@@ -504,7 +504,8 @@ const LANDING_HTML = `<!DOCTYPE html>
   body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;padding:3rem 1rem}
   .container{max-width:760px;margin:0 auto}
   h1{font-size:2.4rem;font-weight:700;letter-spacing:-.5px;margin-bottom:.5rem}
-  .tagline{font-size:1.15rem;color:#8b949e;margin-bottom:2.5rem}
+  .tagline{font-size:1.15rem;color:#e6edf3;margin-bottom:.4rem}
+  .subtext{font-size:.9rem;color:#8b949e;margin-bottom:2.5rem}
   .bullets{list-style:none;margin-bottom:2.5rem}
   .bullets li{padding:.45rem 0;display:flex;align-items:center;gap:.6rem;color:#c9d1d9}
   .bullets li::before{content:"→";color:#58a6ff;font-weight:700}
@@ -525,7 +526,8 @@ const LANDING_HTML = `<!DOCTYPE html>
 <body>
 <div class="container">
   <h1>Mercury x402</h1>
-  <p class="tagline">Deterministic financial data with cryptographic provenance.</p>
+  <p class="tagline">Payment-native financial data for autonomous agents.</p>
+  <p class="subtext">HTTP 402 &rarr; Pay in USDC on Base &rarr; Deterministic, signed response.</p>
   <ul class="bullets">
     <li>Pay-per-call via x402 — no API keys, no subscriptions</li>
     <li>Settles instantly in USDC on Base (chain 8453)</li>
