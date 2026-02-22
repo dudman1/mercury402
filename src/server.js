@@ -617,6 +617,9 @@ Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
   <h2>Discovery</h2>
   <pre><code>curl https://mercury402.uk/.well-known/x402 | jq .</code></pre>
 
+  <h2>SDK Examples</h2>
+  <p>Full copy-paste examples for Node.js and Python: <a href="/sdk-examples">SDK Examples</a></p>
+
   <footer><a href="/">&#8592; Back</a> &nbsp;&middot;&nbsp; Mercury x402</footer>
 </div>
 </body>
@@ -637,6 +640,46 @@ app.get('/meta.json', (req, res) => {
 
 app.get('/docs', (req, res) => {
   res.set('Content-Type', 'text/html').send(DOCS_HTML);
+});
+
+app.get('/sdk-examples', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const mdPath = path.join(__dirname, '..', 'docs', 'SDK_EXAMPLES.md');
+  let md;
+  try {
+    md = fs.readFileSync(mdPath, 'utf8');
+  } catch (e) {
+    return res.status(404).send('SDK_EXAMPLES.md not found');
+  }
+  // Escape HTML then wrap in a minimal styled page — no markdown parser needed
+  const escaped = md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mercury x402 — SDK Examples</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"SF Mono",Menlo,monospace;background:#0d1117;color:#c9d1d9;padding:3rem 1rem;line-height:1.7}
+  .container{max-width:860px;margin:0 auto}
+  pre{white-space:pre-wrap;word-break:break-word}
+  a{color:#58a6ff}
+  footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #21262d;font-size:.8rem;color:#484f58}
+</style>
+</head>
+<body>
+<div class="container">
+<pre>${escaped}</pre>
+<footer><a href="/docs">&#8592; Quickstart</a> &nbsp;&middot;&nbsp; <a href="/">Home</a></footer>
+</div>
+</body>
+</html>`;
+  res.set('Content-Type', 'text/html').send(html);
 });
 
 // Start server
