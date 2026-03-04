@@ -50,14 +50,16 @@ if (SERVER_PRIVATE_KEY) {
 
 const REVENUE_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl';
 
-function logPayment(endpoint, amount, customerId = 'anon') {
+function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
   const entry = {
     timestamp: Date.now(),
     date: new Date().toISOString(),
     endpoint,
     amount,
     customer: customerId,
-    success: true
+    success: true,
+    verified: verified,
+    rejection_reason: reason
   };
   
   try {
@@ -122,30 +124,49 @@ function require402Payment(endpointPath, price) {
         });
     }
     
-    // Validate token: reject test tokens unless ALLOW_TEST_TOKEN=true
-    if (token === 'x402_test' || token.startsWith('x402_test')) {
-      if (process.env.ALLOW_TEST_TOKEN !== 'true') {
-        const paymentRequired = encodePaymentRequired(price);
-        return res
-          .status(402)
-          .set('Payment-Required', paymentRequired)
-          .json({
-            error: 'INVALID_PAYMENT_TOKEN',
-            message: 'Test tokens not allowed in production',
-            price: `$${price.toFixed(2)} USDC (Base)`,
-            paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`
-          });
-      }
+    // Validate token: accept test tokens ONLY in development
+    const isTestToken = token === 'x402_test' || token.startsWith('x402_test');
+    const allowTestTokens = process.env.ALLOW_TEST_TOKEN === 'true';
+    
+    if (isTestToken && allowTestTokens) {
+      // Test token in dev mode - log as unverified
+      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+      logPayment(endpointPath, price, customerId, false, 'test_token_dev_mode');
+      return next();
     }
     
-    // TODO: In production, validate token against x402 payment ledger/bridge
-    // For now, accept any non-test token
+    if (isTestToken && !allowTestTokens) {
+      // Test token in production - reject
+      const paymentRequired = encodePaymentRequired(price);
+      return res
+        .status(402)
+        .set('Payment-Required', paymentRequired)
+        .json({
+          error: 'INVALID_PAYMENT_TOKEN',
+          message: 'Test tokens not allowed in production',
+          price: `$${price.toFixed(2)} USDC (Base)`,
+          paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`
+        });
+    }
     
-    // Log successful payment
+    // PRODUCTION: Reject unverifiable tokens until x402 payment ledger integration complete
+    // Real tokens must be validated against on-chain payment bridge
+    const paymentRequired = encodePaymentRequired(price);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    logPayment(endpointPath, price, customerId);
     
-    next();
+    // Log rejected payment attempt
+    logPayment(endpointPath, 0, customerId, false, 'unverified_token_no_bridge');
+    
+    return res
+      .status(402)
+      .set('Payment-Required', paymentRequired)
+      .json({
+        error: 'PAYMENT_VERIFICATION_UNAVAILABLE',
+        message: 'Payment verification system not yet operational. Token validation requires x402 bridge integration.',
+        price: `$${price.toFixed(2)} USDC (Base)`,
+        paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`,
+        status: 'Service accepts test tokens in development only (ALLOW_TEST_TOKEN=true). Production payment bridge coming soon.'
+      });
   };
 }
 
