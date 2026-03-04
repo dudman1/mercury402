@@ -1,8 +1,31 @@
 {
-  "name": "mercury-x402-service",
+  "name": "mercury402",
   "version": "1.0.0",
-  "description": "Mercury x402 - Deterministic financial data with cryptographic provenance",
+  "description": "Deterministic finance data API for autonomous agents",
   "main": "src/server.js",
+  "keywords": [
+    "x402",
+    "ai-agents",
+    "finance",
+    "treasury",
+    "fred",
+    "usdc",
+    "base",
+    "autonomous-agents",
+    "pay-per-call",
+    "blockchain",
+    "economic-data"
+  ],
+  "homepage": "https://mercury402.uk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/mercury402.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/mercury402/issues"
+  },
+  "author": "Mercury402",
+  "license": "MIT",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"

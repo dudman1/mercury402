@@ -1,4 +1,37 @@
+# Dependencies
 node_modules/
+
+# Environment
 .env
-.DS_Store
+.env.local
+.env.*.local
+
+# Logs
 *.log
+*.jsonl
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Reports
+*.report.md
+*REPORT.md
+
+# Secrets
+FRED_API_KEY
+SERVER_PRIVATE_KEY
+*_PRIVATE_KEY
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+dist/
+build/

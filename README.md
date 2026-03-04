@@ -1,124 +1,125 @@
-# Mercury x402 Service
+# Mercury402
 
-Deterministic financial data with cryptographic provenance.
+![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-14-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
+
+## Deterministic Finance Data for Autonomous Agents
+
+Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous systems. No API keys, no accounts, no rate limits—just pay in USDC on Base via the x402 protocol and get instant access to Federal Reserve data, Treasury yields, and macro indicators with cryptographic provenance.
+
+**Live at:** https://mercury402.uk
+
+---
+
+## Endpoints
+
+| Endpoint | Data | Price (USDC) |
+|----------|------|--------------|
+| `GET /v1/fred/{series_id}` | Any FRED economic series | $0.01 |
+| `GET /v1/treasury/yield-curve/daily-snapshot` | Current Treasury yield curve (11 maturities) | $0.02 |
+| `POST /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
+| `POST /v1/treasury/yield-curve/historical` | Historical yield curves (max 90-day range) | $0.03 |
+| `POST /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.02 |
+| `POST /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.02 |
+| `POST /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
+| `POST /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
+| `POST /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
+| `GET /.well-known/x402` | x402 discovery document | Free |
+| `GET /health` | Health check | Free |
+| `GET /metrics` | Revenue and usage stats | Free |
+| `GET /openapi.json` | OpenAPI 3.1 spec | Free |
+| `GET /docs/api` | Interactive Swagger UI | Free |
+
+**14 total endpoints** (9 paid data endpoints + 5 free discovery/health endpoints)
+
+---
 
 ## Quick Start
 
 ```bash
-# Install dependencies
+# 1. Try a free health check
+curl https://mercury402.uk/health
+
+# 2. Attempt to access data (returns 402 Payment Required)
+curl https://mercury402.uk/v1/fred/UNRATE
+
+# 3. Pay via x402 and retry with your token
+curl -H "Authorization: Bearer x402_YOUR_TOKEN" \
+  https://mercury402.uk/v1/fred/UNRATE
+```
+
+See [`examples/`](./examples/) for agent integration code.
+
+---
+
+## x402 Payment Flow
+
+1. **Request data** → Server returns `402 Payment Required` with payment details
+2. **Pay in USDC** → Transfer via Base blockchain to merchant wallet
+3. **Get token** → x402 gateway verifies payment and issues bearer token
+4. **Retry request** → Include `Authorization: Bearer x402_<token>` header
+5. **Receive data** → Server validates token and returns data with cryptographic signature
+
+**Marketplace listing:** https://www.x402scan.com/server/mercury402
+
+---
+
+## Documentation
+
+- **Swagger UI:** https://mercury402.uk/docs/api
+- **OpenAPI Spec:** https://mercury402.uk/openapi.json
+- **x402scan Listing:** https://www.x402scan.com/server/mercury402
+- **Examples:** [`examples/README.md`](./examples/README.md)
+
+---
+
+## Features
+
+✅ **No API keys or accounts** — Pay-per-call via USDC on Base  
+✅ **Deterministic data** — All responses include FRED series metadata and provenance signatures  
+✅ **Cryptographic provenance** — ECDSA signatures verify data authenticity  
+✅ **Rate-limited free tier** — Health and discovery endpoints always available  
+✅ **Agent-friendly** — Designed for autonomous systems and AI agents  
+
+---
+
+## Tech Stack
+
+- **Runtime:** Node.js + Express
+- **Data source:** Federal Reserve Economic Data (FRED) API
+- **Payment:** x402 protocol (USDC on Base)
+- **Signing:** ethers.js + ECDSA
+
+---
+
+## Self-Hosting
+
+```bash
+# Clone and install
+git clone https://github.com/YOUR_USERNAME/mercury402.git
+cd mercury402
 npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your FRED_API_KEY and SERVER_PRIVATE_KEY
+# Add your FRED_API_KEY and SERVER_PRIVATE_KEY
 
 # Start server
-npm start
-
-# Development (with auto-reload)
-npm run dev
-```
-
-## Endpoints
-
-### FRED Economic Data
-
-```bash
-# Latest unemployment rate
-curl http://localhost:4020/v1/fred/UNRATE
-
-# 10Y Treasury rate on specific date
-curl 'http://localhost:4020/v1/fred/DGS10?date=2026-01-01'
-
-# GDP historical range
-curl 'http://localhost:4020/v1/fred/GDP?observation_start=2020-01-01&observation_end=2023-12-31'
-```
-
-### Treasury Yield Curve
-
-```bash
-# Daily snapshot (with provenance)
-curl http://localhost:4020/v1/treasury/yield-curve/daily-snapshot
-
-# Legacy format (without provenance)
-curl 'http://localhost:4020/v1/treasury/yield-curve/daily-snapshot?v=0.9'
-```
-
-### Discovery & Health
-
-```bash
-# x402 discovery document
-curl http://localhost:4020/.well-known/x402
-
-# Health check
-curl http://localhost:4020/health
-```
-
-## Configuration
-
-### Required Environment Variables
-
-- `FRED_API_KEY` - Get free API key at https://fred.stlouisfed.org/docs/api/api_key.html
-- `SERVER_PRIVATE_KEY` - Ethereum private key for signing provenance (without 0x prefix)
-
-### Optional Environment Variables
-
-- `PORT` - Server port (default: 4020)
-
-## Generate Signing Key
-
-```bash
-# Generate new private key
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Get corresponding address
-node -e "const {Wallet} = require('ethers'); const w = new Wallet('YOUR_PRIVATE_KEY'); console.log(w.address)"
-```
-
-## Deployment
-
-### Local Testing
-
-```bash
-npm install
 npm start
 ```
 
 Server runs on http://localhost:4020
 
-### Production (mercury402.uk)
+See [deployment docs](./docs/DEPLOYMENT.md) for production setup.
 
-Options:
-1. Deploy as Node.js service with PM2/systemd
-2. Deploy to Cloudflare Workers (requires adaptation)
-3. Deploy to Vercel/Netlify Functions
-
-Recommended: Node.js with reverse proxy (nginx/Caddy) handling SSL termination.
-
-## Verification
-
-Test complete 402 → pay → 200 flow:
-
-```bash
-# Should return 402 (if x402 payment gate enabled)
-curl -is http://localhost:4020/v1/fred/UNRATE
-
-# After payment, should return 200 with data
-# (x402 payment logic not yet implemented - returns data immediately for testing)
-```
-
-## Next Steps
-
-1. ✅ Service created
-2. ⏳ Install dependencies
-3. ⏳ Configure environment (.env)
-4. ⏳ Start server locally
-5. ⏳ Test endpoints
-6. ⏳ Deploy to mercury402.uk
-7. ⏳ Enable x402 payment logic
-8. ⏳ Submit to x402scan marketplace
+---
 
 ## Support
 
-Specs: `/Users/openclaw/.openclaw/workspace-mercury/`
-Docs: https://mercury402.uk/docs (after deployment)
+**Issues:** [GitHub Issues](https://github.com/YOUR_USERNAME/mercury402/issues)  
+**Funding:** https://mercury402.uk
+
+---
+
+## License
+
+MIT
