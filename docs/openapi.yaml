@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Mercury x402 API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Deterministic financial data with cryptographic provenance.
     
@@ -490,6 +490,362 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /v1/macro/snapshot/all:
+    post:
+      summary: Complete macroeconomic snapshot
+      description: |
+        Fetches all major economic indicators in a single call:
+        GDP, UNRATE, CPI, FEDFUNDS, DGS10, DGS2, T10Y2Y, VIX, Dollar Index, Consumer Sentiment.
+        
+        **Price:** $0.05
+        
+        **Indicators (10 total):**
+        - GDP: Gross Domestic Product
+        - UNRATE: Unemployment Rate
+        - CPIAUCSL: Consumer Price Index
+        - FEDFUNDS: Federal Funds Rate
+        - DGS10: 10-Year Treasury Yield
+        - DGS2: 2-Year Treasury Yield
+        - T10Y2Y: 10Y-2Y Yield Spread
+        - VIXCLS: VIX Volatility Index
+        - DTWEXBGS: Trade Weighted U.S. Dollar Index
+        - UMCSENT: Consumer Sentiment Index
+      operationId: getMacroSnapshot
+      x-price: 0.05
+      tags: [Composite]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Macro snapshot with all indicators
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.05"
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      snapshot_date:
+                        type: string
+                        format: date
+                      source:
+                        type: string
+                        example: FRED
+                      indicators:
+                        type: object
+                        properties:
+                          gdp:
+                            $ref: '#/components/schemas/Indicator'
+                          unemployment_rate:
+                            $ref: '#/components/schemas/Indicator'
+                          cpi:
+                            $ref: '#/components/schemas/Indicator'
+                          fed_funds_rate:
+                            $ref: '#/components/schemas/Indicator'
+                          yield_10y:
+                            $ref: '#/components/schemas/Indicator'
+                          yield_2y:
+                            $ref: '#/components/schemas/Indicator'
+                          yield_spread_10y2y:
+                            $ref: '#/components/schemas/Indicator'
+                          vix:
+                            $ref: '#/components/schemas/Indicator'
+                          dollar_index:
+                            $ref: '#/components/schemas/Indicator'
+                          consumer_sentiment:
+                            $ref: '#/components/schemas/Indicator'
+                      deterministic:
+                        type: boolean
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No data available
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/treasury/yield-curve/historical:
+    post:
+      summary: Historical Treasury yield curve data
+      description: |
+        Returns daily yield curve snapshots for a specified date range.
+        Fetches all 11 maturities (1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y).
+        
+        **Price:** $0.03
+        
+        **Constraints:**
+        - Maximum date range: 90 days
+        - Dates must be in YYYY-MM-DD format
+        - start_date must be before end_date
+      operationId: getTreasuryHistorical
+      x-price: 0.03
+      tags: [Treasury]
+      security:
+        - x402Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_date, end_date]
+              properties:
+                start_date:
+                  type: string
+                  format: date
+                  example: "2024-01-01"
+                end_date:
+                  type: string
+                  format: date
+                  example: "2024-01-31"
+      responses:
+        '200':
+          description: Historical yield curve snapshots
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.03"
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      start_date:
+                        type: string
+                        format: date
+                      end_date:
+                        type: string
+                        format: date
+                      source:
+                        type: string
+                        example: FRED (Federal Reserve Economic Data)
+                      snapshots:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            record_date:
+                              type: string
+                              format: date
+                            rates:
+                              type: object
+                              properties:
+                                1_MONTH:
+                                  type: number
+                                3_MONTH:
+                                  type: number
+                                6_MONTH:
+                                  type: number
+                                1_YEAR:
+                                  type: number
+                                2_YEAR:
+                                  type: number
+                                3_YEAR:
+                                  type: number
+                                5_YEAR:
+                                  type: number
+                                7_YEAR:
+                                  type: number
+                                10_YEAR:
+                                  type: number
+                                20_YEAR:
+                                  type: number
+                                30_YEAR:
+                                  type: number
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '400':
+          description: Invalid date range
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: [MISSING_PARAMS, RANGE_TOO_LARGE, INVALID_RANGE]
+                      message:
+                        type: string
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No data available for date range
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/treasury/auction-results/recent:
+    post:
+      summary: Recent Treasury auction results
+      description: |
+        Returns recent auction results using HQM (High Quality Market Corporate Bond) yields as proxy.
+        Includes last 10 observations for 1Y, 5Y, 10Y, 20Y, 30Y maturities.
+        
+        **Price:** $0.02
+        
+        **Note:** Uses FRED HQM series as proxy for actual auction data.
+      operationId: getTreasuryAuctions
+      x-price: 0.02
+      tags: [Treasury]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Recent auction results
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.02"
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        example: FRED/HQM
+                      note:
+                        type: string
+                        example: Corporate bond yield proxy (High Quality Market rates)
+                      auctions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            maturity:
+                              type: string
+                              example: "10Y"
+                            label:
+                              type: string
+                              example: "10-Year"
+                            recent_yields:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  date:
+                                    type: string
+                                    format: date
+                                  yield:
+                                    type: number
+                                  maturity:
+                                    type: string
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No auction data available
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/treasury/tips-rates/current:
+    post:
+      summary: Current TIPS rates
+      description: |
+        Returns current Treasury Inflation-Protected Securities (TIPS) yields for all available maturities.
+        
+        **Price:** $0.02
+        
+        **Maturities:**
+        - 5-Year (DFII5)
+        - 7-Year (DFII7)
+        - 10-Year (DFII10)
+        - 20-Year (DFII20)
+        - 30-Year (DFII30)
+      operationId: getTreasuryTIPS
+      x-price: 0.02
+      tags: [Treasury]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Current TIPS rates
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.02"
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      record_date:
+                        type: string
+                        format: date
+                      rates:
+                        type: object
+                        properties:
+                          5_YEAR:
+                            type: number
+                          7_YEAR:
+                            type: number
+                          10_YEAR:
+                            type: number
+                          20_YEAR:
+                            type: number
+                          30_YEAR:
+                            type: number
+                      source:
+                        type: string
+                        example: FRED (Federal Reserve Economic Data)
+                      note:
+                        type: string
+                        example: Treasury Inflation-Protected Securities (TIPS) yields
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No TIPS rates available
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /.well-known/x402:
     get:
       summary: x402 protocol discovery document
@@ -666,6 +1022,21 @@ components:
                     example: "4.0"
         provenance:
           $ref: '#/components/schemas/Provenance'
+
+    Indicator:
+      type: object
+      required: [value, date, unit]
+      properties:
+        value:
+          type: number
+          example: 4.3
+        date:
+          type: string
+          format: date
+          example: "2026-01-01"
+        unit:
+          type: string
+          example: "Percent"
 
     TreasuryResponseV1:
       type: object

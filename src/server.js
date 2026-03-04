@@ -856,39 +856,429 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 // ============================================
 
 // Macro snapshot (all indicators in one call)
-app.get('/v1/macro/snapshot/all', (req, res) => {
-  res.status(503).json({
-    error: 'coming_soon',
-    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
-    available: false
-  });
+// ============================================
+// MACRO SNAPSHOT — ALL MAJOR INDICATORS
+// ============================================
+
+app.post('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', getPrice('/v1/macro/snapshot/all')), async (req, res) => {
+  try {
+    if (!FRED_API_KEY) {
+      return res.status(503).json({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' }
+      });
+    }
+
+    const seriesConfig = [
+      { id: 'GDP', key: 'gdp', label: 'GDP', unit: 'Billions of Dollars' },
+      { id: 'UNRATE', key: 'unemployment_rate', label: 'Unemployment Rate', unit: 'Percent' },
+      { id: 'CPIAUCSL', key: 'cpi', label: 'Consumer Price Index', unit: 'Index 1982-1984=100' },
+      { id: 'FEDFUNDS', key: 'fed_funds_rate', label: 'Federal Funds Rate', unit: 'Percent' },
+      { id: 'DGS10', key: 'yield_10y', label: '10-Year Treasury Yield', unit: 'Percent' },
+      { id: 'DGS2', key: 'yield_2y', label: '2-Year Treasury Yield', unit: 'Percent' },
+      { id: 'T10Y2Y', key: 'yield_spread_10y2y', label: '10Y-2Y Spread', unit: 'Percent' },
+      { id: 'VIXCLS', key: 'vix', label: 'VIX', unit: 'Index' },
+      { id: 'DTWEXBGS', key: 'dollar_index', label: 'Dollar Index', unit: 'Index' },
+      { id: 'UMCSENT', key: 'consumer_sentiment', label: 'Consumer Sentiment', unit: 'Index 1966:Q1=100' }
+    ];
+
+    // Generate cache key
+    const cacheKey = getCacheKey('macro:snapshot:all', {});
+    const cached = getCached(cacheKey);
+    
+    if (cached && !cached.stale) {
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+
+    // Fetch all series in parallel (with caching)
+    cacheStats.misses++;
+    const results = await Promise.all(
+      seriesConfig.map(s => 
+        fetchFredData(s.id, { sort_order: 'desc', limit: 1 })
+          .catch(err => {
+            console.error(`Failed to fetch ${s.id}:`, err.message);
+            return { observations: [] };
+          })
+      )
+    );
+
+    const indicators = {};
+    let snapshotDate = null;
+
+    seriesConfig.forEach((series, idx) => {
+      const result = results[idx];
+      if (result.observations && result.observations.length > 0) {
+        const obs = result.observations[0];
+        if (obs.value && obs.value !== '.') {
+          indicators[series.key] = {
+            value: parseFloat(obs.value),
+            date: obs.date,
+            unit: series.unit
+          };
+          // Use most recent date as snapshot_date
+          if (!snapshotDate || obs.date > snapshotDate) {
+            snapshotDate = obs.date;
+          }
+        }
+      }
+    });
+
+    if (Object.keys(indicators).length === 0) {
+      return res.status(404).json({
+        error: { code: 'NO_DATA', message: 'No indicators available' }
+      });
+    }
+
+    const responseData = {
+      snapshot_date: snapshotDate || new Date().toISOString().split('T')[0],
+      source: 'FRED',
+      indicators,
+      deterministic: true
+    };
+
+    const provenance = generateProvenance(responseData, 'macro-snapshot', {});
+    
+    const response = {
+      data: responseData,
+      provenance
+    };
+
+    // Cache for 6 hours
+    setCache(cacheKey, response, CACHE_TTL.FRED);
+
+    res.setHeader('X-Mercury-Price', `$${getPrice('/v1/macro/snapshot/all').toFixed(2)}`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Macro snapshot error:', error.message);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch macro snapshot' }
+    });
+  }
 });
 
-// Treasury yield curve historical data
-app.get('/v1/treasury/yield-curve/historical', (req, res) => {
-  res.status(503).json({
-    error: 'coming_soon',
-    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
-    available: false
-  });
+// ============================================
+// TREASURY YIELD CURVE — HISTORICAL
+// ============================================
+
+app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical')), async (req, res) => {
+  try {
+    if (!FRED_API_KEY) {
+      return res.status(503).json({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' }
+      });
+    }
+
+    const { start_date, end_date } = req.body || {};
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({
+        error: { code: 'MISSING_PARAMS', message: 'start_date and end_date required (ISO format YYYY-MM-DD)' }
+      });
+    }
+
+    // Validate date range (max 90 days)
+    const start = new Date(start_date);
+    const end = new Date(end_date);
+    const daysDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > 90) {
+      return res.status(400).json({
+        error: { code: 'RANGE_TOO_LARGE', message: 'Date range cannot exceed 90 days' }
+      });
+    }
+
+    if (daysDiff < 0) {
+      return res.status(400).json({
+        error: { code: 'INVALID_RANGE', message: 'start_date must be before end_date' }
+      });
+    }
+
+    // Generate cache key
+    const cacheKey = getCacheKey('treasury:historical', { start_date, end_date });
+    const cached = getCached(cacheKey);
+    
+    if (cached && !cached.stale) {
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+
+    cacheStats.misses++;
+
+    const seriesMap = {
+      '1_MONTH': 'DGS1MO',
+      '3_MONTH': 'DGS3MO',
+      '6_MONTH': 'DGS6MO',
+      '1_YEAR': 'DGS1',
+      '2_YEAR': 'DGS2',
+      '3_YEAR': 'DGS3',
+      '5_YEAR': 'DGS5',
+      '7_YEAR': 'DGS7',
+      '10_YEAR': 'DGS10',
+      '20_YEAR': 'DGS20',
+      '30_YEAR': 'DGS30'
+    };
+
+    // Fetch all series for date range
+    const seriesIds = Object.values(seriesMap);
+    const results = await Promise.all(
+      seriesIds.map(id => 
+        fetchFredData(id, { observation_start: start_date, observation_end: end_date })
+          .catch(err => {
+            console.error(`Failed to fetch ${id}:`, err.message);
+            return { observations: [] };
+          })
+      )
+    );
+
+    // Build daily snapshots
+    const snapshotsByDate = {};
+
+    Object.entries(seriesMap).forEach(([label, seriesId], index) => {
+      const result = results[index];
+      if (result.observations) {
+        result.observations.forEach(obs => {
+          if (obs.value && obs.value !== '.') {
+            if (!snapshotsByDate[obs.date]) {
+              snapshotsByDate[obs.date] = { record_date: obs.date, rates: {} };
+            }
+            snapshotsByDate[obs.date].rates[label] = parseFloat(obs.value);
+          }
+        });
+      }
+    });
+
+    const snapshots = Object.values(snapshotsByDate).sort((a, b) => 
+      a.record_date.localeCompare(b.record_date)
+    );
+
+    if (snapshots.length === 0) {
+      return res.status(404).json({
+        error: { code: 'NO_DATA', message: 'No yield curve data available for date range' }
+      });
+    }
+
+    const responseData = {
+      start_date,
+      end_date,
+      source: 'FRED (Federal Reserve Economic Data)',
+      snapshots
+    };
+
+    const provenance = generateProvenance(responseData, 'treasury-historical', { start_date, end_date });
+
+    const response = {
+      data: responseData,
+      provenance
+    };
+
+    // Cache for 6 hours
+    setCache(cacheKey, response, CACHE_TTL.TREASURY);
+
+    res.setHeader('X-Mercury-Price', `$${getPrice('/v1/treasury/yield-curve/historical').toFixed(2)}`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Treasury historical error:', error.message);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch treasury historical data' }
+    });
+  }
 });
 
-// Treasury auction results (recent)
-app.get('/v1/treasury/auction-results/recent', (req, res) => {
-  res.status(503).json({
-    error: 'coming_soon',
-    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
-    available: false
-  });
+// ============================================
+// TREASURY AUCTION RESULTS — RECENT
+// ============================================
+
+app.post('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/auction-results/recent', getPrice('/v1/treasury/auction-results/recent')), async (req, res) => {
+  try {
+    if (!FRED_API_KEY) {
+      return res.status(503).json({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' }
+      });
+    }
+
+    // Generate cache key
+    const cacheKey = getCacheKey('treasury:auction:recent', {});
+    const cached = getCached(cacheKey);
+    
+    if (cached && !cached.stale) {
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+
+    cacheStats.misses++;
+
+    // Use HQM (High Quality Market Corporate Bond) yields as proxy
+    const seriesConfig = [
+      { id: 'HQMCB1YR', label: '1-Year', maturity: '1Y' },
+      { id: 'HQMCB5YR', label: '5-Year', maturity: '5Y' },
+      { id: 'HQMCB10YR', label: '10-Year', maturity: '10Y' },
+      { id: 'HQMCB20YR', label: '20-Year', maturity: '20Y' },
+      { id: 'HQMCB30YR', label: '30-Year', maturity: '30Y' }
+    ];
+
+    // Fetch last 10 observations for each series
+    const results = await Promise.all(
+      seriesConfig.map(s => 
+        fetchFredData(s.id, { sort_order: 'desc', limit: 10 })
+          .catch(err => {
+            console.error(`Failed to fetch ${s.id}:`, err.message);
+            return { observations: [] };
+          })
+      )
+    );
+
+    const auctions = [];
+
+    seriesConfig.forEach((series, idx) => {
+      const result = results[idx];
+      if (result.observations && result.observations.length > 0) {
+        const observations = result.observations
+          .filter(obs => obs.value && obs.value !== '.')
+          .map(obs => ({
+            date: obs.date,
+            yield: parseFloat(obs.value),
+            maturity: series.maturity
+          }));
+        
+        auctions.push({
+          maturity: series.maturity,
+          label: series.label,
+          recent_yields: observations
+        });
+      }
+    });
+
+    if (auctions.length === 0) {
+      return res.status(404).json({
+        error: { code: 'NO_DATA', message: 'No auction data available' }
+      });
+    }
+
+    const responseData = {
+      source: 'FRED/HQM',
+      note: 'Corporate bond yield proxy (High Quality Market rates)',
+      auctions
+    };
+
+    const provenance = generateProvenance(responseData, 'treasury-auctions', {});
+
+    const response = {
+      data: responseData,
+      provenance
+    };
+
+    // Cache for 6 hours
+    setCache(cacheKey, response, CACHE_TTL.TREASURY);
+
+    res.setHeader('X-Mercury-Price', `$${getPrice('/v1/treasury/auction-results/recent').toFixed(2)}`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Treasury auction error:', error.message);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch auction data' }
+    });
+  }
 });
 
-// Treasury TIPS rates (current)
-app.get('/v1/treasury/tips-rates/current', (req, res) => {
-  res.status(503).json({
-    error: 'coming_soon',
-    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
-    available: false
-  });
+// ============================================
+// TREASURY TIPS RATES — CURRENT
+// ============================================
+
+app.post('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-rates/current', getPrice('/v1/treasury/tips-rates/current')), async (req, res) => {
+  try {
+    if (!FRED_API_KEY) {
+      return res.status(503).json({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' }
+      });
+    }
+
+    // Generate cache key
+    const cacheKey = getCacheKey('treasury:tips:current', {});
+    const cached = getCached(cacheKey);
+    
+    if (cached && !cached.stale) {
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+
+    cacheStats.misses++;
+
+    // TIPS series from FRED
+    const seriesMap = {
+      '5_YEAR': 'DFII5',
+      '7_YEAR': 'DFII7',
+      '10_YEAR': 'DFII10',
+      '20_YEAR': 'DFII20',
+      '30_YEAR': 'DFII30'
+    };
+
+    // Fetch current rates (latest observation)
+    const seriesIds = Object.values(seriesMap);
+    const results = await Promise.all(
+      seriesIds.map(id => 
+        fetchFredData(id, { sort_order: 'desc', limit: 1 })
+          .catch(err => {
+            console.error(`Failed to fetch ${id}:`, err.message);
+            return { observations: [] };
+          })
+      )
+    );
+
+    const rates = {};
+    let recordDate = null;
+
+    Object.entries(seriesMap).forEach(([label, seriesId], index) => {
+      const result = results[index];
+      if (result.observations && result.observations.length > 0) {
+        const obs = result.observations[0];
+        if (obs.value && obs.value !== '.') {
+          rates[label] = parseFloat(obs.value);
+          if (!recordDate || obs.date > recordDate) {
+            recordDate = obs.date;
+          }
+        }
+      }
+    });
+
+    if (Object.keys(rates).length === 0) {
+      return res.status(404).json({
+        error: { code: 'NO_DATA', message: 'No TIPS rates available' }
+      });
+    }
+
+    const responseData = {
+      record_date: recordDate || new Date().toISOString().split('T')[0],
+      rates,
+      source: 'FRED (Federal Reserve Economic Data)',
+      note: 'Treasury Inflation-Protected Securities (TIPS) yields'
+    };
+
+    const provenance = generateProvenance(responseData, 'treasury-tips', {});
+
+    const response = {
+      data: responseData,
+      provenance
+    };
+
+    // Cache for 6 hours
+    setCache(cacheKey, response, CACHE_TTL.TREASURY);
+
+    res.setHeader('X-Mercury-Price', `$${getPrice('/v1/treasury/tips-rates/current').toFixed(2)}`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Treasury TIPS error:', error.message);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch TIPS rates' }
+    });
+  }
 });
 
 // ============================================
@@ -1157,42 +1547,77 @@ app.get('/health', (req, res) => {
 const JSON_MANIFEST = {
   name: 'Mercury x402',
   tagline: 'Deterministic financial data with cryptographic provenance',
-  version: '1.1.0',
+  version: '1.2.0',
   endpoints: {
     fred: {
       path: '/v1/fred/{series_id}',
       price: getPrice('/v1/fred/{series_id}'),
-      description: 'Federal Reserve Economic Data (FRED) series'
+      description: 'Federal Reserve Economic Data (FRED) series',
+      available: true
     },
     treasury: {
       path: '/v1/treasury/yield-curve/daily-snapshot',
       price: getPrice('/v1/treasury/yield-curve/daily-snapshot'),
-      description: 'U.S. Treasury yield curve (11 maturities)'
+      description: 'U.S. Treasury yield curve (11 maturities)',
+      available: true
+    },
+    macroSnapshot: {
+      path: '/v1/macro/snapshot/all',
+      method: 'POST',
+      price: getPrice('/v1/macro/snapshot/all'),
+      description: 'Complete macro snapshot: GDP, UNRATE, CPI, FEDFUNDS, yields, VIX, dollar index, sentiment',
+      available: true
+    },
+    treasuryHistorical: {
+      path: '/v1/treasury/yield-curve/historical',
+      method: 'POST',
+      price: getPrice('/v1/treasury/yield-curve/historical'),
+      description: 'Historical yield curve data (max 90-day range)',
+      available: true
+    },
+    treasuryAuctions: {
+      path: '/v1/treasury/auction-results/recent',
+      method: 'POST',
+      price: getPrice('/v1/treasury/auction-results/recent'),
+      description: 'Recent auction results (HQM corporate bond yield proxy)',
+      available: true
+    },
+    treasuryTIPS: {
+      path: '/v1/treasury/tips-rates/current',
+      method: 'POST',
+      price: getPrice('/v1/treasury/tips-rates/current'),
+      description: 'Current TIPS rates (5, 7, 10, 20, 30-year)',
+      available: true
     },
     economicDashboard: {
       path: '/v1/composite/economic-dashboard',
       price: getPrice('/v1/composite/economic-dashboard'),
-      description: 'Economic overview: GDP, CPI, Unemployment'
+      description: 'Economic overview: GDP, CPI, Unemployment',
+      available: true
     },
     inflationTracker: {
       path: '/v1/composite/inflation-tracker',
       price: getPrice('/v1/composite/inflation-tracker'),
-      description: 'Inflation metrics: CPI, PCE, Core CPI'
+      description: 'Inflation metrics: CPI, PCE, Core CPI',
+      available: true
     },
     laborMarket: {
       path: '/v1/composite/labor-market',
       price: getPrice('/v1/composite/labor-market'),
-      description: 'Labor market: Unemployment, Claims, Payrolls'
+      description: 'Labor market: Unemployment, Claims, Payrolls',
+      available: true
     },
     discovery: {
       path: '/.well-known/x402',
       price: 0,
-      description: 'x402 discovery document'
+      description: 'x402 discovery document',
+      available: true
     },
     health: {
       path: '/health',
       price: 0,
-      description: 'Service health check'
+      description: 'Service health check',
+      available: true
     }
   },
   docs: {
