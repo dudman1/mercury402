@@ -19,10 +19,10 @@
   "homepage": "https://mercury402.uk",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_USERNAME/mercury402.git"
+    "url": "git+https://github.com/dudman1/mercury402.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/mercury402/issues"
+    "url": "https://github.com/dudman1/mercury402/issues"
   },
   "author": "Mercury402",
   "license": "MIT",
