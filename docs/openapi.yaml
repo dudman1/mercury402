@@ -64,6 +64,8 @@ paths:
         
         Browse all series: https://fred.stlouisfed.org/
       operationId: getFredSeries
+      x-price: 0.15
+      x-price-range: 0.30
       tags: [FRED]
       security:
         - x402Bearer: []
@@ -200,6 +202,7 @@ paths:
         
         **Data quality:** Returns 404 if fewer than 5 maturities available.
       operationId: getTreasuryYieldCurve
+      x-price: 0.02
       tags: [Treasury]
       security:
         - x402Bearer: []
@@ -318,6 +321,7 @@ paths:
         
         Returns latest observation for each series.
       operationId: getEconomicDashboard
+      x-price: 0.50
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -379,6 +383,7 @@ paths:
         - PCEPI (Personal Consumption Expenditures Price Index)
         - CPILFESL (Core CPI - Less Food & Energy)
       operationId: getInflationTracker
+      x-price: 0.40
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -438,6 +443,7 @@ paths:
         - ICSA (Initial Jobless Claims)
         - PAYEMS (Total Nonfarm Payrolls)
       operationId: getLaborMarket
+      x-price: 0.40
       tags: [Composite]
       security:
         - x402Bearer: []

@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+const { getPrice } = require('./pricing');
+
 const app = express();
 const PORT = process.env.PORT || 4020;
 
@@ -312,7 +314,7 @@ function generateProvenance(data, seriesId, params) {
   return provenance;
 }
 
-app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', 0.15), async (req, res) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -327,8 +329,9 @@ app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', 0.15), 
     const { date, observation_start, observation_end, limit } = req.query;
 
     // Determine pricing based on query type
+    const basePrice = getPrice('/v1/fred/{series_id}');
     const isRange = observation_start && observation_end;
-    const price = isRange ? 0.30 : 0.15;
+    const price = isRange ? basePrice * 2 : basePrice;
 
     // Build FRED API params
     const fredParams = {};
@@ -533,7 +536,7 @@ function buildTreasuryProvenance(data, fetchedAt) {
   return provenance;
 }
 
-app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', 0.10), async (req, res) => {
+app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', getPrice('/v1/treasury/yield-curve/daily-snapshot')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -602,7 +605,7 @@ app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasu
 // ============================================
 
 // Economic Dashboard - GDP + CPI + Unemployment - $0.50
-app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', 0.50), async (req, res) => {
+app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', getPrice('/v1/composite/economic-dashboard')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -623,16 +626,17 @@ app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
 
     const provenance = generateProvenance(responseData, 'composite/economic-dashboard', {});
 
+    const endpointPrice = getPrice('/v1/composite/economic-dashboard');
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    logPayment('/v1/composite/economic-dashboard', 0.50, customerId);
+    logPayment('/v1/composite/economic-dashboard', endpointPrice, customerId);
     
     // Emit to Convex (fire-and-forget)
     const paymentMeta = res.locals.paymentMeta || {};
     if (paymentMeta.price_usd > 0) {
-      emitToConvex('/v1/composite/economic-dashboard', 0.50, paymentMeta.wallet_address);
+      emitToConvex('/v1/composite/economic-dashboard', endpointPrice, paymentMeta.wallet_address);
     }
     
-    res.setHeader('X-Mercury-Price', '$0.50');
+    res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
     res.json({ data: responseData, provenance });
 
   } catch (error) {
@@ -642,7 +646,7 @@ app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
 });
 
 // Inflation Tracker - CPI + PCE + Core CPI - $0.40
-app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', 0.40), async (req, res) => {
+app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', getPrice('/v1/composite/inflation-tracker')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -663,16 +667,17 @@ app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
 
     const provenance = generateProvenance(responseData, 'composite/inflation-tracker', {});
 
+    const endpointPrice = getPrice('/v1/composite/inflation-tracker');
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    logPayment('/v1/composite/inflation-tracker', 0.40, customerId);
+    logPayment('/v1/composite/inflation-tracker', endpointPrice, customerId);
     
     // Emit to Convex (fire-and-forget)
     const paymentMeta = res.locals.paymentMeta || {};
     if (paymentMeta.price_usd > 0) {
-      emitToConvex('/v1/composite/inflation-tracker', 0.40, paymentMeta.wallet_address);
+      emitToConvex('/v1/composite/inflation-tracker', endpointPrice, paymentMeta.wallet_address);
     }
     
-    res.setHeader('X-Mercury-Price', '$0.40');
+    res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
     res.json({ data: responseData, provenance });
 
   } catch (error) {
@@ -682,7 +687,7 @@ app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
 });
 
 // Labor Market Health - Unemployment + Initial Claims + Nonfarm Payrolls - $0.40
-app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', 0.40), async (req, res) => {
+app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', getPrice('/v1/composite/labor-market')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -703,16 +708,17 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 
     const provenance = generateProvenance(responseData, 'composite/labor-market', {});
 
+    const endpointPrice = getPrice('/v1/composite/labor-market');
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    logPayment('/v1/composite/labor-market', 0.40, customerId);
+    logPayment('/v1/composite/labor-market', endpointPrice, customerId);
     
     // Emit to Convex (fire-and-forget)
     const paymentMeta = res.locals.paymentMeta || {};
     if (paymentMeta.price_usd > 0) {
-      emitToConvex('/v1/composite/labor-market', 0.40, paymentMeta.wallet_address);
+      emitToConvex('/v1/composite/labor-market', endpointPrice, paymentMeta.wallet_address);
     }
     
-    res.setHeader('X-Mercury-Price', '$0.40');
+    res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
     res.json({ data: responseData, provenance });
 
   } catch (error) {
@@ -726,83 +732,57 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 // ============================================
 
 app.get('/.well-known/x402', (req, res) => {
+  const { PRICING } = require('./pricing');
+  
+  // Build accepts array dynamically from pricing config
+  const endpointsByPrice = {};
+  
+  // Group endpoints by price
+  Object.entries(PRICING).forEach(([endpoint, price]) => {
+    if (endpoint === 'default') return;
+    
+    if (!endpointsByPrice[price]) {
+      endpointsByPrice[price] = [];
+    }
+    
+    let description = endpoint;
+    if (endpoint === '/v1/fred/{series_id}') {
+      description = 'Federal Reserve Economic Data (FRED) series';
+    } else if (endpoint === '/v1/treasury/yield-curve/daily-snapshot') {
+      description = 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)';
+    } else if (endpoint === '/v1/composite/economic-dashboard') {
+      description = 'Economic overview: GDP, CPI, and Unemployment in one call';
+    } else if (endpoint === '/v1/composite/inflation-tracker') {
+      description = 'Inflation metrics: CPI, PCE, and Core CPI';
+    } else if (endpoint === '/v1/composite/labor-market') {
+      description = 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls';
+    }
+    
+    endpointsByPrice[price].push({
+      path: endpoint,
+      price: price,
+      description: description
+    });
+  });
+  
+  // Build accepts array
+  const accepts = Object.entries(endpointsByPrice)
+    .sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]))
+    .map(([price, endpoints]) => ({
+      scheme: 'exact',
+      network: 'eip155:8453', // Base mainnet
+      amount: String(Math.floor(parseFloat(price) * 1000000)), // Convert to USDC wei (6 decimals)
+      payTo: MERCHANT_WALLET,
+      maxTimeoutSeconds: 30,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+      extra: {
+        endpoints: endpoints
+      }
+    }));
+  
   res.json({
     x402Version: 2,
-    accepts: [
-      {
-        scheme: 'exact',
-        network: 'eip155:8453', // Base mainnet
-        amount: '150000', // 0.15 USDC in wei (6 decimals)
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-        extra: {
-          endpoints: [
-            {
-              path: '/v1/fred/{series_id}',
-              price: 0.15,
-              description: 'Federal Reserve Economic Data (FRED) series'
-            }
-          ]
-        }
-      },
-      {
-        scheme: 'exact',
-        network: 'eip155:8453',
-        amount: '100000', // 0.10 USDC in wei
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        extra: {
-          endpoints: [
-            {
-              path: '/v1/treasury/yield-curve/daily-snapshot',
-              price: 0.10,
-              description: 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)'
-            }
-          ]
-        }
-      },
-      {
-        scheme: 'exact',
-        network: 'eip155:8453',
-        amount: '500000', // 0.50 USDC
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        extra: {
-          endpoints: [
-            {
-              path: '/v1/composite/economic-dashboard',
-              price: 0.50,
-              description: 'Economic overview: GDP, CPI, and Unemployment in one call'
-            }
-          ]
-        }
-      },
-      {
-        scheme: 'exact',
-        network: 'eip155:8453',
-        amount: '400000', // 0.40 USDC
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        extra: {
-          endpoints: [
-            {
-              path: '/v1/composite/inflation-tracker',
-              price: 0.40,
-              description: 'Inflation metrics: CPI, PCE, and Core CPI'
-            },
-            {
-              path: '/v1/composite/labor-market',
-              price: 0.40,
-              description: 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls'
-            }
-          ]
-        }
-      }
-    ],
+    accepts: accepts,
     extensions: {
       bazaar: {
         info: {
@@ -1006,13 +986,41 @@ const JSON_MANIFEST = {
   tagline: 'Deterministic financial data with cryptographic provenance',
   version: '1.1.0',
   endpoints: {
-    fred: '/v1/fred/{series_id}',
-    treasury: '/v1/treasury/yield-curve/daily-snapshot',
-    economicDashboard: '/v1/composite/economic-dashboard',
-    inflationTracker: '/v1/composite/inflation-tracker',
-    laborMarket: '/v1/composite/labor-market',
-    discovery: '/.well-known/x402',
-    health: '/health'
+    fred: {
+      path: '/v1/fred/{series_id}',
+      price: getPrice('/v1/fred/{series_id}'),
+      description: 'Federal Reserve Economic Data (FRED) series'
+    },
+    treasury: {
+      path: '/v1/treasury/yield-curve/daily-snapshot',
+      price: getPrice('/v1/treasury/yield-curve/daily-snapshot'),
+      description: 'U.S. Treasury yield curve (11 maturities)'
+    },
+    economicDashboard: {
+      path: '/v1/composite/economic-dashboard',
+      price: getPrice('/v1/composite/economic-dashboard'),
+      description: 'Economic overview: GDP, CPI, Unemployment'
+    },
+    inflationTracker: {
+      path: '/v1/composite/inflation-tracker',
+      price: getPrice('/v1/composite/inflation-tracker'),
+      description: 'Inflation metrics: CPI, PCE, Core CPI'
+    },
+    laborMarket: {
+      path: '/v1/composite/labor-market',
+      price: getPrice('/v1/composite/labor-market'),
+      description: 'Labor market: Unemployment, Claims, Payrolls'
+    },
+    discovery: {
+      path: '/.well-known/x402',
+      price: 0,
+      description: 'x402 discovery document'
+    },
+    health: {
+      path: '/health',
+      price: 0,
+      description: 'Service health check'
+    }
   },
   docs: {
     quickstart: 'https://mercury402.uk/docs',
