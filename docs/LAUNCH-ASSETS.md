@@ -22,7 +22,7 @@ Traditional finance APIs require developers to manage API keys, subscriptions, a
 
 Current endpoints: 14 live, including any FRED economic series ($0.01), Treasury yield curves ($0.02), complete macro snapshots with 10 indicators ($0.05), and historical yield curve data ($0.03). Full pricing at https://mercury402.uk/docs/api. Data includes ECDSA signatures for provenance verification. OpenAPI 3.1 spec available at /openapi.json.
 
-Early traction: ~13 agents discovering endpoints on x402scan before announcement. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://mercury402.uk/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
+Listed on x402scan marketplace with organic agent discovery. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://mercury402.uk/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
 ```
 
 ---
@@ -110,7 +110,7 @@ Pay-per-call access to Federal Reserve Economic Data (FRED), Treasury yields, an
 
 **Architecture:**
 - Runtime: Node.js + Express
-- Upstream: FRED API (11,000+ economic series)
+- Upstream: FRED API (800,000+ economic series)
 - Cache: 6-hour TTL on all premium endpoints
 - Pricing: Tiered by endpoint value ($0.01-0.50 per call)
 - Signing: ECDSA signatures for data provenance
@@ -160,7 +160,7 @@ Is this the standard x402 token format? Or should I expect JWT?
 - GitHub Actions: Health check every 6 hours
 
 **Current traction:**
-~13 agents discovered endpoints on x402scan pre-announcement (organic discovery working!). Early revenue: $0.30-0.50/day baseline.
+Listed on x402scan marketplace with organic agent discovery working pre-announcement.
 
 **Questions for the community:**
 
@@ -210,7 +210,7 @@ Financial / Data APIs
 ```
 Mercury402 provides pay-per-call access to Federal Reserve Economic Data (FRED), U.S. Treasury yields, and macro indicators designed for autonomous agents and AI systems. Instead of traditional API keys and subscriptions, Mercury402 uses the x402 protocol: pay in USDC on Base blockchain and receive instant access with cryptographic signatures for data provenance.
 
-Access 11,000+ FRED economic series ($0.01/call), current Treasury yield curves ($0.02), complete macro snapshots with GDP, unemployment, inflation, and market sentiment ($0.05), historical yield data ($0.03), and TIPS rates ($0.02). All responses include ECDSA signatures for verification.
+Access 800,000+ FRED economic series ($0.01/call), current Treasury yield curves ($0.02), complete macro snapshots with GDP, unemployment, inflation, and market sentiment ($0.05), historical yield data ($0.03), and TIPS rates ($0.02). All responses include ECDSA signatures for verification.
 
 Designed for autonomous systems that can't manage traditional API credentials. No rate limits, no monthly minimums, no account setup—just pay per call. Perfect for AI agents, trading bots, economic research tools, and automated financial analysis systems.
 ```
@@ -236,7 +236,7 @@ Designed for autonomous systems that can't manage traditional API credentials. N
 
 | Endpoint | Price (USDC) | Description |
 |----------|--------------|-------------|
-| FRED Series | $0.01 | Any of 11,000+ economic series |
+| FRED Series | $0.01 | Any of 800,000+ economic series |
 | Treasury Yield Curve | $0.02 | Current rates (11 maturities) |
 | Macro Snapshot | $0.05 | GDP, CPI, unemployment, rates, VIX, sentiment |
 | Historical Yields | $0.03 | 90-day historical yield curves |
@@ -348,7 +348,7 @@ Before posting any of these assets, verify:
    - Check current revenue in metrics endpoint
    - Confirm this is accurate as of launch date
 
-3. **"11,000+ FRED series available"**
+3. **"800,000+ FRED series available"**
    - Verify this is the correct count from FRED documentation
    - Source: https://fred.stlouisfed.org/
 
