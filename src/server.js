@@ -140,16 +140,93 @@ const REVENUE_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.json
 const ACCESS_LOG = '/Users/openclaw/.openclaw/LOGS/mercury402-access.jsonl';
 
 // Parse x402 token for payment metadata (wallet, tx_hash)
-// Current implementation: token is opaque string, real fields will come from bridge
+// Defensive decoder: tries multiple formats (JWT, base64 JSON, hex JSON)
 function parsePaymentToken(token) {
-  // TODO: Once x402 payment bridge is integrated, decode token to extract:
-  // - wallet_address (payer's wallet)
-  // - tx_hash (on-chain transaction hash)
-  // For now, return null (fields not yet available)
+  if (!token || !token.startsWith('x402_')) {
+    return {
+      wallet_address: null,
+      tx_hash: null,
+      token_id: token,
+      wallet_source: 'invalid_format'
+    };
+  }
+
+  const tokenBody = token.replace('x402_', '');
+  
+  // Strategy 1: Try base64-encoded JSON
+  try {
+    const decoded = Buffer.from(tokenBody, 'base64').toString('utf8');
+    const json = JSON.parse(decoded);
+    
+    if (json && (json.wallet || json.wallet_address) && (json.tx || json.tx_hash)) {
+      return {
+        wallet_address: json.wallet || json.wallet_address || null,
+        tx_hash: json.tx || json.tx_hash || null,
+        token_id: token,
+        wallet_source: 'base64_claim',
+        merchant: json.merchant || null,
+        amount: json.amount || null,
+        network: json.network || null,
+        timestamp: json.timestamp || json.iat || null
+      };
+    }
+  } catch (e) {
+    // Not base64 JSON, try next format
+  }
+
+  // Strategy 2: Try hex-encoded JSON
+  try {
+    const decoded = Buffer.from(tokenBody, 'hex').toString('utf8');
+    const json = JSON.parse(decoded);
+    
+    if (json && (json.wallet || json.wallet_address) && (json.tx || json.tx_hash)) {
+      return {
+        wallet_address: json.wallet || json.wallet_address || null,
+        tx_hash: json.tx || json.tx_hash || null,
+        token_id: token,
+        wallet_source: 'hex_claim',
+        merchant: json.merchant || null,
+        amount: json.amount || null,
+        network: json.network || null,
+        timestamp: json.timestamp || json.iat || null
+      };
+    }
+  } catch (e) {
+    // Not hex JSON, try next format
+  }
+
+  // Strategy 3: Try JWT decode (without verification)
+  try {
+    const parts = tokenBody.split('.');
+    if (parts.length === 3) {
+      // JWT format: header.payload.signature
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      
+      if (payload && (payload.wallet || payload.wallet_address) && (payload.tx || payload.tx_hash)) {
+        return {
+          wallet_address: payload.wallet || payload.wallet_address || null,
+          tx_hash: payload.tx || payload.tx_hash || null,
+          token_id: token,
+          wallet_source: 'jwt_claim',
+          merchant: payload.merchant || null,
+          amount: payload.amount || null,
+          network: payload.network || null,
+          timestamp: payload.timestamp || payload.iat || null,
+          expires: payload.exp || null
+        };
+      }
+    }
+  } catch (e) {
+    // Not JWT or parsing failed
+  }
+
+  // Fallback: token is unparseable, return nulls
+  console.warn(`Unable to parse x402 token format: ${token.substring(0, 20)}...`);
   return {
     wallet_address: null,
     tx_hash: null,
-    token_id: token // Store token for audit trail
+    token_id: token,
+    wallet_source: 'unparseable'
   };
 }
 
@@ -184,6 +261,7 @@ function logAccess(req, res, startTime, paymentMeta = null) {
     endpoint: req.path,
     wallet_address: paymentMeta?.wallet_address || null,
     tx_hash: paymentMeta?.tx_hash || null,
+    wallet_source: paymentMeta?.wallet_source || null,
     verified: paymentMeta?.verified || false,
     status: res.statusCode,
     duration_ms: duration,
@@ -302,6 +380,7 @@ function require402Payment(endpointPath, price) {
       res.locals.paymentMeta = {
         wallet_address: tokenMeta.wallet_address,
         tx_hash: tokenMeta.tx_hash,
+        wallet_source: tokenMeta.wallet_source,
         verified: false,
         price_usd: price
       };
@@ -326,13 +405,20 @@ function require402Payment(endpointPath, price) {
     
     // PRODUCTION: Reject unverifiable tokens until x402 payment ledger integration complete
     // Real tokens must be validated against on-chain payment bridge
+    // BUT: extract and log wallet metadata from token for tracking purposes
     const paymentRequired = encodePaymentRequired(price);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
     
-    // Log rejected payment attempt
+    // Log rejected payment attempt (but include wallet metadata from token)
     logPayment(endpointPath, 0, customerId, false, 'unverified_token_no_bridge');
     
-    res.locals.paymentMeta = { verified: false, price_usd: 0 };
+    res.locals.paymentMeta = { 
+      wallet_address: tokenMeta.wallet_address,
+      tx_hash: tokenMeta.tx_hash,
+      wallet_source: tokenMeta.wallet_source,
+      verified: false, 
+      price_usd: 0 
+    };
     
     return res
       .status(402)
@@ -342,7 +428,10 @@ function require402Payment(endpointPath, price) {
         message: 'Payment verification system not yet operational. Token validation requires x402 bridge integration.',
         price: `$${price.toFixed(2)} USDC (Base)`,
         paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`,
-        status: 'Service accepts test tokens in development only (ALLOW_TEST_TOKEN=true). Production payment bridge coming soon.'
+        status: 'Service accepts test tokens in development only (ALLOW_TEST_TOKEN=true). Production payment bridge coming soon.',
+        debug: tokenMeta.wallet_address ? 
+          `Token decoded: wallet=${tokenMeta.wallet_address.substring(0, 10)}..., source=${tokenMeta.wallet_source}` : 
+          'Token could not be decoded'
       });
   };
 }
@@ -1490,14 +1579,36 @@ function getMetricsFromLog() {
       ? parseFloat(((verifiedCount / total_calls) * 100).toFixed(1))
       : 0;
 
+    // Wallet tracking
+    const unique_wallets = uniqueWallets.size; // Same as unique_buyers, renamed for clarity
+    
+    // Bridge verification rate (payments with wallet_source indicating verification)
+    const bridgeVerifiedSources = ['bridge_verified', 'rpc_verified'];
+    const bridgeVerifiedCount = entries.filter(e => 
+      e.wallet_source && bridgeVerifiedSources.includes(e.wallet_source)
+    ).length;
+    const bridge_verified_pct = total_calls > 0
+      ? parseFloat(((bridgeVerifiedCount / total_calls) * 100).toFixed(1))
+      : 0;
+    
+    // Wallet source breakdown
+    const walletSourceCounts = {};
+    entries.forEach(e => {
+      const source = e.wallet_source || 'none';
+      walletSourceCounts[source] = (walletSourceCounts[source] || 0) + 1;
+    });
+
     return {
       total_revenue_usd: parseFloat(total_revenue_usd.toFixed(2)),
       total_calls,
-      unique_buyers,
+      unique_buyers, // Legacy field (IP-based from old implementation)
+      unique_wallets, // New field (wallet_address-based)
       calls_last_24h,
       revenue_last_24h_usd: parseFloat(revenue_last_24h_usd.toFixed(2)),
       top_endpoints,
-      verified_payment_rate_pct
+      verified_payment_rate_pct,
+      bridge_verified_pct,
+      wallet_source_breakdown: walletSourceCounts
     };
   } catch (e) {
     console.error('Failed to read metrics from log:', e.message);
