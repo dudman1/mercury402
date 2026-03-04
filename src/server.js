@@ -11,6 +11,92 @@ const { getPrice } = require('./pricing');
 const app = express();
 const PORT = process.env.PORT || 4020;
 
+// Simple concurrency limiter for FRED API (max 10 concurrent requests)
+class ConcurrencyLimiter {
+  constructor(limit) {
+    this.limit = limit;
+    this.running = 0;
+    this.queue = [];
+  }
+
+  async run(fn) {
+    while (this.running >= this.limit) {
+      await new Promise(resolve => this.queue.push(resolve));
+    }
+    
+    this.running++;
+    try {
+      return await fn();
+    } finally {
+      this.running--;
+      const next = this.queue.shift();
+      if (next) next();
+    }
+  }
+}
+
+const fredLimit = new ConcurrencyLimiter(10);
+
+// TTL Cache
+const cache = new Map();
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  staleHits: 0
+};
+
+const CACHE_TTL = {
+  FRED: 6 * 60 * 60 * 1000,      // 6 hours
+  TREASURY: 6 * 60 * 60 * 1000   // 6 hours
+};
+
+function getCacheKey(endpoint, params = {}) {
+  return `${endpoint}:${JSON.stringify(params)}`;
+}
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  
+  const now = Date.now();
+  if (now < entry.expiresAt) {
+    // Fresh cache hit
+    cacheStats.hits++;
+    return { data: entry.data, age: Math.floor((now - entry.cachedAt) / 1000), stale: false };
+  }
+  
+  // Expired but keep for fallback
+  return { data: entry.data, age: Math.floor((now - entry.cachedAt) / 1000), stale: true };
+}
+
+function setCache(key, data, ttl) {
+  const now = Date.now();
+  cache.set(key, {
+    data: data,
+    cachedAt: now,
+    expiresAt: now + ttl
+  });
+}
+
+function getCacheMetrics() {
+  const total = cacheStats.hits + cacheStats.misses;
+  const hitRate = total > 0 ? ((cacheStats.hits / total) * 100).toFixed(1) : 0;
+  
+  // Find oldest entry
+  let oldestAge = 0;
+  const now = Date.now();
+  for (const entry of cache.values()) {
+    const age = Math.floor((now - entry.cachedAt) / 1000);
+    if (age > oldestAge) oldestAge = age;
+  }
+  
+  return {
+    cache_size: cache.size,
+    cache_hit_rate_pct: parseFloat(hitRate),
+    oldest_entry_age_seconds: oldestAge
+  };
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -101,7 +187,8 @@ function logAccess(req, res, startTime, paymentMeta = null) {
     verified: paymentMeta?.verified || false,
     status: res.statusCode,
     duration_ms: duration,
-    price_usd: paymentMeta?.price_usd || 0
+    price_usd: paymentMeta?.price_usd || 0,
+    cache_hit: res.locals.cacheHit || false
   };
   
   try {
@@ -265,8 +352,20 @@ function require402Payment(endpointPath, price) {
 // ============================================
 
 async function fetchFredData(seriesId, params) {
-  const fredUrl = 'https://api.stlouisfed.org/fred/series/observations';
+  // Generate cache key
+  const cacheKey = getCacheKey(`fred:${seriesId}`, params);
   
+  // Check cache
+  const cached = getCached(cacheKey);
+  if (cached && !cached.stale) {
+    // Fresh cache hit
+    return { ...cached.data, _cacheAge: cached.age, _cacheHit: true };
+  }
+  
+  // Cache miss - fetch from FRED
+  cacheStats.misses++;
+  
+  const fredUrl = 'https://api.stlouisfed.org/fred/series/observations';
   const query = {
     api_key: FRED_API_KEY,
     series_id: seriesId,
@@ -274,8 +373,23 @@ async function fetchFredData(seriesId, params) {
     ...params
   };
 
-  const response = await axios.get(fredUrl, { params: query });
-  return response.data;
+  try {
+    // Apply concurrency limit
+    const response = await fredLimit.run(() => axios.get(fredUrl, { params: query }));
+    
+    // Cache successful response
+    setCache(cacheKey, response.data, CACHE_TTL.FRED);
+    
+    return { ...response.data, _cacheAge: 0, _cacheHit: false };
+  } catch (error) {
+    // Graceful degradation: serve stale cache on error
+    if ((error.response?.status === 429 || error.response?.status === 503) && cached) {
+      console.warn(`FRED error ${error.response.status}, serving stale cache for ${seriesId}`);
+      cacheStats.staleHits++;
+      return { ...cached.data, _cacheAge: cached.age, _cacheHit: true, _stale: true };
+    }
+    throw error;
+  }
 }
 
 function generateProvenance(data, seriesId, params) {
@@ -347,7 +461,7 @@ app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPric
       fredParams.limit = limit || 1;
     }
 
-    // Fetch from FRED
+    // Fetch from FRED (with caching)
     const fredData = await fetchFredData(series_id, fredParams);
 
     if (!fredData.observations || fredData.observations.length === 0) {
@@ -379,6 +493,16 @@ app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPric
 
     // Payment validation happens in middleware - only reached if payment valid
     res.setHeader('X-Mercury-Price', `$${price.toFixed(2)}`);
+    
+    // Add cache headers and mark for access log
+    if (fredData._cacheHit) {
+      res.setHeader('X-Data-Age', fredData._cacheAge.toString());
+      if (fredData._stale) {
+        res.setHeader('X-Cache-Status', 'stale');
+      }
+      res.locals.cacheHit = true;
+    }
+    
     res.json({
       data: responseData,
       provenance
@@ -1003,11 +1127,17 @@ function getMetricsFromLog() {
 // GET /metrics — live revenue and usage statistics
 app.get('/metrics', (req, res) => {
   const metrics = getMetricsFromLog();
-  res.json(metrics);
+  const cacheMetrics = getCacheMetrics();
+  
+  res.json({
+    ...metrics,
+    ...cacheMetrics
+  });
 });
 
 app.get('/health', (req, res) => {
   const metrics = getMetricsFromLog();
+  const cacheMetrics = getCacheMetrics();
   
   res.json({
     status: 'healthy',
@@ -1017,7 +1147,10 @@ app.get('/health', (req, res) => {
     fred_configured: !!FRED_API_KEY,
     revenue_last_24h_usd: metrics.revenue_last_24h_usd,
     calls_last_24h: metrics.calls_last_24h,
-    verified_payment_rate_pct: metrics.verified_payment_rate_pct
+    verified_payment_rate_pct: metrics.verified_payment_rate_pct,
+    cache_size: cacheMetrics.cache_size,
+    cache_hit_rate_pct: cacheMetrics.cache_hit_rate_pct,
+    oldest_entry_age_seconds: cacheMetrics.oldest_entry_age_seconds
   });
 });
 
