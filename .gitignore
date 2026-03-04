@@ -17,9 +17,11 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Reports
-*.report.md
-*REPORT.md
+# Internal reports (exclude from repo)
+# Note: Documentation reports like PUBLIC-DISTRIBUTION-REPORT.md should be committed
+*-IMPLEMENTATION-REPORT.md
+*-TEST-REPORT.md
+DEMO-*.md
 
 # Secrets
 FRED_API_KEY
