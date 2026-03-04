@@ -786,7 +786,11 @@ const JSON_MANIFEST = {
     discovery: '/.well-known/x402',
     health: '/health'
   },
-  docs: 'https://mercury402.uk/docs'
+  docs: {
+    quickstart: 'https://mercury402.uk/docs',
+    apiReference: 'https://mercury402.uk/docs/api',
+    openapi: 'https://mercury402.uk/openapi.json'
+  }
 };
 
 const LANDING_HTML = `<!DOCTYPE html>
@@ -917,6 +921,7 @@ const LANDING_HTML = `<!DOCTYPE html>
   </div>
   <a class="btn primary" href="/demo" style="display:inline-block;margin-bottom:1.5rem">View Payment Flow &#8594;</a>
   <div class="links" style="opacity:.85">
+    <a class="btn" href="/docs/api">API Reference</a>
     <a class="btn" href="/docs">Quickstart</a>
     <a class="btn" href="/.well-known/x402">x402 Discovery</a>
     <a class="btn" href="/health">Health</a>
@@ -1077,6 +1082,78 @@ app.get(['/demo', '/demo/'], (req, res) => {
     return res.status(404).send('demo.html not found');
   }
   res.set('Content-Type', 'text/html').send(html);
+});
+
+// OpenAPI spec as JSON
+app.get('/openapi.json', (req, res) => {
+  const yaml = require('js-yaml');
+  const fs = require('fs');
+  const path = require('path');
+  const yamlPath = path.join(__dirname, '..', 'docs', 'openapi.yaml');
+  
+  try {
+    const yamlContent = fs.readFileSync(yamlPath, 'utf8');
+    const jsonSpec = yaml.load(yamlContent);
+    res.set('Content-Type', 'application/json');
+    res.json(jsonSpec);
+  } catch (e) {
+    console.error('Failed to load OpenAPI spec:', e.message);
+    res.status(500).json({
+      error: {
+        code: 'SPEC_LOAD_ERROR',
+        message: 'Failed to load OpenAPI specification',
+        detail: e.message
+      }
+    });
+  }
+});
+
+// Swagger UI (CDN-based, no npm install required)
+app.get('/docs/api', (req, res) => {
+  const swaggerHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mercury x402 API Documentation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui.css">
+  <style>
+    body { margin: 0; padding: 0; }
+    .topbar { display: none; }
+    .swagger-ui .info .title { color: #58a6ff; }
+    .swagger-ui { max-width: 1400px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        docExpansion: "list",
+        filter: true,
+        tryItOutEnabled: true
+      });
+      window.ui = ui;
+    };
+  </script>
+</body>
+</html>`;
+  res.set('Content-Type', 'text/html').send(swaggerHTML);
 });
 
 // Start server

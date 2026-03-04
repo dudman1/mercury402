@@ -1,0 +1,930 @@
+openapi: 3.1.0
+info:
+  title: Mercury x402 API
+  version: 1.1.0
+  description: |
+    Deterministic financial data with cryptographic provenance.
+    
+    Payment required via x402 protocol (HTTP 402 + USDC on Base).
+    All paid endpoints require `Authorization: Bearer x402_<token>` header.
+    
+    **Payment Flow:**
+    1. Call endpoint without auth → receive 402 with Payment-Required header
+    2. Pay via x402 protocol (USDC on Base mainnet)
+    3. Retry with Bearer token → receive 200 + data
+    
+    **Data Sources:**
+    - FRED (Federal Reserve Economic Data): 800k+ economic series
+    - U.S. Treasury rates: 11 maturities via FRED DGS series
+    
+  contact:
+    name: Mercury x402 Support
+    url: https://mercury402.uk
+  license:
+    name: Proprietary
+    
+servers:
+  - url: https://mercury402.uk
+    description: Production
+  - url: http://localhost:4020
+    description: Local development
+
+security:
+  - x402Bearer: []
+
+tags:
+  - name: FRED
+    description: Federal Reserve Economic Data series
+  - name: Treasury
+    description: U.S. Treasury yield curve data
+  - name: Composite
+    description: Multi-series composite dashboards
+  - name: Discovery
+    description: Service discovery and health
+  - name: Documentation
+    description: Documentation and examples
+
+paths:
+  /v1/fred/{series_id}:
+    get:
+      summary: Fetch FRED economic series data
+      description: |
+        Returns observations for any FRED series ID (GDP, UNRATE, DGS10, etc.).
+        
+        **Pricing:**
+        - Single date or latest: $0.15
+        - Date range (observation_start + observation_end): $0.30
+        
+        **Common Series:**
+        - UNRATE: Unemployment Rate
+        - GDP: Gross Domestic Product
+        - CPIAUCSL: Consumer Price Index
+        - DGS10: 10-Year Treasury Rate
+        - FEDFUNDS: Federal Funds Rate
+        
+        Browse all series: https://fred.stlouisfed.org/
+      operationId: getFredSeries
+      tags: [FRED]
+      security:
+        - x402Bearer: []
+      parameters:
+        - name: series_id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: UNRATE
+          description: FRED series ID (case-sensitive)
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Single date observation (YYYY-MM-DD)
+        - name: observation_start
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2020-01-01"
+          description: Start date for range query (requires observation_end)
+        - name: observation_end
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2023-12-31"
+          description: End date for range query (requires observation_start)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1
+            example: 5
+          description: Max observations to return (ignored if date/range specified)
+      responses:
+        '200':
+          description: Successful response with data and provenance
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.15"
+              description: Price charged for this call
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FREDResponse'
+              example:
+                data:
+                  series_id: UNRATE
+                  title: Unemployment Rate
+                  units: Percent
+                  frequency: Monthly
+                  seasonal_adjustment: Seasonally Adjusted
+                  last_updated: "2026-02-07T13:03:22.000Z"
+                  observation_count: 1
+                  observations:
+                    - date: "2026-01-01"
+                      value: "4.0"
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  source_url: https://fred.stlouisfed.org/series/UNRATE
+                  fetched_at: "2026-03-04T18:20:00.000Z"
+                  mercury_version: v1.0
+                  deterministic: true
+                  signature: "0x42d8f3f315633eaab09da600a89463314a1344da..."
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: Series not found or no data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: [SERIES_NOT_FOUND, NO_DATA_FOUND]
+                      message:
+                        type: string
+                      series_id:
+                        type: string
+              example:
+                error:
+                  code: SERIES_NOT_FOUND
+                  message: "Series 'INVALID' not found in FRED database"
+                  series_id: INVALID
+        '429':
+          description: FRED API rate limit exceeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: RATE_LIMIT_EXCEEDED
+                      message:
+                        type: string
+                      retry_after:
+                        type: integer
+                        example: 60
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/treasury/yield-curve/daily-snapshot:
+    get:
+      summary: U.S. Treasury yield curve daily snapshot
+      description: |
+        Returns daily U.S. Treasury par yield curve rates across 11 maturities.
+        Data sourced from FRED series (DGS1MO through DGS30).
+        
+        **Price:** $0.10
+        
+        **Maturities covered:**
+        - 1 Month, 3 Month, 6 Month
+        - 1 Year, 2 Year, 3 Year, 5 Year, 7 Year
+        - 10 Year, 20 Year, 30 Year
+        
+        **Data quality:** Returns 404 if fewer than 5 maturities available.
+      operationId: getTreasuryYieldCurve
+      tags: [Treasury]
+      security:
+        - x402Bearer: []
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2026-03-01"
+          description: Specific date (defaults to latest available)
+        - name: v
+          in: query
+          schema:
+            type: string
+            enum: ["0.9", "1.0"]
+            default: "1.0"
+          description: |
+            Response format version:
+            - 0.9: Legacy format (rates only)
+            - 1.0: New format with provenance (default)
+      responses:
+        '200':
+          description: Treasury yield curve data with provenance
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.10"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TreasuryResponseV1'
+                  - $ref: '#/components/schemas/TreasuryResponseV0_9'
+              examples:
+                v1:
+                  summary: Version 1.0 (with provenance)
+                  value:
+                    data:
+                      record_date: "2026-03-02"
+                      rates:
+                        1_MONTH: 3.74
+                        3_MONTH: 3.72
+                        6_MONTH: 3.68
+                        1_YEAR: 3.54
+                        2_YEAR: 3.47
+                        3_YEAR: 3.49
+                        5_YEAR: 3.62
+                        7_YEAR: 3.82
+                        10_YEAR: 4.05
+                        20_YEAR: 4.64
+                        30_YEAR: 4.70
+                    provenance:
+                      source: Federal Reserve Economic Data (FRED) - U.S. Treasury rates
+                      source_url: https://fred.stlouisfed.org
+                      fetched_at: "2026-03-04T18:07:49.590Z"
+                      mercury_version: v1.0
+                      deterministic: true
+                      cache_until: "2026-03-05T18:07:49.590Z"
+                      series_coverage: "11/11 maturities"
+                      record_date: "2026-03-02"
+                      signature: "0x42d8f3f315633eaab09da600a89463314a1344da..."
+                v0_9:
+                  summary: Version 0.9 (legacy)
+                  value:
+                    record_date: "2026-03-02"
+                    rates:
+                      1_MONTH: 3.74
+                      3_MONTH: 3.72
+                      10_YEAR: 4.05
+                      30_YEAR: 4.70
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No valid Treasury rate data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: NO_DATA_AVAILABLE
+                      message:
+                        type: string
+                      alternatives:
+                        type: array
+                        items:
+                          type: string
+              example:
+                error:
+                  code: NO_DATA_AVAILABLE
+                  message: No valid Treasury rate data available for requested date
+                  alternatives: ["/v1/fred/DGS10", "/v1/fred/DGS2", "/v1/fred/DGS30"]
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/composite/economic-dashboard:
+    get:
+      summary: Economic overview dashboard
+      description: |
+        Composite endpoint returning GDP, CPI, and Unemployment in one call.
+        
+        **Price:** $0.50
+        
+        **Includes:**
+        - GDP (Gross Domestic Product)
+        - CPIAUCSL (Consumer Price Index)
+        - UNRATE (Unemployment Rate)
+        
+        Returns latest observation for each series.
+      operationId: getEconomicDashboard
+      tags: [Composite]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Economic indicators dashboard
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.50"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: economic-overview
+                  timestamp: "2026-03-04T18:20:00.000Z"
+                  indicators:
+                    - series_id: GDP
+                      title: Gross Domestic Product
+                      value: "28230.532"
+                      date: "2025-10-01"
+                      units: Billions of Dollars
+                    - series_id: CPIAUCSL
+                      title: Consumer Price Index
+                      value: "315.249"
+                      date: "2026-01-01"
+                      units: Index 1982-1984=100
+                    - series_id: UNRATE
+                      title: Unemployment Rate
+                      value: "4.0"
+                      date: "2026-01-01"
+                      units: Percent
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  source_url: https://fred.stlouisfed.org/series/composite/economic-dashboard
+                  fetched_at: "2026-03-04T18:20:00.000Z"
+                  mercury_version: v1.0
+                  deterministic: true
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/composite/inflation-tracker:
+    get:
+      summary: Inflation metrics dashboard
+      description: |
+        Composite endpoint returning CPI, PCE, and Core CPI in one call.
+        
+        **Price:** $0.40
+        
+        **Includes:**
+        - CPIAUCSL (Consumer Price Index - All Items)
+        - PCEPI (Personal Consumption Expenditures Price Index)
+        - CPILFESL (Core CPI - Less Food & Energy)
+      operationId: getInflationTracker
+      tags: [Composite]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Inflation indicators
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.40"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: inflation-tracker
+                  timestamp: "2026-03-04T18:20:00.000Z"
+                  indicators:
+                    - series_id: CPIAUCSL
+                      title: Consumer Price Index (All Items)
+                      value: "315.249"
+                      date: "2026-01-01"
+                      units: Index 1982-1984=100
+                    - series_id: PCEPI
+                      title: Personal Consumption Expenditures Price Index
+                      value: "123.456"
+                      date: "2026-01-01"
+                      units: Index 2017=100
+                    - series_id: CPILFESL
+                      title: Core CPI (Less Food & Energy)
+                      value: "320.789"
+                      date: "2026-01-01"
+                      units: Index 1982-1984=100
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  fetched_at: "2026-03-04T18:20:00.000Z"
+                  mercury_version: v1.0
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/composite/labor-market:
+    get:
+      summary: Labor market health dashboard
+      description: |
+        Composite endpoint returning unemployment, jobless claims, and payrolls in one call.
+        
+        **Price:** $0.40
+        
+        **Includes:**
+        - UNRATE (Unemployment Rate)
+        - ICSA (Initial Jobless Claims)
+        - PAYEMS (Total Nonfarm Payrolls)
+      operationId: getLaborMarket
+      tags: [Composite]
+      security:
+        - x402Bearer: []
+      responses:
+        '200':
+          description: Labor market indicators
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: "$0.40"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: labor-market
+                  timestamp: "2026-03-04T18:20:00.000Z"
+                  indicators:
+                    - series_id: UNRATE
+                      title: Unemployment Rate
+                      value: "4.0"
+                      date: "2026-01-01"
+                      units: Percent
+                    - series_id: ICSA
+                      title: Initial Jobless Claims
+                      value: "210000"
+                      date: "2026-03-01"
+                      units: Number
+                    - series_id: PAYEMS
+                      title: Total Nonfarm Payrolls
+                      value: "158500"
+                      date: "2026-01-01"
+                      units: Thousands of Persons
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  fetched_at: "2026-03-04T18:20:00.000Z"
+                  mercury_version: v1.0
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /.well-known/x402:
+    get:
+      summary: x402 protocol discovery document
+      description: |
+        Returns x402 protocol configuration including:
+        - Supported payment schemes (exact)
+        - Network (Base mainnet - eip155:8453)
+        - Asset (USDC - 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
+        - Merchant wallet (payTo address)
+        - Endpoint pricing and descriptions
+        
+        Used by x402-compatible clients for automatic payment setup.
+      operationId: getX402Discovery
+      tags: [Discovery]
+      security: []
+      responses:
+        '200':
+          description: x402 discovery document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/X402Discovery'
+
+  /health:
+    get:
+      summary: Service health check
+      description: |
+        Returns service health status and configuration.
+        
+        **Fields:**
+        - status: "healthy" or "degraded"
+        - timestamp: current server time
+        - version: service version
+        - signing_address: ECDSA wallet for provenance signatures
+        - fred_configured: whether FRED API key is set
+      operationId: getHealth
+      tags: [Discovery]
+      security: []
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, timestamp, version]
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded]
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  signing_address:
+                    type: string
+                    nullable: true
+                    example: "0xe76795db4100E10374d19E91742A392C658f3a43"
+                  fred_configured:
+                    type: boolean
+
+  /:
+    get:
+      summary: Landing page or JSON manifest
+      description: |
+        Returns landing page HTML (if browser) or JSON manifest (if API client).
+        Content-Type negotiation via Accept header.
+      operationId: getRoot
+      tags: [Documentation]
+      security: []
+      responses:
+        '200':
+          description: Landing page or manifest
+          content:
+            text/html:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: Mercury x402
+                  tagline:
+                    type: string
+                  version:
+                    type: string
+                  endpoints:
+                    type: object
+
+  /docs:
+    get:
+      summary: Quickstart documentation
+      operationId: getDocs
+      tags: [Documentation]
+      security: []
+      responses:
+        '200':
+          description: HTML documentation
+          content:
+            text/html:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    x402Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: x402_<token>
+      description: |
+        x402 payment token obtained after USDC payment on Base.
+        
+        **Format:** `Authorization: Bearer x402_<token>`
+        
+        **How to get a token:**
+        1. Call any paid endpoint without auth → receive 402
+        2. Extract `Payment-Required` header (base64url-encoded payment info)
+        3. Pay via x402 protocol (USDC on Base)
+        4. Receive token from payment gateway
+        5. Retry request with `Authorization: Bearer x402_<token>`
+        
+        **Test tokens (dev only):**
+        Set `ALLOW_TEST_TOKEN=true` to accept `x402_test` token.
+
+  schemas:
+    FREDResponse:
+      type: object
+      required: [data, provenance]
+      properties:
+        data:
+          type: object
+          required: [series_id, observations]
+          properties:
+            series_id:
+              type: string
+              example: UNRATE
+            title:
+              type: string
+              example: Unemployment Rate
+            units:
+              type: string
+              example: Percent
+            frequency:
+              type: string
+              example: Monthly
+            seasonal_adjustment:
+              type: string
+              example: Seasonally Adjusted
+            last_updated:
+              type: string
+              format: date-time
+            observation_count:
+              type: integer
+              example: 1
+            observations:
+              type: array
+              items:
+                type: object
+                required: [date, value]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  value:
+                    oneOf:
+                      - type: string
+                      - type: "null"
+                    description: FRED returns "." for missing values (converted to null)
+                    example: "4.0"
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+
+    TreasuryResponseV1:
+      type: object
+      required: [data, provenance]
+      properties:
+        data:
+          type: object
+          required: [record_date, rates]
+          properties:
+            record_date:
+              type: string
+              format: date
+            rates:
+              type: object
+              properties:
+                1_MONTH:
+                  type: number
+                  format: float
+                3_MONTH:
+                  type: number
+                6_MONTH:
+                  type: number
+                1_YEAR:
+                  type: number
+                2_YEAR:
+                  type: number
+                3_YEAR:
+                  type: number
+                5_YEAR:
+                  type: number
+                7_YEAR:
+                  type: number
+                10_YEAR:
+                  type: number
+                20_YEAR:
+                  type: number
+                30_YEAR:
+                  type: number
+              additionalProperties: false
+        provenance:
+          allOf:
+            - $ref: '#/components/schemas/Provenance'
+            - type: object
+              properties:
+                series_coverage:
+                  type: string
+                  example: "11/11 maturities"
+                cache_until:
+                  type: string
+                  format: date-time
+
+    TreasuryResponseV0_9:
+      type: object
+      required: [record_date, rates]
+      properties:
+        record_date:
+          type: string
+          format: date
+        rates:
+          type: object
+          additionalProperties:
+            type: number
+
+    CompositeResponse:
+      type: object
+      required: [data, provenance]
+      properties:
+        data:
+          type: object
+          required: [dashboard, timestamp, indicators]
+          properties:
+            dashboard:
+              type: string
+              enum: [economic-overview, inflation-tracker, labor-market]
+            timestamp:
+              type: string
+              format: date-time
+            indicators:
+              type: array
+              items:
+                type: object
+                required: [series_id, value, date]
+                properties:
+                  series_id:
+                    type: string
+                  title:
+                    type: string
+                  value:
+                    oneOf:
+                      - type: string
+                      - type: "null"
+                  date:
+                    type: string
+                    format: date
+                  units:
+                    type: string
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+
+    Provenance:
+      type: object
+      required: [source, source_url, fetched_at, mercury_version, deterministic]
+      properties:
+        source:
+          type: string
+          example: Federal Reserve Economic Data (FRED)
+        source_url:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
+        mercury_version:
+          type: string
+          example: v1.0
+        deterministic:
+          type: boolean
+          description: Whether this response is deterministic/reproducible
+        signature:
+          type: string
+          nullable: true
+          description: ECDSA signature of canonical data (hex, with 0x prefix). Optional - only present if signing wallet is configured.
+          pattern: "^0x[a-fA-F0-9]+$"
+        requested_date:
+          type: string
+          format: date
+          description: Present if date query param was used
+        observation_start:
+          type: string
+          format: date
+          description: Present if observation_start query param was used
+        observation_end:
+          type: string
+          format: date
+          description: Present if observation_end query param was used
+
+    X402Discovery:
+      type: object
+      required: [x402Version, accepts]
+      properties:
+        x402Version:
+          type: integer
+          example: 2
+        accepts:
+          type: array
+          items:
+            type: object
+            required: [scheme, network, amount, payTo, maxTimeoutSeconds, asset]
+            properties:
+              scheme:
+                type: string
+                enum: [exact]
+              network:
+                type: string
+                example: "eip155:8453"
+                description: Base mainnet
+              amount:
+                type: string
+                example: "150000"
+                description: Amount in wei (USDC has 6 decimals)
+              payTo:
+                type: string
+                example: "0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+                description: Merchant wallet address
+              maxTimeoutSeconds:
+                type: integer
+                example: 30
+              asset:
+                type: string
+                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                description: USDC contract address on Base
+              extra:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        price:
+                          type: number
+                        description:
+                          type: string
+        extensions:
+          type: object
+          description: Optional x402 protocol extensions
+
+    PaymentRequired:
+      type: object
+      required: [error, price]
+      properties:
+        error:
+          type: string
+          enum: [PAYMENT_REQUIRED, INVALID_PAYMENT_TOKEN, PAYMENT_VERIFICATION_UNAVAILABLE]
+        message:
+          type: string
+        price:
+          type: string
+          example: "$0.15 USDC (Base)"
+        paymentUri:
+          type: string
+          format: uri
+          example: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.15&token=USDC&chain=base&recipient=0xF8d59..."
+        instructions:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          description: Additional status info (present for PAYMENT_VERIFICATION_UNAVAILABLE)
+
+  responses:
+    PaymentRequired:
+      description: Payment required via x402
+      headers:
+        Payment-Required:
+          schema:
+            type: string
+          description: Base64url-encoded x402 payment descriptor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PaymentRequired'
+          example:
+            error: PAYMENT_REQUIRED
+            message: Payment required to access this endpoint
+            price: "$0.15 USDC (Base)"
+            paymentUri: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.15&token=USDC&chain=base&recipient=0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+            instructions:
+              - "1. Click the paymentUri link above or visit https://x402.io"
+              - "2. Select this endpoint and enter your Authorization header value"
+              - "3. Make payment (USDC on Base blockchain)"
+              - "4. Retry request with Authorization header: Bearer x402_<token>"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: INTERNAL_ERROR
+                  message:
+                    type: string
+
+    ServiceUnavailable:
+      description: Service configuration issue (e.g., missing API key)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: SERVICE_UNAVAILABLE
+                  message:
+                    type: string
+                    example: FRED API key not configured
