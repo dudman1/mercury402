@@ -728,6 +728,46 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 });
 
 // ============================================
+// STUB ROUTES (UNDER CONSTRUCTION)
+// ============================================
+
+// Macro snapshot (all indicators in one call)
+app.get('/v1/macro/snapshot/all', (req, res) => {
+  res.status(503).json({
+    error: 'coming_soon',
+    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
+    available: false
+  });
+});
+
+// Treasury yield curve historical data
+app.get('/v1/treasury/yield-curve/historical', (req, res) => {
+  res.status(503).json({
+    error: 'coming_soon',
+    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
+    available: false
+  });
+});
+
+// Treasury auction results (recent)
+app.get('/v1/treasury/auction-results/recent', (req, res) => {
+  res.status(503).json({
+    error: 'coming_soon',
+    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
+    available: false
+  });
+});
+
+// Treasury TIPS rates (current)
+app.get('/v1/treasury/tips-rates/current', (req, res) => {
+  res.status(503).json({
+    error: 'coming_soon',
+    message: 'This endpoint is under construction. Subscribe to updates at https://mercury402.uk',
+    available: false
+  });
+});
+
+// ============================================
 // DISCOVERY & HEALTH
 // ============================================
 
