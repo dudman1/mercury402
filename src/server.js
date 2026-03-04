@@ -49,6 +49,21 @@ if (SERVER_PRIVATE_KEY) {
 // ============================================
 
 const REVENUE_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl';
+const ACCESS_LOG = '/Users/openclaw/.openclaw/LOGS/mercury402-access.jsonl';
+
+// Parse x402 token for payment metadata (wallet, tx_hash)
+// Current implementation: token is opaque string, real fields will come from bridge
+function parsePaymentToken(token) {
+  // TODO: Once x402 payment bridge is integrated, decode token to extract:
+  // - wallet_address (payer's wallet)
+  // - tx_hash (on-chain transaction hash)
+  // For now, return null (fields not yet available)
+  return {
+    wallet_address: null,
+    tx_hash: null,
+    token_id: token // Store token for audit trail
+  };
+}
 
 function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
   const entry = {
@@ -71,6 +86,54 @@ function logPayment(endpoint, amount, customerId = 'anon', verified = false, rea
   } catch (e) {
     console.error('Failed to log payment:', e.message);
   }
+}
+
+// Structured access logging with payment metadata
+function logAccess(req, res, startTime, paymentMeta = null) {
+  const duration = Date.now() - startTime;
+  const entry = {
+    timestamp: Date.now(),
+    endpoint: req.path,
+    wallet_address: paymentMeta?.wallet_address || null,
+    tx_hash: paymentMeta?.tx_hash || null,
+    verified: paymentMeta?.verified || false,
+    status: res.statusCode,
+    duration_ms: duration,
+    price_usd: paymentMeta?.price_usd || 0
+  };
+  
+  try {
+    const dir = path.dirname(ACCESS_LOG);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.appendFileSync(ACCESS_LOG, JSON.stringify(entry) + '\n');
+  } catch (e) {
+    console.error('Failed to log access:', e.message);
+  }
+}
+
+// Fire-and-forget Convex webhook for verified payments
+function emitToConvex(endpoint, revenue_usd, wallet_address) {
+  if (revenue_usd <= 0) return; // Only emit successful paid calls
+  
+  const payload = {
+    endpoint,
+    revenue_usd,
+    wallet_address: wallet_address || 'unknown',
+    timestamp: Date.now()
+  };
+  
+  axios.post('https://rapid-hummingbird-980.convex.cloud/api/mutation', {
+    path: 'api/metrics:recordMercuryCall',
+    args: payload
+  }, {
+    timeout: 5000,
+    headers: { 'Content-Type': 'application/json' }
+  }).catch(err => {
+    // Fire-and-forget: log failure but don't block
+    console.error('Convex emit failed:', err.message);
+  });
 }
 
 // ============================================
@@ -97,6 +160,8 @@ function encodePaymentRequired(price) {
 
 function require402Payment(endpointPath, price) {
   return (req, res, next) => {
+    const startTime = Date.now();
+    
     // Check for x402 payment token in Authorization header
     const authHeader = req.headers.authorization || '';
     
@@ -104,9 +169,18 @@ function require402Payment(endpointPath, price) {
     const bearerMatch = authHeader.match(/^Bearer\s+(x402_\S+)$/);
     const token = bearerMatch ? bearerMatch[1] : null;
     
+    // Intercept response to log access with final status
+    const originalJson = res.json.bind(res);
+    res.json = function(body) {
+      const paymentMeta = res.locals.paymentMeta || { verified: false, price_usd: 0 };
+      logAccess(req, res, startTime, paymentMeta);
+      return originalJson(body);
+    };
+    
     if (!token) {
       // No authorization header with x402 token
       const paymentRequired = encodePaymentRequired(price);
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
         .set('Payment-Required', paymentRequired)
@@ -124,6 +198,9 @@ function require402Payment(endpointPath, price) {
         });
     }
     
+    // Parse payment token for metadata
+    const tokenMeta = parsePaymentToken(token);
+    
     // Validate token: accept test tokens ONLY in development
     const isTestToken = token === 'x402_test' || token.startsWith('x402_test');
     const allowTestTokens = process.env.ALLOW_TEST_TOKEN === 'true';
@@ -132,12 +209,21 @@ function require402Payment(endpointPath, price) {
       // Test token in dev mode - log as unverified
       const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
       logPayment(endpointPath, price, customerId, false, 'test_token_dev_mode');
+      
+      res.locals.paymentMeta = {
+        wallet_address: tokenMeta.wallet_address,
+        tx_hash: tokenMeta.tx_hash,
+        verified: false,
+        price_usd: price
+      };
+      
       return next();
     }
     
     if (isTestToken && !allowTestTokens) {
       // Test token in production - reject
       const paymentRequired = encodePaymentRequired(price);
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
         .set('Payment-Required', paymentRequired)
@@ -156,6 +242,8 @@ function require402Payment(endpointPath, price) {
     
     // Log rejected payment attempt
     logPayment(endpointPath, 0, customerId, false, 'unverified_token_no_bridge');
+    
+    res.locals.paymentMeta = { verified: false, price_usd: 0 };
     
     return res
       .status(402)
@@ -535,7 +623,15 @@ app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
 
     const provenance = generateProvenance(responseData, 'composite/economic-dashboard', {});
 
-    logPayment('/v1/composite/economic-dashboard', 0.50, req.headers['x-customer-id'] || 'anon');
+    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+    logPayment('/v1/composite/economic-dashboard', 0.50, customerId);
+    
+    // Emit to Convex (fire-and-forget)
+    const paymentMeta = res.locals.paymentMeta || {};
+    if (paymentMeta.price_usd > 0) {
+      emitToConvex('/v1/composite/economic-dashboard', 0.50, paymentMeta.wallet_address);
+    }
+    
     res.setHeader('X-Mercury-Price', '$0.50');
     res.json({ data: responseData, provenance });
 
@@ -567,7 +663,15 @@ app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
 
     const provenance = generateProvenance(responseData, 'composite/inflation-tracker', {});
 
-    logPayment('/v1/composite/inflation-tracker', 0.40, req.headers['x-customer-id'] || 'anon');
+    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+    logPayment('/v1/composite/inflation-tracker', 0.40, customerId);
+    
+    // Emit to Convex (fire-and-forget)
+    const paymentMeta = res.locals.paymentMeta || {};
+    if (paymentMeta.price_usd > 0) {
+      emitToConvex('/v1/composite/inflation-tracker', 0.40, paymentMeta.wallet_address);
+    }
+    
     res.setHeader('X-Mercury-Price', '$0.40');
     res.json({ data: responseData, provenance });
 
@@ -599,7 +703,15 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 
     const provenance = generateProvenance(responseData, 'composite/labor-market', {});
 
-    logPayment('/v1/composite/labor-market', 0.40, req.headers['x-customer-id'] || 'anon');
+    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+    logPayment('/v1/composite/labor-market', 0.40, customerId);
+    
+    // Emit to Convex (fire-and-forget)
+    const paymentMeta = res.locals.paymentMeta || {};
+    if (paymentMeta.price_usd > 0) {
+      emitToConvex('/v1/composite/labor-market', 0.40, paymentMeta.wallet_address);
+    }
+    
     res.setHeader('X-Mercury-Price', '$0.40');
     res.json({ data: responseData, provenance });
 
@@ -763,13 +875,129 @@ app.get('/.well-known/x402', (req, res) => {
   });
 });
 
+// Aggregate metrics from access log
+function getMetricsFromLog() {
+  try {
+    if (!fs.existsSync(ACCESS_LOG)) {
+      return {
+        total_revenue_usd: 0,
+        total_calls: 0,
+        unique_buyers: 0,
+        calls_last_24h: 0,
+        revenue_last_24h_usd: 0,
+        top_endpoints: [],
+        verified_payment_rate_pct: 0
+      };
+    }
+
+    const logData = fs.readFileSync(ACCESS_LOG, 'utf8');
+    const lines = logData.trim().split('\n').filter(l => l);
+    
+    if (lines.length === 0) {
+      return {
+        total_revenue_usd: 0,
+        total_calls: 0,
+        unique_buyers: 0,
+        calls_last_24h: 0,
+        revenue_last_24h_usd: 0,
+        top_endpoints: [],
+        verified_payment_rate_pct: 0
+      };
+    }
+
+    const entries = lines.map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        return null;
+      }
+    }).filter(e => e !== null);
+
+    const now = Date.now();
+    const last24h = now - (24 * 60 * 60 * 1000);
+
+    // Totals
+    const total_revenue_usd = entries.reduce((sum, e) => sum + (e.price_usd || 0), 0);
+    const total_calls = entries.length;
+    
+    // Unique buyers (non-null wallet addresses)
+    const uniqueWallets = new Set(
+      entries.filter(e => e.wallet_address).map(e => e.wallet_address)
+    );
+    const unique_buyers = uniqueWallets.size;
+
+    // Last 24h
+    const recent = entries.filter(e => e.timestamp >= last24h);
+    const calls_last_24h = recent.length;
+    const revenue_last_24h_usd = recent.reduce((sum, e) => sum + (e.price_usd || 0), 0);
+
+    // Top endpoints
+    const endpointStats = {};
+    entries.forEach(e => {
+      if (!endpointStats[e.endpoint]) {
+        endpointStats[e.endpoint] = { calls: 0, revenue_usd: 0 };
+      }
+      endpointStats[e.endpoint].calls++;
+      endpointStats[e.endpoint].revenue_usd += (e.price_usd || 0);
+    });
+
+    const top_endpoints = Object.entries(endpointStats)
+      .map(([endpoint, stats]) => ({
+        endpoint,
+        calls: stats.calls,
+        revenue_usd: parseFloat(stats.revenue_usd.toFixed(2))
+      }))
+      .sort((a, b) => b.revenue_usd - a.revenue_usd)
+      .slice(0, 10);
+
+    // Verified payment rate
+    const verifiedCount = entries.filter(e => e.verified === true).length;
+    const verified_payment_rate_pct = total_calls > 0 
+      ? parseFloat(((verifiedCount / total_calls) * 100).toFixed(1))
+      : 0;
+
+    return {
+      total_revenue_usd: parseFloat(total_revenue_usd.toFixed(2)),
+      total_calls,
+      unique_buyers,
+      calls_last_24h,
+      revenue_last_24h_usd: parseFloat(revenue_last_24h_usd.toFixed(2)),
+      top_endpoints,
+      verified_payment_rate_pct
+    };
+  } catch (e) {
+    console.error('Failed to read metrics from log:', e.message);
+    return {
+      total_revenue_usd: 0,
+      total_calls: 0,
+      unique_buyers: 0,
+      calls_last_24h: 0,
+      revenue_last_24h_usd: 0,
+      top_endpoints: [],
+      verified_payment_rate_pct: 0,
+      error: e.message
+    };
+  }
+}
+
+// GET /metrics — live revenue and usage statistics
+app.get('/metrics', (req, res) => {
+  const metrics = getMetricsFromLog();
+  res.json(metrics);
+});
+
 app.get('/health', (req, res) => {
+  const metrics = getMetricsFromLog();
+  
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     signing_address: signingWallet ? signingWallet.address : null,
-    fred_configured: !!FRED_API_KEY
+    fred_configured: !!FRED_API_KEY,
+    revenue_last_24h_usd: metrics.revenue_last_24h_usd,
+    calls_last_24h: metrics.calls_last_24h,
+    verified_payment_rate_pct: metrics.verified_payment_rate_pct
   });
 });
 
