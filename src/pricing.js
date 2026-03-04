@@ -16,10 +16,7 @@ const PRICING = {
   '/v1/composite/inflation-tracker': 0.40,
   '/v1/composite/labor-market': 0.40,
   
-  // FRED series (base price, range queries may cost more)
-  '/v1/fred/{series_id}': 0.15,
-  
-  // Default fallback price
+  // Default fallback price (applies to FRED series and any unspecified endpoints)
   default: 0.01
 };
 
@@ -32,7 +29,7 @@ function getPrice(endpoint) {
   
   // Check for FRED series pattern
   if (endpoint.startsWith('/v1/fred/')) {
-    return PRICING['/v1/fred/{series_id}'];
+    return PRICING['/v1/fred/{series_id}'] ?? PRICING.default;
   }
   
   // Default fallback
