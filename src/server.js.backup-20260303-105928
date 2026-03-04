@@ -12,9 +12,6 @@ const PORT = process.env.PORT || 4020;
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../public')));
-
 // Configuration
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -308,127 +305,87 @@ app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', 0.15), 
 // TREASURY ENDPOINT (Hardened)
 // ============================================
 
-// Treasury yield curve endpoint - TEMPORARILY DISABLED
-// Mock data replaced with 503 until real FRED-based implementation ready
-app.get('/v1/treasury/yield-curve/daily-snapshot', async (req, res) => {
-  // DO NOT charge customers for unavailable data
-  res.status(503).json({
-    error: {
-      code: 'ENDPOINT_UNAVAILABLE',
-      message: 'Treasury yield curve data is temporarily unavailable. Use /v1/fred/DGS10 or other FRED series for live rate data.',
-      alternatives: [
-        '/v1/fred/DGS10',
-        '/v1/fred/DGS2',
-        '/v1/fred/DGS30',
-        '/v1/fred/DGS1MO',
-        '/v1/fred/DGS3MO',
-        '/v1/fred/DGS6MO',
-        '/v1/fred/DGS1',
-        '/v1/fred/DGS5',
-        '/v1/fred/DGS7',
-        '/v1/fred/DGS20'
-      ]
+async function fetchTreasuryData(date) {
+  // This is a placeholder - you'll need to implement actual Treasury.gov scraping
+  // For now, return mock data structure
+  const mockData = {
+    record_date: date || new Date().toISOString().split('T')[0],
+    rates: {
+      '1_MONTH': 4.42,
+      '3_MONTH': 4.38,
+      '6_MONTH': 4.33,
+      '1_YEAR': 4.23,
+      '2_YEAR': 4.12,
+      '3_YEAR': 4.05,
+      '5_YEAR': 4.01,
+      '7_YEAR': 4.08,
+      '10_YEAR': 4.19,
+      '20_YEAR': 4.47,
+      '30_YEAR': 4.52
     }
-  });
-});
+  };
 
-// ============================================
-// PREMIUM COMPOSITE ENDPOINTS
-// ============================================
+  return mockData;
+}
 
-// Economic Dashboard - GDP + CPI + Unemployment - $0.50
-app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', 0.50), async (req, res) => {
-  try {
-    if (!FRED_API_KEY) {
-      return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
+function buildTreasuryProvenance(data, fetchedAt) {
+  const provenance = {
+    source: 'U.S. Department of the Treasury - Daily Treasury Par Yield Curve Rates',
+    source_url: `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve&field_tdr_date_value=${data.record_date.substring(0, 4)}`,
+    fetched_at: fetchedAt,
+    mercury_version: 'v1.0',
+    deterministic: true,
+    cache_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  };
+
+  // Generate signature
+  if (signingWallet) {
+    try {
+      const canonical = JSON.stringify({
+        record_date: data.record_date,
+        rates: data.rates,
+        fetched_at: fetchedAt
+      });
+      const messageHash = ethers.id(canonical);
+      const signature = signingWallet.signMessageSync(ethers.getBytes(messageHash));
+      provenance.signature = signature;
+    } catch (e) {
+      console.error('Treasury signature generation failed:', e.message);
     }
-
-    const series = ['GDP', 'CPIAUCSL', 'UNRATE'];
-    const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
-
-    const responseData = {
-      dashboard: 'economic-overview',
-      timestamp: new Date().toISOString(),
-      indicators: [
-        { series_id: 'GDP', title: 'Gross Domestic Product', value: results[0].observations[0]?.value, date: results[0].observations[0]?.date, units: results[0].units },
-        { series_id: 'CPIAUCSL', title: 'Consumer Price Index', value: results[1].observations[0]?.value, date: results[1].observations[0]?.date, units: results[1].units },
-        { series_id: 'UNRATE', title: 'Unemployment Rate', value: results[2].observations[0]?.value, date: results[2].observations[0]?.date, units: results[2].units }
-      ]
-    };
-
-    const provenance = generateProvenance(responseData, 'composite/economic-dashboard', {});
-
-    logPayment('/v1/composite/economic-dashboard', 0.50, req.headers['x-customer-id'] || 'anon');
-    res.setHeader('X-Mercury-Price', '$0.50');
-    res.json({ data: responseData, provenance });
-
-  } catch (error) {
-    console.error('Economic dashboard error:', error.message);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: error.message } });
   }
-});
 
-// Inflation Tracker - CPI + PCE + Core CPI - $0.40
-app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', 0.40), async (req, res) => {
+  return provenance;
+}
+
+app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', 0.10), async (req, res) => {
   try {
-    if (!FRED_API_KEY) {
-      return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
+    const { v, date } = req.query;
+
+    // Fetch treasury data
+    const treasuryData = await fetchTreasuryData(date);
+    const fetchedAt = new Date().toISOString();
+
+    // Legacy format (v0.9)
+    if (v === '0.9') {
+      return res.json(treasuryData);
     }
 
-    const series = ['CPIAUCSL', 'PCEPI', 'CPILFESL'];
-    const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
+    // New format with provenance (v1.0 default)
+    const provenance = buildTreasuryProvenance(treasuryData, fetchedAt);
 
-    const responseData = {
-      dashboard: 'inflation-tracker',
-      timestamp: new Date().toISOString(),
-      indicators: [
-        { series_id: 'CPIAUCSL', title: 'Consumer Price Index (All Items)', value: results[0].observations[0]?.value, date: results[0].observations[0]?.date, units: results[0].units },
-        { series_id: 'PCEPI', title: 'Personal Consumption Expenditures Price Index', value: results[1].observations[0]?.value, date: results[1].observations[0]?.date, units: results[1].units },
-        { series_id: 'CPILFESL', title: 'Core CPI (Less Food & Energy)', value: results[2].observations[0]?.value, date: results[2].observations[0]?.date, units: results[2].units }
-      ]
-    };
-
-    const provenance = generateProvenance(responseData, 'composite/inflation-tracker', {});
-
-    logPayment('/v1/composite/inflation-tracker', 0.40, req.headers['x-customer-id'] || 'anon');
-    res.setHeader('X-Mercury-Price', '$0.40');
-    res.json({ data: responseData, provenance });
+    res.json({
+      data: treasuryData,
+      provenance
+    });
 
   } catch (error) {
-    console.error('Inflation tracker error:', error.message);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: error.message } });
-  }
-});
-
-// Labor Market Health - Unemployment + Initial Claims + Nonfarm Payrolls - $0.40
-app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', 0.40), async (req, res) => {
-  try {
-    if (!FRED_API_KEY) {
-      return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
-    }
-
-    const series = ['UNRATE', 'ICSA', 'PAYEMS'];
-    const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
-
-    const responseData = {
-      dashboard: 'labor-market',
-      timestamp: new Date().toISOString(),
-      indicators: [
-        { series_id: 'UNRATE', title: 'Unemployment Rate', value: results[0].observations[0]?.value, date: results[0].observations[0]?.date, units: results[0].units },
-        { series_id: 'ICSA', title: 'Initial Jobless Claims', value: results[1].observations[0]?.value, date: results[1].observations[0]?.date, units: results[1].units },
-        { series_id: 'PAYEMS', title: 'Total Nonfarm Payrolls', value: results[2].observations[0]?.value, date: results[2].observations[0]?.date, units: results[2].units }
-      ]
-    };
-
-    const provenance = generateProvenance(responseData, 'composite/labor-market', {});
-
-    logPayment('/v1/composite/labor-market', 0.40, req.headers['x-customer-id'] || 'anon');
-    res.setHeader('X-Mercury-Price', '$0.40');
-    res.json({ data: responseData, provenance });
-
-  } catch (error) {
-    console.error('Labor market error:', error.message);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: error.message } });
+    console.error('Treasury endpoint error:', error.message);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
   }
 });
 
@@ -457,42 +414,19 @@ app.get('/.well-known/x402', (req, res) => {
           ]
         }
       },
-
       {
         scheme: 'exact',
         network: 'eip155:8453',
-        amount: '500000', // 0.50 USDC
+        amount: '100000', // 0.10 USDC in wei
         payTo: MERCHANT_WALLET,
         maxTimeoutSeconds: 30,
         asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         extra: {
           endpoints: [
             {
-              path: '/v1/composite/economic-dashboard',
-              price: 0.50,
-              description: 'Economic overview: GDP, CPI, and Unemployment in one call'
-            }
-          ]
-        }
-      },
-      {
-        scheme: 'exact',
-        network: 'eip155:8453',
-        amount: '400000', // 0.40 USDC
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        extra: {
-          endpoints: [
-            {
-              path: '/v1/composite/inflation-tracker',
-              price: 0.40,
-              description: 'Inflation metrics: CPI, PCE, and Core CPI'
-            },
-            {
-              path: '/v1/composite/labor-market',
-              price: 0.40,
-              description: 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls'
+              path: '/v1/treasury/yield-curve/daily-snapshot',
+              price: 0.10,
+              description: 'U.S. Treasury yield curve snapshot with cryptographic provenance'
             }
           ]
         }
@@ -583,13 +517,10 @@ app.get('/health', (req, res) => {
 const JSON_MANIFEST = {
   name: 'Mercury x402',
   tagline: 'Deterministic financial data with cryptographic provenance',
-  version: '1.1.0',
+  version: '1.0.0',
   endpoints: {
     fred: '/v1/fred/{series_id}',
     treasury: '/v1/treasury/yield-curve/daily-snapshot',
-    economicDashboard: '/v1/composite/economic-dashboard',
-    inflationTracker: '/v1/composite/inflation-tracker',
-    laborMarket: '/v1/composite/labor-market',
     discovery: '/.well-known/x402',
     health: '/health'
   },
@@ -700,21 +631,6 @@ const LANDING_HTML = `<!DOCTYPE html>
       <div class="price">$0.10<span>/call</span></div>
       <p>Daily U.S. Treasury par yield curve snapshot</p>
     </div>
-    <div class="card">
-      <h3>Economic Dashboard</h3>
-      <div class="price">$0.50<span>/call</span></div>
-      <p>GDP, CPI, and Unemployment in one composite call</p>
-    </div>
-    <div class="card">
-      <h3>Inflation Tracker</h3>
-      <div class="price">$0.40<span>/call</span></div>
-      <p>CPI, PCE, and Core CPI inflation metrics</p>
-    </div>
-    <div class="card">
-      <h3>Labor Market</h3>
-      <div class="price">$0.40<span>/call</span></div>
-      <p>Unemployment, Jobless Claims, and Nonfarm Payrolls</p>
-    </div>
   </div>
   <p class="trust-line">Designed for builders who want agents that transact &mdash; not just query.</p>
   <div class="preview">
@@ -820,17 +736,6 @@ app.get('/meta.json', (req, res) => {
 
 app.get('/docs', (req, res) => {
   res.set('Content-Type', 'text/html').send(DOCS_HTML);
-});
-
-app.get('/docs/quickstart', (req, res) => {
-  const mdPath = path.join(__dirname, '..', 'docs', 'quickstart-x402-agents.md');
-  let md;
-  try {
-    md = fs.readFileSync(mdPath, 'utf8');
-  } catch (e) {
-    return res.status(404).send('Quickstart guide not found');
-  }
-  res.set('Content-Type', 'text/markdown').send(md);
 });
 
 app.get('/sdk-examples', (req, res) => {
