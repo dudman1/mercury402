@@ -138,6 +138,8 @@ if (SERVER_PRIVATE_KEY) {
 
 const REVENUE_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl';
 const ACCESS_LOG = '/Users/openclaw/.openclaw/LOGS/mercury402-access.jsonl';
+const MAX_LOG_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_ROTATED_FILES = 7;
 
 // Parse x402 token for payment metadata (wallet, tx_hash)
 // Defensive decoder: tries multiple formats (JWT, base64 JSON, hex JSON)
@@ -253,6 +255,58 @@ function logPayment(endpoint, amount, customerId = 'anon', verified = false, rea
   }
 }
 
+// Log rotation helper
+function rotateAccessLog() {
+  try {
+    if (!fs.existsSync(ACCESS_LOG)) return;
+    
+    const stats = fs.statSync(ACCESS_LOG);
+    if (stats.size < MAX_LOG_SIZE) return;
+    
+    // Rotate: rename to mercury402-access.YYYY-MM-DD.jsonl
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const rotatedPath = path.join(
+      path.dirname(ACCESS_LOG),
+      `mercury402-access.${dateStr}.jsonl`
+    );
+    
+    // If file for today already exists, append timestamp to make unique
+    let finalPath = rotatedPath;
+    if (fs.existsSync(finalPath)) {
+      const timestamp = now.toISOString().replace(/[:.]/g, '-');
+      finalPath = path.join(
+        path.dirname(ACCESS_LOG),
+        `mercury402-access.${dateStr}.${timestamp}.jsonl`
+      );
+    }
+    
+    fs.renameSync(ACCESS_LOG, finalPath);
+    console.log(`✅ Log rotated: ${finalPath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+    
+    // Cleanup old rotated files (keep last MAX_ROTATED_FILES)
+    const logDir = path.dirname(ACCESS_LOG);
+    const files = fs.readdirSync(logDir)
+      .filter(f => f.startsWith('mercury402-access.') && f.endsWith('.jsonl'))
+      .map(f => ({
+        name: f,
+        path: path.join(logDir, f),
+        mtime: fs.statSync(path.join(logDir, f)).mtime.getTime()
+      }))
+      .sort((a, b) => b.mtime - a.mtime); // Newest first
+    
+    // Delete files beyond MAX_ROTATED_FILES
+    if (files.length > MAX_ROTATED_FILES) {
+      files.slice(MAX_ROTATED_FILES).forEach(file => {
+        fs.unlinkSync(file.path);
+        console.log(`🗑️  Deleted old log: ${file.name}`);
+      });
+    }
+  } catch (e) {
+    console.error('Log rotation failed:', e.message);
+  }
+}
+
 // Structured access logging with payment metadata
 function logAccess(req, res, startTime, paymentMeta = null) {
   const duration = Date.now() - startTime;
@@ -274,6 +328,10 @@ function logAccess(req, res, startTime, paymentMeta = null) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    
+    // Check for log rotation before writing
+    rotateAccessLog();
+    
     fs.appendFileSync(ACCESS_LOG, JSON.stringify(entry) + '\n');
   } catch (e) {
     console.error('Failed to log access:', e.message);
@@ -1626,14 +1684,57 @@ function getMetricsFromLog() {
 }
 
 // GET /metrics — live revenue and usage statistics
+// /metrics rate limiting + caching
+const metricsRateLimit = new Map(); // IP -> [timestamps]
+const METRICS_RATE_LIMIT = 60; // Max 60 requests per minute
+const METRICS_RATE_WINDOW = 60 * 1000; // 1 minute in ms
+const METRICS_CACHE_TTL = 60 * 1000; // 1 minute cache
+let metricsCached = null;
+let metricsCachedAt = 0;
+
 app.get('/metrics', (req, res) => {
+  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const now = Date.now();
+  
+  // Rate limiting (60 req/min per IP)
+  if (!metricsRateLimit.has(clientIP)) {
+    metricsRateLimit.set(clientIP, []);
+  }
+  
+  const timestamps = metricsRateLimit.get(clientIP);
+  // Remove timestamps older than 1 minute
+  const recentTimestamps = timestamps.filter(ts => now - ts < METRICS_RATE_WINDOW);
+  
+  if (recentTimestamps.length >= METRICS_RATE_LIMIT) {
+    return res.status(429).json({
+      error: 'rate_limited',
+      retry_after_seconds: 60
+    });
+  }
+  
+  // Record this request
+  recentTimestamps.push(now);
+  metricsRateLimit.set(clientIP, recentTimestamps);
+  
+  // Check cache (refresh every 60 seconds)
+  if (metricsCached && (now - metricsCachedAt) < METRICS_CACHE_TTL) {
+    return res.json(metricsCached);
+  }
+  
+  // Recompute metrics
   const metrics = getMetricsFromLog();
   const cacheMetrics = getCacheMetrics();
   
-  res.json({
+  const result = {
     ...metrics,
     ...cacheMetrics
-  });
+  };
+  
+  // Update cache
+  metricsCached = result;
+  metricsCachedAt = now;
+  
+  res.json(result);
 });
 
 app.get('/health', (req, res) => {
@@ -2100,6 +2201,18 @@ app.get('/docs/api', (req, res) => {
 </html>`;
   res.set('Content-Type', 'text/html').send(swaggerHTML);
 });
+
+// Startup: ensure log directory exists
+const logDir = path.dirname(ACCESS_LOG);
+try {
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  console.log(`✅ Log directory ready: ${logDir}`);
+} catch (e) {
+  console.error(`❌ Failed to create log directory: ${e.message}`);
+  process.exit(1);
+}
 
 // Start server
 app.listen(PORT, '127.0.0.1', () => {
