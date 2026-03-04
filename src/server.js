@@ -329,28 +329,184 @@ app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', 0.15), 
 // TREASURY ENDPOINT (Hardened)
 // ============================================
 
-// Treasury yield curve endpoint - TEMPORARILY DISABLED
-// Mock data replaced with 503 until real FRED-based implementation ready
-app.get('/v1/treasury/yield-curve/daily-snapshot', async (req, res) => {
-  // DO NOT charge customers for unavailable data
-  res.status(503).json({
-    error: {
-      code: 'ENDPOINT_UNAVAILABLE',
-      message: 'Treasury yield curve data is temporarily unavailable. Use /v1/fred/DGS10 or other FRED series for live rate data.',
-      alternatives: [
-        '/v1/fred/DGS10',
-        '/v1/fred/DGS2',
-        '/v1/fred/DGS30',
-        '/v1/fred/DGS1MO',
-        '/v1/fred/DGS3MO',
-        '/v1/fred/DGS6MO',
-        '/v1/fred/DGS1',
-        '/v1/fred/DGS5',
-        '/v1/fred/DGS7',
-        '/v1/fred/DGS20'
-      ]
+// ============================================
+// TREASURY ENDPOINT (FRED-based implementation)
+// ============================================
+
+async function fetchTreasuryYieldCurve(date) {
+  if (!FRED_API_KEY) {
+    throw new Error('FRED_API_KEY not configured');
+  }
+
+  // Treasury rate series from FRED
+  const seriesMap = {
+    '1_MONTH': 'DGS1MO',
+    '3_MONTH': 'DGS3MO',
+    '6_MONTH': 'DGS6MO',
+    '1_YEAR': 'DGS1',
+    '2_YEAR': 'DGS2',
+    '3_YEAR': 'DGS3',
+    '5_YEAR': 'DGS5',
+    '7_YEAR': 'DGS7',
+    '10_YEAR': 'DGS10',
+    '20_YEAR': 'DGS20',
+    '30_YEAR': 'DGS30'
+  };
+
+  // Build params for FRED API
+  const fredParams = {
+    sort_order: 'desc',
+    limit: 1
+  };
+
+  if (date) {
+    fredParams.observation_start = date;
+    fredParams.observation_end = date;
+  }
+
+  // Fetch all series in parallel
+  const seriesIds = Object.values(seriesMap);
+  const results = await Promise.all(
+    seriesIds.map(id => fetchFredData(id, fredParams).catch(err => {
+      console.error(`Failed to fetch ${id}:`, err.message);
+      return { observations: [] };
+    }))
+  );
+
+  // Map results back to yield curve format
+  const rates = {};
+  const recordDates = [];
+  
+  Object.entries(seriesMap).forEach(([label, seriesId], index) => {
+    const result = results[index];
+    if (result.observations && result.observations.length > 0) {
+      const obs = result.observations[0];
+      // FRED returns "." for missing values
+      if (obs.value && obs.value !== '.') {
+        rates[label] = parseFloat(obs.value);
+        recordDates.push(obs.date);
+      }
     }
   });
+
+  // Sanity checks
+  if (Object.keys(rates).length === 0) {
+    throw new Error('No valid Treasury rate data available for requested date');
+  }
+
+  // Use most common date as record_date (should all be same for daily snapshot)
+  const dateCounts = {};
+  recordDates.forEach(d => dateCounts[d] = (dateCounts[d] || 0) + 1);
+  const record_date = Object.keys(dateCounts).sort((a, b) => dateCounts[b] - dateCounts[a])[0];
+
+  // Validate: all rates are numeric
+  const invalidRates = Object.entries(rates).filter(([_, v]) => isNaN(v));
+  if (invalidRates.length > 0) {
+    throw new Error(`Invalid rate values: ${invalidRates.map(([k]) => k).join(', ')}`);
+  }
+
+  return {
+    record_date: record_date || (date || new Date().toISOString().split('T')[0]),
+    rates,
+    source: 'FRED (Federal Reserve Economic Data)',
+    series_fetched: Object.keys(rates).length,
+    total_series: Object.keys(seriesMap).length
+  };
+}
+
+function buildTreasuryProvenance(data, fetchedAt) {
+  const provenance = {
+    source: 'Federal Reserve Economic Data (FRED) - U.S. Treasury rates',
+    source_url: 'https://fred.stlouisfed.org',
+    fetched_at: fetchedAt,
+    mercury_version: 'v1.0',
+    deterministic: true,
+    cache_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    series_coverage: `${data.series_fetched}/${data.total_series} maturities`,
+    record_date: data.record_date
+  };
+
+  // Generate signature
+  if (signingWallet) {
+    try {
+      const canonical = JSON.stringify({
+        record_date: data.record_date,
+        rates: data.rates,
+        source: data.source
+      });
+      const messageHash = ethers.id(canonical);
+      const signature = signingWallet.signMessageSync(ethers.getBytes(messageHash));
+      provenance.signature = signature;
+    } catch (e) {
+      console.error('Treasury signature generation failed:', e.message);
+    }
+  }
+
+  return provenance;
+}
+
+app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', 0.10), async (req, res) => {
+  try {
+    if (!FRED_API_KEY) {
+      return res.status(503).json({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'FRED API key not configured'
+        }
+      });
+    }
+
+    const { v, date } = req.query;
+
+    // Fetch real treasury data from FRED
+    const treasuryData = await fetchTreasuryYieldCurve(date);
+    const fetchedAt = new Date().toISOString();
+
+    // Sanity check: verify data quality
+    if (treasuryData.series_fetched < 5) {
+      console.warn(`Low series coverage: ${treasuryData.series_fetched}/11 series available`);
+    }
+
+    // Legacy format (v0.9) - just rates
+    if (v === '0.9') {
+      return res.json({
+        record_date: treasuryData.record_date,
+        rates: treasuryData.rates
+      });
+    }
+
+    // New format with provenance (v1.0 default)
+    const provenance = buildTreasuryProvenance(treasuryData, fetchedAt);
+
+    res.setHeader('X-Mercury-Price', '$0.10');
+    res.json({
+      data: {
+        record_date: treasuryData.record_date,
+        rates: treasuryData.rates
+      },
+      provenance
+    });
+
+  } catch (error) {
+    console.error('Treasury endpoint error:', error.message);
+    
+    if (error.message.includes('No valid Treasury rate data')) {
+      return res.status(404).json({
+        error: {
+          code: 'NO_DATA_AVAILABLE',
+          message: error.message,
+          alternatives: ['/v1/fred/DGS10', '/v1/fred/DGS2', '/v1/fred/DGS30']
+        }
+      });
+    }
+
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
 });
 
 // ============================================
@@ -478,7 +634,23 @@ app.get('/.well-known/x402', (req, res) => {
           ]
         }
       },
-
+      {
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '100000', // 0.10 USDC in wei
+        payTo: MERCHANT_WALLET,
+        maxTimeoutSeconds: 30,
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        extra: {
+          endpoints: [
+            {
+              path: '/v1/treasury/yield-curve/daily-snapshot',
+              price: 0.10,
+              description: 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)'
+            }
+          ]
+        }
+      },
       {
         scheme: 'exact',
         network: 'eip155:8453',
