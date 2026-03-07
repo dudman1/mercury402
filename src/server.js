@@ -232,6 +232,66 @@ function parsePaymentToken(token) {
   };
 }
 
+async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+    const USDC_CONTRACT = process.env.USDC_CONTRACT_BASE;
+    
+    // Fetch transaction receipt (includes logs)
+    const receipt = await provider.getTransactionReceipt(tx_hash);
+    
+    if (!receipt || receipt.status !== 1) {
+      return { verified: false, reason: 'rpc_tx_not_found_or_failed' };
+    }
+    
+    // Parse USDC Transfer event logs
+    // Transfer event signature: Transfer(address indexed from, address indexed to, uint256 value)
+    const transferTopic = ethers.id('Transfer(address,address,uint256)');
+    
+    const transferLog = receipt.logs.find(log => 
+      log.address.toLowerCase() === USDC_CONTRACT.toLowerCase() &&
+      log.topics[0] === transferTopic
+    );
+    
+    if (!transferLog) {
+      return { verified: false, reason: 'rpc_no_usdc_transfer' };
+    }
+    
+    // Decode log: topics[1] = from, topics[2] = to, data = amount
+    const recipientAddress = '0x' + transferLog.topics[2].slice(26); // Remove padding
+    const amountHex = transferLog.data;
+    const amountWei = BigInt(amountHex);
+    const amountUSDC = Number(amountWei) / 1e6; // USDC has 6 decimals
+    
+    // Verify recipient matches merchant wallet
+    if (recipientAddress.toLowerCase() !== merchant_wallet.toLowerCase()) {
+      return { 
+        verified: false, 
+        reason: `rpc_wrong_recipient_expected_${merchant_wallet}_got_${recipientAddress}` 
+      };
+    }
+    
+    // Verify amount >= expected (allow slight underpayment tolerance of 1 cent)
+    const tolerance = 0.01;
+    if (amountUSDC < (expected_amount_usd - tolerance)) {
+      return { 
+        verified: false, 
+        reason: `rpc_insufficient_amount_expected_${expected_amount_usd}_got_${amountUSDC}` 
+      };
+    }
+    
+    return { 
+      verified: true, 
+      actual_amount_usd: amountUSDC, 
+      block_number: receipt.blockNumber 
+    };
+    
+  } catch (error) {
+    console.error('RPC verification error:', error.message);
+    return { verified: false, reason: `rpc_error_${error.message.substring(0, 50)}` };
+  }
+}
+
 function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
   const entry = {
     timestamp: Date.now(),
@@ -384,7 +444,7 @@ function encodePaymentRequired(price) {
 }
 
 function require402Payment(endpointPath, price) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const startTime = Date.now();
     
     // Check for x402 payment token in Authorization header
@@ -461,36 +521,59 @@ function require402Payment(endpointPath, price) {
         });
     }
     
-    // PRODUCTION: Reject unverifiable tokens until x402 payment ledger integration complete
-    // Real tokens must be validated against on-chain payment bridge
-    // BUT: extract and log wallet metadata from token for tracking purposes
+    // PRODUCTION: Verify payment on-chain via Base RPC
     const paymentRequired = encodePaymentRequired(price);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
     
-    // Log rejected payment attempt (but include wallet metadata from token)
-    logPayment(endpointPath, 0, customerId, false, 'unverified_token_no_bridge');
+    if (!tokenMeta.tx_hash) {
+      // Token parsed but no tx_hash found
+      logPayment(endpointPath, 0, customerId, false, 'no_tx_hash_in_token');
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
+      return res.status(402).set('Payment-Required', paymentRequired).json({
+        error: 'INVALID_PAYMENT_TOKEN',
+        message: 'Token does not contain transaction hash',
+        price: `$${price.toFixed(2)} USDC (Base)`
+      });
+    }
     
-    res.locals.paymentMeta = { 
+    // Verify transaction on-chain
+    const verification = await verifyPaymentOnChain(
+      tokenMeta.tx_hash, 
+      price, 
+      MERCHANT_WALLET
+    );
+    
+    if (!verification.verified) {
+      // Verification failed - log and reject
+      logPayment(endpointPath, 0, customerId, false, verification.reason);
+      res.locals.paymentMeta = { 
+        wallet_address: tokenMeta.wallet_address,
+        tx_hash: tokenMeta.tx_hash,
+        verified: false, 
+        price_usd: 0 
+      };
+      
+      return res.status(402).set('Payment-Required', paymentRequired).json({
+        error: 'PAYMENT_VERIFICATION_FAILED',
+        message: `Transaction verification failed: ${verification.reason}`,
+        price: `$${price.toFixed(2)} USDC (Base)`,
+        tx_hash: tokenMeta.tx_hash
+      });
+    }
+    
+    // VERIFIED ✅ - Log successful payment and proceed
+    logPayment(endpointPath, price, customerId, true, null);
+    
+    res.locals.paymentMeta = {
       wallet_address: tokenMeta.wallet_address,
       tx_hash: tokenMeta.tx_hash,
       wallet_source: tokenMeta.wallet_source,
-      verified: false, 
-      price_usd: 0 
+      verified: true,
+      price_usd: price,
+      block_number: verification.block_number
     };
     
-    return res
-      .status(402)
-      .set('Payment-Required', paymentRequired)
-      .json({
-        error: 'PAYMENT_VERIFICATION_UNAVAILABLE',
-        message: 'Payment verification system not yet operational. Token validation requires x402 bridge integration.',
-        price: `$${price.toFixed(2)} USDC (Base)`,
-        paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`,
-        status: 'Service accepts test tokens in development only (ALLOW_TEST_TOKEN=true). Production payment bridge coming soon.',
-        debug: tokenMeta.wallet_address ? 
-          `Token decoded: wallet=${tokenMeta.wallet_address.substring(0, 10)}..., source=${tokenMeta.wallet_source}` : 
-          'Token could not be decoded'
-      });
+    return next();
   };
 }
 
