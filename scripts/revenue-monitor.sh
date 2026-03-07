@@ -16,21 +16,21 @@ if [ ! -s "$LEDGER" ]; then
     exit 0
 fi
 
-# Calculate metrics
-TOTAL_REVENUE=$(cat "$LEDGER" | jq -r '.amount' | awk '{sum+=$1} END {print sum}')
-TOTAL_CALLS=$(cat "$LEDGER" | wc -l | tr -d ' ')
-UNIQUE_CUSTOMERS=$(cat "$LEDGER" | jq -r '.customer' | sort -u | wc -l | tr -d ' ')
+# Calculate metrics (verified payments only)
+TOTAL_REVENUE=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .amount' | awk '{sum+=$1} END {print sum}')
+TOTAL_CALLS=$(cat "$LEDGER" | jq -r 'select(.verified == true)' | wc -l | tr -d ' ')
+UNIQUE_CUSTOMERS=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .customer' | sort -u | wc -l | tr -d ' ')
 
-# Today's revenue (last 24 hours)
+# Today's revenue (last 24 hours, verified only)
 YESTERDAY_TS=$(($(date +%s) - 86400))
-TODAY_REVENUE=$(cat "$LEDGER" | jq -r "select(.timestamp/1000 > $YESTERDAY_TS) | .amount" | awk '{sum+=$1} END {print sum}')
+TODAY_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .timestamp/1000 > $YESTERDAY_TS) | .amount" | awk '{sum+=$1} END {print sum}')
 
-# This week's revenue (last 7 days)
+# This week's revenue (last 7 days, verified only)
 WEEK_AGO_TS=$(($(date +%s) - 604800))
-WEEK_REVENUE=$(cat "$LEDGER" | jq -r "select(.timestamp/1000 > $WEEK_AGO_TS) | .amount" | awk '{sum+=$1} END {print sum}')
+WEEK_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .timestamp/1000 > $WEEK_AGO_TS) | .amount" | awk '{sum+=$1} END {print sum}')
 
-# Most popular endpoint
-TOP_ENDPOINT=$(cat "$LEDGER" | jq -r '.endpoint' | sort | uniq -c | sort -rn | head -1 | awk '{print $2, "("$1" calls)"}')
+# Most popular endpoint (verified only)
+TOP_ENDPOINT=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .endpoint' | sort | uniq -c | sort -rn | head -1 | awk '{print $2, "("$1" calls)"}')
 
 # Format output
 echo "📊 Mercury402 Revenue Report"
