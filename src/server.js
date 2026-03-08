@@ -473,11 +473,11 @@ function require402Payment(endpointPath, price) {
           error: 'PAYMENT_REQUIRED',
           message: 'Payment required to access this endpoint',
           price: `$${price.toFixed(2)} USDC (Base)`,
-          paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`,
+          paymentUri: `https://mercury402.uk/pay?endpoint=${endpointPath}&price=${price.toFixed(2)}`,
           instructions: [
-            '1. Click the paymentUri link above or visit https://x402.io',
-            '2. Select this endpoint and enter your Authorization header value',
-            '3. Make payment (USDC on Base blockchain)',
+            '1. Visit the paymentUri link above for payment instructions',
+            '2. Send USDC on Base network to merchant wallet',
+            '3. Create your x402 token using the provided tool',
             '4. Retry request with Authorization header: Bearer x402_<token>'
           ]
         });
@@ -517,7 +517,7 @@ function require402Payment(endpointPath, price) {
           error: 'INVALID_PAYMENT_TOKEN',
           message: 'Test tokens not allowed in production',
           price: `$${price.toFixed(2)} USDC (Base)`,
-          paymentUri: `https://x402.io/pay?endpoint=${endpointPath}&amount=${(price * 1).toFixed(2)}&token=USDC&chain=base&recipient=${MERCHANT_WALLET}`
+          paymentUri: `https://mercury402.uk/pay?endpoint=${endpointPath}&price=${price.toFixed(2)}`
         });
     }
     
@@ -1820,6 +1820,11 @@ app.get('/metrics', (req, res) => {
   res.json(result);
 });
 
+// Serve payment instructions page
+app.get('/pay', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/pay.html'));
+});
+
 app.get('/health', (req, res) => {
   const metrics = getMetricsFromLog();
   const cacheMetrics = getCacheMetrics();
@@ -2099,11 +2104,11 @@ Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
 {
   "error": "PAYMENT_REQUIRED",
   "price": "$0.15 USDC (Base)",
-  "paymentUri": "https://x402.io/pay?..."
+  "paymentUri": "https://mercury402.uk/pay?..."
 }</code></pre>
 
   <h2>Step 2 — Pay and get a token</h2>
-  <p>Visit the <code>paymentUri</code> or any x402-compatible client. After paying, you receive a bearer token like <code>x402_abc123...</code>.</p>
+  <p>Visit the <code>paymentUri</code> for payment instructions. After paying, create your x402 token and retry the request.</p>
 
   <h2>Step 3 — Make a paid request</h2>
   <pre><code>curl -H "Authorization: Bearer x402_&lt;token&gt;" \\

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Instructions — Mercury402</title>
+    <meta name="description" content="How to pay for Mercury402 API access via x402 micropayments">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .tagline {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+        
+        section {
+            background: white;
+            margin: 30px 0;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1em;
+            font-weight: 700;
+        }
+        
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .info-box p {
+            margin: 8px 0;
+        }
+        
+        .info-box strong {
+            color: #667eea;
+        }
+        
+        code {
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 180px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            resize: vertical;
+            background: #fafafa;
+            margin: 10px 0;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin: 10px 5px;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        .success {
+            background: #10b981;
+        }
+        
+        .success:hover {
+            background: #059669;
+        }
+        
+        #encoded-token {
+            background: #1e1e1e;
+            color: #4ade80;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            margin: 15px 0;
+            display: none;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-size: 0.85em;
+        }
+        
+        .warning {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .addr {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>💳 Mercury402 Payment</h1>
+            <p class="tagline">x402 micropayment instructions</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <section id="payment-info">
+            <h2><span class="step-number">1</span> Send USDC on Base</h2>
+            <div class="info-box">
+                <p><strong>Recipient address:</strong></p>
+                <p class="addr">0xF8d59270cBC746a7593D25b6569812eF1681C6D2</p>
+                <p><strong>Amount:</strong> <span id="price-display">$0.00</span> USDC</p>
+                <p><strong>Network:</strong> Base (chain ID: 8453)</p>
+                <p><strong>Token contract:</strong> 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</p>
+            </div>
+            <p>Send the exact amount shown above using MetaMask, Coinbase Wallet, or any wallet that supports Base network.</p>
+        </section>
+
+        <section>
+            <h2><span class="step-number">2</span> Copy Your Transaction Hash</h2>
+            <p>After sending, your wallet will show a transaction hash (starts with <code>0x...</code>). Copy the entire hash.</p>
+            <p>You can also find it on <a href="https://basescan.org" target="_blank">BaseScan</a>.</p>
+        </section>
+
+        <section>
+            <h2><span class="step-number">3</span> Create Your Payment Token</h2>
+            <p>Fill in your wallet address and transaction hash below:</p>
+            
+            <textarea id="token-template" spellcheck="false">{
+  "wallet_address": "YOUR_WALLET_ADDRESS",
+  "tx_hash": "YOUR_TX_HASH",
+  "merchant": "0xF8d59270cBC746a7593D25b6569812eF1681C6D2",
+  "amount": 0.00,
+  "network": "base",
+  "timestamp": 0
+}</textarea>
+
+            <button onclick="encodeToken()">🔐 Encode Token</button>
+            <button onclick="prefillTemplate()" style="background: #6b7280;">📝 Auto-fill Template</button>
+            
+            <div id="encoded-token"></div>
+            <button id="copy-btn" class="success hidden" onclick="copyToken()">📋 Copy Token</button>
+        </section>
+
+        <section id="usage-section" class="hidden">
+            <h2><span class="step-number">4</span> Use Your Token</h2>
+            <p>Make your API request with the token in the Authorization header:</p>
+            <pre><code>curl -H "Authorization: Bearer <span id="token-preview">x402_...</span>" \
+  https://mercury402.uk<span id="endpoint-display">/v1/...</span></code></pre>
+            
+            <div class="warning">
+                <strong>⚠️ Token is single-use per endpoint</strong>
+                <p>Each payment is validated on-chain. If you need to access multiple endpoints or make multiple requests, you'll need separate payments for each.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Need Help?</h2>
+            <p>Having trouble? Contact <a href="https://x.com/Mercuryclaw1" target="_blank">@Mercuryclaw1</a> on X.</p>
+            <p><a href="/">← Back to Mercury402</a></p>
+        </section>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const endpoint = urlParams.get('endpoint') || '/v1/treasury/yield-curve/daily-snapshot';
+        const price = parseFloat(urlParams.get('price')) || 0.02;
+
+        // Update display
+        document.getElementById('price-display').textContent = `$${price.toFixed(2)}`;
+        document.getElementById('endpoint-display').textContent = endpoint;
+
+        // Pre-fill template button
+        function prefillTemplate() {
+            const now = Math.floor(Date.now() / 1000);
+            const template = {
+                wallet_address: "YOUR_WALLET_ADDRESS",
+                tx_hash: "YOUR_TX_HASH",
+                merchant: "0xF8d59270cBC746a7593D25b6569812eF1681C6D2",
+                amount: price,
+                network: "base",
+                timestamp: now
+            };
+            document.getElementById('token-template').value = JSON.stringify(template, null, 2);
+        }
+
+        // Auto-fill on page load
+        prefillTemplate();
+
+        let generatedToken = '';
+
+        function encodeToken() {
+            const textarea = document.getElementById('token-template');
+            const tokenDisplay = document.getElementById('encoded-token');
+            const copyBtn = document.getElementById('copy-btn');
+            const usageSection = document.getElementById('usage-section');
+            const tokenPreview = document.getElementById('token-preview');
+
+            try {
+                // Parse JSON to validate
+                const tokenData = JSON.parse(textarea.value);
+                
+                // Validate required fields
+                if (!tokenData.wallet_address || tokenData.wallet_address === "YOUR_WALLET_ADDRESS") {
+                    alert('⚠️ Please enter your wallet address');
+                    return;
+                }
+                if (!tokenData.tx_hash || tokenData.tx_hash === "YOUR_TX_HASH") {
+                    alert('⚠️ Please enter your transaction hash');
+                    return;
+                }
+                
+                // Encode to base64
+                const jsonString = JSON.stringify(tokenData);
+                const base64 = btoa(jsonString);
+                generatedToken = 'x402_' + base64;
+                
+                // Display
+                tokenDisplay.textContent = generatedToken;
+                tokenDisplay.style.display = 'block';
+                copyBtn.classList.remove('hidden');
+                usageSection.classList.remove('hidden');
+                tokenPreview.textContent = generatedToken.substring(0, 20) + '...';
+                
+                // Scroll to result
+                tokenDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e) {
+                alert('❌ Invalid JSON format. Please check your input.');
+            }
+        }
+
+        function copyToken() {
+            navigator.clipboard.writeText(generatedToken).then(() => {
+                const btn = document.getElementById('copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
