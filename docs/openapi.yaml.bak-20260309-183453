@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Mercury x402 API
   version: 1.2.0
@@ -22,11 +22,7 @@ info:
     url: https://mercury402.uk
   license:
     name: Proprietary
-  guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay USDC, retry with Bearer token."
     
-x-discovery:
-  ownershipProofs: []
-
 servers:
   - url: https://mercury402.uk
     description: Production
@@ -56,8 +52,8 @@ paths:
         Returns observations for any FRED series ID (GDP, UNRATE, DGS10, etc.).
         
         **Pricing:**
-        - Single date or latest: $0.01
-        - Date range (observation_start + observation_end): $0.02
+        - Single date or latest: $0.15
+        - Date range (observation_start + observation_end): $0.30
         
         **Common Series:**
         - UNRATE: Unemployment Rate
@@ -68,12 +64,8 @@ paths:
         
         Browse all series: https://fred.stlouisfed.org/
       operationId: getFredSeries
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.010000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.15
+      x-price-range: 0.30
       tags: [FRED]
       security:
         - x402Bearer: []
@@ -122,7 +114,7 @@ paths:
             X-Mercury-Price:
               schema:
                 type: string
-                example: "$0.01"
+                example: "$0.15"
               description: Price charged for this call
           content:
             application/json:
@@ -210,12 +202,7 @@ paths:
         
         **Data quality:** Returns 404 if fewer than 5 maturities available.
       operationId: getTreasuryYieldCurve
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.02
       tags: [Treasury]
       security:
         - x402Bearer: []
@@ -334,12 +321,7 @@ paths:
         
         Returns latest observation for each series.
       operationId: getEconomicDashboard
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.500000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.50
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -401,12 +383,7 @@ paths:
         - PCEPI (Personal Consumption Expenditures Price Index)
         - CPILFESL (Core CPI - Less Food & Energy)
       operationId: getInflationTracker
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.400000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.40
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -466,12 +443,7 @@ paths:
         - ICSA (Initial Jobless Claims)
         - PAYEMS (Total Nonfarm Payrolls)
       operationId: getLaborMarket
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.400000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.40
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -519,7 +491,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/macro/snapshot/all:
-    get:
+    post:
       summary: Complete macroeconomic snapshot
       description: |
         Fetches all major economic indicators in a single call:
@@ -539,12 +511,7 @@ paths:
         - DTWEXBGS: Trade Weighted U.S. Dollar Index
         - UMCSENT: Consumer Sentiment Index
       operationId: getMacroSnapshot
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.050000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.05
       tags: [Composite]
       security:
         - x402Bearer: []
@@ -624,12 +591,7 @@ paths:
         - Dates must be in YYYY-MM-DD format
         - start_date must be before end_date
       operationId: getTreasuryHistorical
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.030000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.03
       tags: [Treasury]
       security:
         - x402Bearer: []
@@ -738,7 +700,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/treasury/auction-results/recent:
-    get:
+    post:
       summary: Recent Treasury auction results
       description: |
         Returns recent auction results using HQM (High Quality Market Corporate Bond) yields as proxy.
@@ -748,12 +710,7 @@ paths:
         
         **Note:** Uses FRED HQM series as proxy for actual auction data.
       operationId: getTreasuryAuctions
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.02
       tags: [Treasury]
       security:
         - x402Bearer: []
@@ -818,7 +775,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/treasury/tips-rates/current:
-    get:
+    post:
       summary: Current TIPS rates
       description: |
         Returns current Treasury Inflation-Protected Securities (TIPS) yields for all available maturities.
@@ -832,12 +789,7 @@ paths:
         - 20-Year (DFII20)
         - 30-Year (DFII30)
       operationId: getTreasuryTIPS
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
-        protocols:
-          - x402
-          - mpp
+      x-price: 0.02
       tags: [Treasury]
       security:
         - x402Bearer: []
@@ -1285,11 +1237,11 @@ components:
           type: string
         price:
           type: string
-          example: "$0.01 USDC (Base)"
+          example: "$0.15 USDC (Base)"
         paymentUri:
           type: string
           format: uri
-          example: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59..."
+          example: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.15&token=USDC&chain=base&recipient=0xF8d59..."
         instructions:
           type: array
           items:
@@ -1313,8 +1265,8 @@ components:
           example:
             error: PAYMENT_REQUIRED
             message: Payment required to access this endpoint
-            price: "$0.01 USDC (Base)"
-            paymentUri: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+            price: "$0.15 USDC (Base)"
+            paymentUri: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.15&token=USDC&chain=base&recipient=0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
             instructions:
               - "1. Click the paymentUri link above or visit https://x402.io"
               - "2. Select this endpoint and enter your Authorization header value"

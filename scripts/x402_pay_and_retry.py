@@ -234,7 +234,15 @@ def main():
         print("  ERROR: no payment-required header found")
         sys.exit(1)
 
-    descriptor = decode_payment_descriptor(pr_header)
+    raw_descriptor = decode_payment_descriptor(pr_header)
+
+    # Support x402 v1 (top-level amount) and v2 (accepts[0] array)
+    if "accepts" in raw_descriptor and raw_descriptor["accepts"]:
+        descriptor = raw_descriptor["accepts"][0]
+        x402_version = raw_descriptor.get("x402Version", 2)
+        print(f"  (x402 version: {x402_version})")
+    else:
+        descriptor = raw_descriptor
 
     amount_raw = int(descriptor["amount"])
     amount_usdc = amount_raw / 1_000_000
@@ -301,11 +309,20 @@ def main():
         sys.exit(1)
 
     # ── STEP 5: Derive Authorization token ────────────────────────────────────
-    # Server currently accepts any x402_<non-test> bearer token (TODO: ledger validation)
-    # Convention: x402_txhash_prefix so logs are traceable
-    token_suffix = txhash.replace("0x", "")[:16] if txhash.startswith("0x") else txhash[:20]
-    auth_token = f"x402_{token_suffix}"
-    print(f"\nSTEP 5 — Authorization token: Bearer {auth_token}")
+    # Server expects x402_<base64JSON> with wallet + tx fields
+    import time as _time
+    token_payload = {
+        "wallet": os.environ.get("WALLET_ADDRESS", "0xF7eaaAD30cF55e014B0A72f8985C9CE349b8B2Bd"),
+        "tx": txhash,
+        "merchant": descriptor["payTo"],
+        "amount": amount_usdc,
+        "network": descriptor["network"],
+        "timestamp": int(_time.time())
+    }
+    import base64 as _b64
+    token_b64 = _b64.b64encode(json.dumps(token_payload).encode()).decode()
+    auth_token = f"x402_{token_b64}"
+    print(f"\nSTEP 5 — Authorization token: Bearer {auth_token[:60]}...")
 
     # ── STEP 6: Paid retry ────────────────────────────────────────────────────
     print("\nSTEP 6 — Retrying paid endpoint ...")

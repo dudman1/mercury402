@@ -28,8 +28,8 @@
 🚀 Mercury402 now live on x402scan!
 
 Deterministic financial data for AI agents:
-• US Treasury yield curves - $0.10
-• FRED economic data (800k+ series) - $0.15-$0.30
+• US Treasury yield curves - $0.02
+• FRED economic data (800k+ series) - $0.01
 • Composite dashboards (GDP/CPI/Unemployment) - $0.40-$0.50
 • Every response cryptographically signed
 • No API keys, no rate limits
@@ -52,8 +52,8 @@ DM me for early access credits.
 Mercury402 is live on x402scan.com 🚀
 
 Deterministic financial data via micropayments:
-• US Treasury yield curves ($0.10)
-• FRED economic data ($0.15-$0.30)
+• US Treasury yield curves ($0.02)
+• FRED economic data ($0.01)
 • Cryptographic signatures for provenance
 
 No API keys. No rate limits. Pay per call.
@@ -82,7 +82,7 @@ First 5 integrations get $20 USDC credit
 Why pay $50/month for economic data APIs when your agent can pay per call?
 
 Mercury402:
-• $0.10-$0.50 per call
+• $0.01-$0.50 per call
 • No subscriptions
 • No API keys
 • Cryptographic signatures
@@ -99,7 +99,7 @@ Your trading agent needs unemployment data.
 
 Traditional API: $50/month minimum, API key management, rate limits
 
-Mercury402: $0.15, one x402 payment, done.
+Mercury402: $0.01, one x402 payment, done.
 
 This is what agent-native infrastructure looks like.
 
@@ -114,7 +114,7 @@ https://www.x402scan.com/server/mercury402
 ```
 Hey [name], saw you're building agents in the x402 ecosystem.
 
-I built Mercury402 - deterministic financial data (FRED, Treasury yields) via micropayments. $0.10-$0.50/call, no subscriptions.
+I built Mercury402 - deterministic financial data (FRED, Treasury yields) via micropayments. $0.01-$0.50/call, no subscriptions.
 
 Would you find this useful for [their agent type]? Happy to sponsor your first 20 calls if you want to test integration.
 
@@ -137,7 +137,7 @@ I built Mercury402 - a financial data API specifically for autonomous AI agents 
 
 **What it does:**
 - Provides deterministic economic data (FRED, Treasury yields)
-- Charges per call ($0.10-$0.50) via x402 protocol
+- Charges per call ($0.01-$0.50) via x402 protocol
 - No API keys, no subscriptions
 - Every response cryptographically signed for provenance
 

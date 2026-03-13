@@ -3,7 +3,7 @@
 # Returns milestone info if crossed, empty if not
 
 LEDGER="/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl"
-STATE_FILE="/Users/openclaw/.openclaw/workspace/memory/mercury-milestone-state.json"
+STATE_FILE="/Users/openclaw/.openclaw/workspace/mercury-milestone-state.json"
 
 # Exit if no ledger
 if [ ! -f "$LEDGER" ] || [ ! -s "$LEDGER" ]; then

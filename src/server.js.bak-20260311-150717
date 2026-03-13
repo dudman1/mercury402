@@ -113,298 +113,6 @@ if (!MERCHANT_WALLET) {
   process.exit(1);
 }
 
-// Bazaar schema metadata for x402scan discovery
-// Fixed BAZAAR_SCHEMAS structure for x402scan compatibility
-// Replace lines 117-181 in ~/mercury-x402-service/src/server.js
-
-const BAZAAR_SCHEMAS = {
-  '/v1/fred/{series_id}': {
-    info: {
-      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } } },
-      output: { type: 'json', example: { series_id: 'UNRATE', realtime_start: '2026-03-11', realtime_end: '2026-03-11', observations: [{ date: '2024-01-01', value: '3.7' }] } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' },
-            pathParams: {
-              type: 'object',
-              properties: {
-                series_id: { type: 'string', description: 'FRED series ID' }
-              },
-              required: ['series_id']
-            }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            series_id: { type: 'string' },
-            realtime_start: { type: 'string' },
-            realtime_end: { type: 'string' },
-            observations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  date: { type: 'string' },
-                  value: { type: 'string' }
-                }
-              }
-            }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/treasury/yield-curve/daily-snapshot': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { date: '2026-03-11', rates: { '1_MONTH': 5.42, '3_MONTH': 5.38 } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            date: { type: 'string' },
-            rates: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/composite/economic-dashboard': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', gdp: { value: 22000.5 } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            timestamp: { type: 'string' },
-            gdp: { type: 'object' },
-            unemployment: { type: 'object' },
-            inflation: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/composite/inflation-tracker': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', cpi: { value: 315.2 } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            timestamp: { type: 'string' },
-            cpi: { type: 'object' },
-            core_cpi: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/composite/labor-market': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', unemployment_rate: { value: 3.7 } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            timestamp: { type: 'string' },
-            unemployment_rate: { type: 'object' },
-            labor_force_participation: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/macro/snapshot/all': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', indicators: { GDP: { value: 22000.5 } } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            timestamp: { type: 'string' },
-            indicators: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/treasury/yield-curve/historical': {
-    info: {
-      input: { type: 'http', method: 'POST', bodyType: 'json', body: { start_date: '2024-01-01', end_date: '2024-12-31' } },
-      output: { type: 'json', example: { start_date: '2024-01-01', end_date: '2024-12-31', data: [] } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'POST' },
-            bodyType: { type: 'string', const: 'json' },
-            body: {
-              type: 'object',
-              properties: {
-                start_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Start date (YYYY-MM-DD)' },
-                end_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'End date (YYYY-MM-DD)' }
-              },
-              required: ['start_date', 'end_date'],
-              additionalProperties: false
-            }
-          },
-          required: ['type', 'method', 'bodyType', 'body']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            start_date: { type: 'string' },
-            end_date: { type: 'string' },
-            data: { type: 'array' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/treasury/auction-results/recent': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', auctions: [] } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            timestamp: { type: 'string' },
-            auctions: { type: 'array' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  },
-  '/v1/treasury/tips-rates/current': {
-    info: {
-      input: { type: 'http', method: 'GET' },
-      output: { type: 'json', example: { date: '2026-03-11', rates: { '5_YEAR': 2.15 } } }
-    },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        input: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
-          },
-          required: ['type', 'method']
-        },
-        output: {
-          type: 'object',
-          properties: {
-            date: { type: 'string' },
-            rates: { type: 'object' }
-          }
-        }
-      },
-      required: ['input', 'output']
-    }
-  }
-};
-
 if (!FRED_API_KEY) {
   console.warn('⚠️  FRED_API_KEY not set - FRED endpoint will fail');
 }
@@ -717,39 +425,18 @@ function emitToConvex(endpoint, revenue_usd, wallet_address) {
 // x402 PAYMENT VALIDATION
 // ============================================
 
-// Helper: Encode x402 payment info as base64url for Payment-Required header (v2 format)
-function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
-  const paymentRequiredV2 = {
-    x402Version: 2,
-    accepts: [{
-      scheme: 'exact',
-      network: 'eip155:8453',
-      amount: String(Math.floor(price * 1000000)),
-      payTo: MERCHANT_WALLET,
-      maxTimeoutSeconds: 30,
-      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      extra: {
-        name: 'USD Coin',
-        version: '2'
-      }
-    }],
-    resource: {
-      url: `https://mercury402.uk${resolvedPath}`,
-      method: method.toUpperCase(),
-      description: 'Deterministic financial data from official sources',
-      mimeType: 'application/json'
-    }
+// Helper: Encode x402 payment info as base64url for Payment-Required header
+function encodePaymentRequired(price) {
+  const acceptInfo = {
+    scheme: 'exact',
+    network: 'eip155:8453', // Base mainnet
+    amount: String(Math.floor(price * 1000000)), // Convert to wei (6 decimals for USDC)
+    payTo: MERCHANT_WALLET, // Mercury's payment recipient wallet
+    maxTimeoutSeconds: 30,
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // USDC on Base
   };
-
-  // Add Bazaar extensions if schema exists for this endpoint
-  const bazaarSchema = BAZAAR_SCHEMAS[endpointPath];
-  if (bazaarSchema) {
-    paymentRequiredV2.extensions = {
-      bazaar: bazaarSchema
-    };
-  }
   
-  const json = JSON.stringify(paymentRequiredV2);
+  const json = JSON.stringify(acceptInfo);
   const base64 = Buffer.from(json).toString('base64');
   // Convert standard base64 to base64url
   const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -802,7 +489,7 @@ function require402Payment(endpointPath, price) {
         }
       }
       // No valid payment found
-      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+      const paymentRequired = encodePaymentRequired(price);
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
@@ -845,7 +532,7 @@ function require402Payment(endpointPath, price) {
     
     if (isTestToken && !allowTestTokens) {
       // Test token in production - reject
-      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+      const paymentRequired = encodePaymentRequired(price);
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
@@ -859,7 +546,7 @@ function require402Payment(endpointPath, price) {
     }
     
     // PRODUCTION: Verify payment on-chain via Base RPC
-    const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+    const paymentRequired = encodePaymentRequired(price);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
     
     if (!tokenMeta.tx_hash) {
@@ -995,7 +682,7 @@ function generateProvenance(data, seriesId, params) {
   return provenance;
 }
 
-app.all('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1227,7 +914,7 @@ function buildTreasuryProvenance(data, fetchedAt) {
   return provenance;
 }
 
-app.all('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', getPrice('/v1/treasury/yield-curve/daily-snapshot')), async (req, res) => {
+app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', getPrice('/v1/treasury/yield-curve/daily-snapshot')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1296,7 +983,7 @@ app.all('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasu
 // ============================================
 
 // Economic Dashboard - GDP + CPI + Unemployment - $0.50
-app.all('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', getPrice('/v1/composite/economic-dashboard')), async (req, res) => {
+app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', getPrice('/v1/composite/economic-dashboard')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1337,7 +1024,7 @@ app.all('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
 });
 
 // Inflation Tracker - CPI + PCE + Core CPI - $0.40
-app.all('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', getPrice('/v1/composite/inflation-tracker')), async (req, res) => {
+app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', getPrice('/v1/composite/inflation-tracker')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1378,7 +1065,7 @@ app.all('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
 });
 
 // Labor Market Health - Unemployment + Initial Claims + Nonfarm Payrolls - $0.40
-app.all('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', getPrice('/v1/composite/labor-market')), async (req, res) => {
+app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', getPrice('/v1/composite/labor-market')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1427,7 +1114,7 @@ app.all('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 // MACRO SNAPSHOT — ALL MAJOR INDICATORS
 // ============================================
 
-app.all('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', getPrice('/v1/macro/snapshot/all')), async (req, res) => {
+app.post('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', getPrice('/v1/macro/snapshot/all')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1659,7 +1346,7 @@ app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/
 // TREASURY AUCTION RESULTS — RECENT
 // ============================================
 
-app.all('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/auction-results/recent', getPrice('/v1/treasury/auction-results/recent')), async (req, res) => {
+app.post('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/auction-results/recent', getPrice('/v1/treasury/auction-results/recent')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1757,7 +1444,7 @@ app.all('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/a
 // TREASURY TIPS RATES — CURRENT
 // ============================================
 
-app.all('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-rates/current', getPrice('/v1/treasury/tips-rates/current')), async (req, res) => {
+app.post('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-rates/current', getPrice('/v1/treasury/tips-rates/current')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1871,42 +1558,23 @@ app.get('/.well-known/x402', (req, res) => {
   const accepts = Object.entries(PRICING)
     .filter(([endpoint]) => endpoint !== 'default')
     .sort((a, b) => parseFloat(a[1]) - parseFloat(b[1]))
-    .map(([endpoint, price]) => {
-      const method = endpoint === '/v1/treasury/yield-curve/historical' ? 'POST' : 'GET';
-      return {
-        scheme: 'exact',
-        method: method, // x402scan reads this for HTTP method
-        network: 'eip155:8453', // Base mainnet
-        amount: String(Math.floor(parseFloat(price) * 1000000)), // Convert to USDC units (6 decimals)
-        payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-        extra: {
-          name: ENDPOINT_DESCRIPTIONS[endpoint] || endpoint,
-          path: endpoint,
-          method: method,
-          price_usd: price
-        }
-      };
-    });
-  
-  // Build resources array for x402scan v1 compatibility
-  const BASE_URL = 'https://mercury402.uk';
-  const resources = Object.keys(PRICING)
-    .filter(endpoint => endpoint !== 'default')
-    .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
-    .map(endpoint => {
-      // Use concrete URL for FRED endpoint (x402scan may skip path params)
-      if (endpoint === '/v1/fred/{series_id}') {
-        return `${BASE_URL}/v1/fred/UNRATE`;
+    .map(([endpoint, price]) => ({
+      scheme: 'exact',
+      network: 'eip155:8453', // Base mainnet
+      amount: String(Math.floor(parseFloat(price) * 1000000)), // Convert to USDC units (6 decimals)
+      payTo: MERCHANT_WALLET,
+      maxTimeoutSeconds: 30,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+      extra: {
+        name: ENDPOINT_DESCRIPTIONS[endpoint] || endpoint,
+        path: endpoint,
+        price_usd: price
       }
-      return `${BASE_URL}${endpoint}`;
-    });
+    }));
   
   res.json({
     x402Version: 2,
     accepts: accepts,
-    resources: resources, // v1 compatibility for x402scan
     extensions: {
       bazaar: {
         info: {
@@ -1980,186 +1648,6 @@ app.get('/.well-known/x402', (req, res) => {
         type: "git"
       }
     }
-  });
-});
-
-// ============================================
-// AgentCash v1-compatible manifest
-// ============================================
-
-app.get('/.well-known/x402-agentcash', (req, res) => {
-  const { PRICING } = require('./pricing');
-  
-  // Build resources array (v1 format) — flat list of full URLs
-  const BASE_URL = 'https://mercury402.uk';
-  const resources = Object.keys(PRICING)
-    .filter(endpoint => endpoint !== 'default')
-    .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
-    .map(endpoint => {
-      // Replace template path with literal example for FRED endpoint
-      if (endpoint === '/v1/fred/{series_id}') {
-        return `${BASE_URL}/v1/fred/UNRATE`;
-      }
-      return `${BASE_URL}${endpoint}`;
-    });
-  
-  res.json({
-    version: 1,
-    resources: resources,
-    mppResources: resources, // All endpoints require payment
-    description: "Deterministic financial data (FRED, Treasury rates, macro indicators) with cryptographic provenance via x402 micropayments on Base.",
-    instructions: `# Mercury402 API - Agent Usage Guide
-
-## Overview
-
-Mercury402 provides deterministic financial data via x402 micropayments (USDC on Base). All endpoints require payment via HTTP 402 + x402 protocol.
-
-## Authentication
-
-No API keys required. Payment flow:
-1. Call endpoint without auth → receive 402 with Payment-Required header
-2. Pay via x402 protocol (USDC on Base mainnet)
-3. Retry with Bearer token → receive 200 + data
-
-## Base URL
-
-https://mercury402.uk
-
-All endpoints are relative to this base URL.
-
-## Agent Workflow
-
-1. Use \`mcp__agentcash__discover_api_endpoints("https://mercury402.uk")\` to see available endpoints and pricing.
-2. For POST/PUT/PATCH endpoints, call \`mcp__agentcash__check_endpoint_schema\` to confirm request schema before first fetch.
-3. Execute with \`mcp__agentcash__fetch(url, method="GET")\`.
-
-AgentCash handles x402 payment automatically. Payments settle on success only (non-2xx responses don't cost anything).
-
-## Available Endpoints
-
-### GET /v1/fred/{series_id}
-**Price:** $0.01
-**Description:** Fetch any FRED economic series by ID — accepts any valid FRED series_id as path parameter (800k+ series available)
-**Common series_id examples:**
-- UNRATE — Unemployment Rate
-- DGS10 — 10-Year Treasury Constant Maturity Rate
-- CPIAUCSL — Consumer Price Index for All Urban Consumers
-- GDP — Gross Domestic Product
-- FEDFUNDS — Federal Funds Effective Rate
-- DGS2 — 2-Year Treasury Constant Maturity Rate
-
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/fred/UNRATE", method="GET")\`
-**Response:** JSON with series data, observations, and cryptographic signature
-
-### GET /v1/treasury/auction-results/recent
-**Price:** $0.02
-**Description:** Recent U.S. Treasury auction results
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/auction-results/recent", method="GET")\`
-
-### GET /v1/treasury/tips-rates/current
-**Price:** $0.02
-**Description:** Current TIPS rates (5, 7, 10, 20, 30-year)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/tips-rates/current", method="GET")\`
-
-### GET /v1/treasury/yield-curve/daily-snapshot
-**Price:** $0.02
-**Description:** U.S. Treasury yield curve snapshot (11 maturities, FRED-sourced)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
-**Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
-
-### GET /v1/treasury/yield-curve/historical
-**Price:** $0.03
-**Description:** Historical yield curve data (max 90-day range)
-**Query params:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical?start_date=2026-01-01&end_date=2026-03-01", method="GET")\`
-
-### GET /v1/macro/snapshot/all
-**Price:** $0.05
-**Description:** Complete macro snapshot (GDP, CPI, UNRATE, yields, VIX)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/macro/snapshot/all", method="GET")\`
-**Response:** Multi-series bundle with provenance
-
-### GET /v1/composite/inflation-tracker
-**Price:** $0.40
-**Description:** Inflation metrics bundle (CPI, PCE, Core CPI)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/inflation-tracker", method="GET")\`
-
-### GET /v1/composite/labor-market
-**Price:** $0.40
-**Description:** Labor market health (Unemployment, Jobless Claims, Nonfarm Payrolls)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/labor-market", method="GET")\`
-
-### GET /v1/composite/economic-dashboard
-**Price:** $0.50
-**Description:** Economic overview (GDP, CPI, Unemployment in one call)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/economic-dashboard", method="GET")\`
-
-## Data Provenance
-
-All responses include cryptographic signatures for data verification:
-- \`provenance.source\` — Data source (e.g., "Federal Reserve Economic Data (FRED)")
-- \`provenance.source_url\` — Original data URL
-- \`provenance.fetched_at\` — ISO 8601 timestamp
-- \`provenance.signature\` — ECDSA signature over response data
-
-## Response Format
-
-All endpoints return JSON:
-\`\`\`json
-{
-  "data": { /* endpoint-specific data */ },
-  "provenance": {
-    "source": "Federal Reserve Economic Data (FRED)",
-    "source_url": "https://fred.stlouisfed.org/series/UNRATE",
-    "fetched_at": "2026-03-11T18:53:00.000Z",
-    "signature": "0x..."
-  }
-}
-\`\`\`
-
-## Error Handling
-
-- **400 Bad Request** — Invalid parameters (e.g., missing series_id, invalid date range)
-- **402 Payment Required** — Initial request; includes x402 payment challenge
-- **404 Not Found** — Endpoint or series doesn't exist
-- **500 Internal Server Error** — Server error (payment not settled)
-
-Payments settle on success (2xx) only. Failed requests don't cost anything.
-
-## Pricing Summary
-
-| Endpoint | Price |
-|----------|-------|
-| /v1/fred/{series_id} | $0.01 |
-| /v1/treasury/auction-results/recent | $0.02 |
-| /v1/treasury/tips-rates/current | $0.02 |
-| /v1/treasury/yield-curve/daily-snapshot | $0.02 |
-| /v1/treasury/yield-curve/historical | $0.03 |
-| /v1/macro/snapshot/all | $0.05 |
-| /v1/composite/inflation-tracker | $0.40 |
-| /v1/composite/labor-market | $0.40 |
-| /v1/composite/economic-dashboard | $0.50 |
-
-## Use Cases
-
-- **Economic research:** Access 800k+ FRED series (GDP, inflation, employment, etc.)
-- **Fixed income analysis:** Real-time Treasury yield curves and TIPS rates
-- **Macro dashboards:** Bundle multiple indicators in single calls
-- **Automated trading:** Deterministic data with cryptographic proof
-- **Agent-to-agent payments:** No API keys, pay-per-call via USDC
-
-## Network
-
-- **Blockchain:** Base (eip155:8453)
-- **Currency:** USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
-- **Merchant wallet:** 0xF8d59270cBC746a7593D25b6569812eF1681C6D2
-
-## Documentation
-
-- Swagger UI: https://mercury402.uk/docs
-- GitHub: https://github.com/dudman1/mercury402
-- x402scan: https://x402scan.com/server/mercury402
-`
   });
 });
 

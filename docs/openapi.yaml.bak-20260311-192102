@@ -519,7 +519,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/macro/snapshot/all:
-    get:
+    post:
       summary: Complete macroeconomic snapshot
       description: |
         Fetches all major economic indicators in a single call:
@@ -738,7 +738,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/treasury/auction-results/recent:
-    get:
+    post:
       summary: Recent Treasury auction results
       description: |
         Returns recent auction results using HQM (High Quality Market Corporate Bond) yields as proxy.
@@ -818,7 +818,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/treasury/tips-rates/current:
-    get:
+    post:
       summary: Current TIPS rates
       description: |
         Returns current Treasury Inflation-Protected Securities (TIPS) yields for all available maturities.

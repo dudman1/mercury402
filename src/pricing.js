@@ -2,6 +2,9 @@
 // Prices in USD (USDC on Base)
 
 const PRICING = {
+  // FRED series (must be explicit for x402 manifest discovery)
+  '/v1/fred/{series_id}': 0.01,
+  
   // Premium composite endpoints
   '/v1/macro/snapshot/all': 0.05,
   

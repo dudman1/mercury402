@@ -18,7 +18,7 @@ const res = await fetch('https://mercury402.uk/v1/fred/UNRATE');
 if (res.status === 402) {
   const body = await res.json();
   console.log('Payment required');
-  console.log('Price:', body.price);          // "$0.15 USDC (Base)"
+  console.log('Price:', body.price);          // "$0.01 USDC (Base)"
   console.log('Pay at:', body.paymentUri);
   console.log('Payment-Required header:', res.headers.get('payment-required'));
   // Decode the payment descriptor:
@@ -105,7 +105,7 @@ r = requests.get('https://mercury402.uk/v1/fred/UNRATE')
 if r.status_code == 402:
     body = r.json()
     print('Payment required')
-    print('Price:', body['price'])           # "$0.15 USDC (Base)"
+    print('Price:', body['price'])           # "$0.01 USDC (Base)"
     print('Pay at:', body['paymentUri'])
     print('Payment-Required header:', r.headers.get('Payment-Required'))
 ```
@@ -186,8 +186,8 @@ if r.status_code == 402:
 
 | Endpoint | Price | amount (μUSDC) |
 |----------|-------|----------------|
-| `/v1/fred/{series_id}` | $0.15 | 150000 |
-| `/v1/treasury/yield-curve/daily-snapshot` | $0.10 | 100000 |
+| `/v1/fred/{series_id}` | $0.01 | 10000 |
+| `/v1/treasury/yield-curve/daily-snapshot` | $0.02 | 20000 |
 
 Popular FRED series IDs: `UNRATE` (unemployment), `GDP`, `CPIAUCSL` (CPI), `FEDFUNDS` (fed funds rate), `DGS10` (10Y Treasury).
 

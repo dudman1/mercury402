@@ -16,21 +16,21 @@ if [ ! -s "$LEDGER" ]; then
     exit 0
 fi
 
-# Calculate metrics (verified payments only)
-TOTAL_REVENUE=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .amount' | awk '{sum+=$1} END {print sum}')
-TOTAL_CALLS=$(cat "$LEDGER" | jq -r 'select(.verified == true)' | wc -l | tr -d ' ')
-UNIQUE_CUSTOMERS=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .customer' | sort -u | wc -l | tr -d ' ')
+# Calculate metrics (verified payments only, exclude localhost/internal test traffic)
+TOTAL_REVENUE=$(cat "$LEDGER" | jq -r 'select(.verified == true and .customer != "127.0.0.1" and .customer != "localhost") | .amount' | awk '{sum+=$1} END {print sum}')
+TOTAL_CALLS=$(cat "$LEDGER" | jq -c 'select(.verified == true and .customer != "127.0.0.1" and .customer != "localhost")' | wc -l | tr -d ' ')
+UNIQUE_CUSTOMERS=$(cat "$LEDGER" | jq -r 'select(.verified == true and .customer != "127.0.0.1" and .customer != "localhost") | .customer' | sort -u | wc -l | tr -d ' ')
 
-# Today's revenue (last 24 hours, verified only)
+# Today's revenue (last 24 hours, verified only, exclude localhost)
 YESTERDAY_TS=$(($(date +%s) - 86400))
-TODAY_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .timestamp/1000 > $YESTERDAY_TS) | .amount" | awk '{sum+=$1} END {print sum}')
+TODAY_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .customer != \"127.0.0.1\" and .customer != \"localhost\" and .timestamp/1000 > $YESTERDAY_TS) | .amount" | awk '{sum+=$1} END {print sum}')
 
-# This week's revenue (last 7 days, verified only)
+# This week's revenue (last 7 days, verified only, exclude localhost)
 WEEK_AGO_TS=$(($(date +%s) - 604800))
-WEEK_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .timestamp/1000 > $WEEK_AGO_TS) | .amount" | awk '{sum+=$1} END {print sum}')
+WEEK_REVENUE=$(cat "$LEDGER" | jq -r "select(.verified == true and .customer != \"127.0.0.1\" and .customer != \"localhost\" and .timestamp/1000 > $WEEK_AGO_TS) | .amount" | awk '{sum+=$1} END {print sum}')
 
-# Most popular endpoint (verified only)
-TOP_ENDPOINT=$(cat "$LEDGER" | jq -r 'select(.verified == true) | .endpoint' | sort | uniq -c | sort -rn | head -1 | awk '{print $2, "("$1" calls)"}')
+# Most popular endpoint (verified only, exclude localhost)
+TOP_ENDPOINT=$(cat "$LEDGER" | jq -r 'select(.verified == true and .customer != "127.0.0.1" and .customer != "localhost") | .endpoint' | sort | uniq -c | sort -rn | head -1 | awk '{print $2, "("$1" calls)"}')
 
 # Format output
 echo "📊 Mercury402 Revenue Report"

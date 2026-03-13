@@ -611,7 +611,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/treasury/yield-curve/historical:
-    post:
+    get:
       summary: Historical Treasury yield curve data
       description: |
         Returns daily yield curve snapshots for a specified date range.
