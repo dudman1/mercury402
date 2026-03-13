@@ -120,7 +120,7 @@ if (!MERCHANT_WALLET) {
 const BAZAAR_SCHEMAS = {
   '/v1/fred/{series_id}': {
     info: {
-      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } } },
+      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } }, queryParams: { date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)', example: '2026-01-01' }, observation_start: { type: 'string', description: 'Start date for range query (YYYY-MM-DD)', example: '2020-01-01' }, observation_end: { type: 'string', description: 'End date for range query (YYYY-MM-DD)', example: '2023-12-31' }, limit: { type: 'integer', description: 'Max observations to return', example: 5 } } },
       output: { type: 'json', example: { series_id: 'UNRATE', realtime_start: '2026-03-11', realtime_end: '2026-03-11', observations: [{ date: '2024-01-01', value: '3.7' }] } }
     },
     schema: {
@@ -138,6 +138,15 @@ const BAZAAR_SCHEMAS = {
                 series_id: { type: 'string', description: 'FRED series ID' }
               },
               required: ['series_id']
+            },
+            queryParams: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)' },
+                observation_start: { type: 'string', description: 'Range start date (YYYY-MM-DD)' },
+                observation_end: { type: 'string', description: 'Range end date (YYYY-MM-DD)' },
+                limit: { type: 'integer', description: 'Max observations to return (default 1)' }
+              }
             }
           },
           required: ['type', 'method']
@@ -166,7 +175,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/treasury/yield-curve/daily-snapshot': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: { date: { type: 'string', description: 'Specific date for yield curve (YYYY-MM-DD)', example: '2026-03-01' } } },
       output: { type: 'json', example: { date: '2026-03-11', rates: { '1_MONTH': 5.42, '3_MONTH': 5.38 } } }
     },
     schema: {
@@ -177,7 +186,13 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', description: 'Specific date for yield curve (YYYY-MM-DD)' }
+              }
+            }
           },
           required: ['type', 'method']
         },
@@ -194,7 +209,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/composite/economic-dashboard': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', gdp: { value: 22000.5 } } }
     },
     schema: {
@@ -205,7 +220,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -224,7 +240,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/composite/inflation-tracker': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', cpi: { value: 315.2 } } }
     },
     schema: {
@@ -235,7 +251,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -253,7 +270,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/composite/labor-market': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', unemployment_rate: { value: 3.7 } } }
     },
     schema: {
@@ -264,7 +281,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -282,7 +300,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/macro/snapshot/all': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', indicators: { GDP: { value: 22000.5 } } } }
     },
     schema: {
@@ -293,7 +311,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -349,7 +368,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/treasury/auction-results/recent': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { timestamp: '2026-03-11T01:00:00Z', auctions: [] } }
     },
     schema: {
@@ -360,7 +379,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -377,7 +397,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/treasury/tips-rates/current': {
     info: {
-      input: { type: 'http', method: 'GET' },
+      input: { type: 'http', method: 'GET', queryParams: {} },
       output: { type: 'json', example: { date: '2026-03-11', rates: { '5_YEAR': 2.15 } } }
     },
     schema: {
@@ -388,7 +408,8 @@ const BAZAAR_SCHEMAS = {
           type: 'object',
           properties: {
             type: { type: 'string', const: 'http' },
-            method: { type: 'string', const: 'GET' }
+            method: { type: 'string', const: 'GET' },
+            queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
           required: ['type', 'method']
         },
@@ -776,29 +797,97 @@ function require402Payment(endpointPath, price) {
     };
     
     if (!token) {
-      // Check for x402 v2 PAYMENT-SIGNATURE header (EIP-3009 facilitator)
+      // Check for x402 v2 payment-signature header (standard x402 protocol)
       const paymentSig = req.headers['payment-signature'];
       if (paymentSig) {
         try {
-          const payload = JSON.parse(Buffer.from(paymentSig, 'base64').toString('utf8'));
-          const { from, to, value, validAfter, validBefore, nonce, v, r, s } = payload.authorization;
+          // Decode x402 v2 PaymentPayload: base64 → JSON
+          const paymentPayload = JSON.parse(Buffer.from(paymentSig, 'base64').toString('utf8'));
+
+          // x402 v2 wraps the scheme payload inside .payload
+          const schemePayload = paymentPayload.payload || paymentPayload;
+          const authorization = schemePayload.authorization;
+          if (!authorization || !authorization.from) {
+            throw new Error('Missing authorization in payment payload');
+          }
+
+          // Validate payment requirements match this endpoint
+          const accepted = paymentPayload.accepted;
+          if (accepted) {
+            const requiredAmount = BigInt(Math.floor(price * 1000000));
+            const paidAmount = BigInt(authorization.value);
+            if (paidAmount < requiredAmount) {
+              throw new Error(`Insufficient payment: required ${requiredAmount}, got ${paidAmount}`);
+            }
+            if (accepted.payTo && accepted.payTo.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
+              throw new Error(`Wrong payTo: expected ${MERCHANT_WALLET}, got ${accepted.payTo}`);
+            }
+          }
+
+          // Parse EIP-3009 signature: single hex string → v, r, s
+          const sig = schemePayload.signature || authorization.signature;
+          let v, r, s;
+          if (sig) {
+            const parsed = ethers.Signature.from(sig);
+            v = parsed.v;
+            r = parsed.r;
+            s = parsed.s;
+          } else if (authorization.v !== undefined) {
+            // Legacy format: v, r, s already split
+            v = authorization.v;
+            r = authorization.r;
+            s = authorization.s;
+          } else {
+            throw new Error('No signature found in payment payload');
+          }
+
+          // Execute transferWithAuthorization on-chain
           const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
-          const facilitatorWallet = new ethers.Wallet('0x' + process.env.SERVER_PRIVATE_KEY, provider);
+          const facilitatorWallet = new ethers.Wallet(
+            process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
+            provider
+          );
           const USDC = new ethers.Contract(
             process.env.USDC_CONTRACT_BASE,
             ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
             facilitatorWallet
           );
-          const tx = await USDC.transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s);
+
+          const tx = await USDC.transferWithAuthorization(
+            authorization.from,
+            authorization.to,
+            authorization.value,
+            authorization.validAfter,
+            authorization.validBefore,
+            authorization.nonce,
+            v, r, s
+          );
           const receipt = await tx.wait();
           const verification = await verifyPaymentOnChain(receipt.hash, price, MERCHANT_WALLET);
           if (verification.verified) {
-            res.locals.paymentMeta = { wallet_address: from, tx_hash: receipt.hash, wallet_source: 'eip3009_facilitator', verified: true, price_usd: price };
-            logPayment(endpointPath, price, from, true, receipt.hash);
+            // Set PAYMENT-RESPONSE header for x402 clients
+            const settleResponse = Buffer.from(JSON.stringify({
+              success: true,
+              transaction: receipt.hash,
+              network: 'eip155:8453',
+              payer: authorization.from
+            })).toString('base64');
+            res.set('PAYMENT-RESPONSE', settleResponse);
+
+            res.locals.paymentMeta = {
+              wallet_address: authorization.from,
+              tx_hash: receipt.hash,
+              wallet_source: 'x402_eip3009',
+              verified: true,
+              price_usd: price
+            };
+            logPayment(endpointPath, price, authorization.from, true, receipt.hash);
             return next();
           }
+          // Settlement succeeded but on-chain verification failed
+          console.error('x402 payment settled but on-chain verify failed:', verification.reason);
         } catch (err) {
-          console.error('Facilitator error:', err.message);
+          console.error('x402 payment-signature error:', err.message);
         }
       }
       // No valid payment found
@@ -995,7 +1084,7 @@ function generateProvenance(data, seriesId, params) {
   return provenance;
 }
 
-app.all('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1227,7 +1316,7 @@ function buildTreasuryProvenance(data, fetchedAt) {
   return provenance;
 }
 
-app.all('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', getPrice('/v1/treasury/yield-curve/daily-snapshot')), async (req, res) => {
+app.get('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasury/yield-curve/daily-snapshot', getPrice('/v1/treasury/yield-curve/daily-snapshot')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1296,7 +1385,7 @@ app.all('/v1/treasury/yield-curve/daily-snapshot', require402Payment('/v1/treasu
 // ============================================
 
 // Economic Dashboard - GDP + CPI + Unemployment - $0.50
-app.all('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', getPrice('/v1/composite/economic-dashboard')), async (req, res) => {
+app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/economic-dashboard', getPrice('/v1/composite/economic-dashboard')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1337,7 +1426,7 @@ app.all('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
 });
 
 // Inflation Tracker - CPI + PCE + Core CPI - $0.40
-app.all('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', getPrice('/v1/composite/inflation-tracker')), async (req, res) => {
+app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/inflation-tracker', getPrice('/v1/composite/inflation-tracker')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1378,7 +1467,7 @@ app.all('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
 });
 
 // Labor Market Health - Unemployment + Initial Claims + Nonfarm Payrolls - $0.40
-app.all('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', getPrice('/v1/composite/labor-market')), async (req, res) => {
+app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-market', getPrice('/v1/composite/labor-market')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
@@ -1427,7 +1516,7 @@ app.all('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
 // MACRO SNAPSHOT — ALL MAJOR INDICATORS
 // ============================================
 
-app.all('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', getPrice('/v1/macro/snapshot/all')), async (req, res) => {
+app.get('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', getPrice('/v1/macro/snapshot/all')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1659,7 +1748,7 @@ app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/
 // TREASURY AUCTION RESULTS — RECENT
 // ============================================
 
-app.all('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/auction-results/recent', getPrice('/v1/treasury/auction-results/recent')), async (req, res) => {
+app.get('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/auction-results/recent', getPrice('/v1/treasury/auction-results/recent')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1757,7 +1846,7 @@ app.all('/v1/treasury/auction-results/recent', require402Payment('/v1/treasury/a
 // TREASURY TIPS RATES — CURRENT
 // ============================================
 
-app.all('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-rates/current', getPrice('/v1/treasury/tips-rates/current')), async (req, res) => {
+app.get('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-rates/current', getPrice('/v1/treasury/tips-rates/current')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
