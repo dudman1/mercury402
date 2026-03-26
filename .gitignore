@@ -37,3 +37,4 @@ SERVER_PRIVATE_KEY
 # Build output
 dist/
 build/
+.env*
