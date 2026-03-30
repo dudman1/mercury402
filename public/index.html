@@ -1,401 +1,478 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mercury402 — Deterministic Finance Data for Autonomous Agents</title>
-    <meta name="description" content="US Treasury and macro data APIs for AI agents. Pay-per-call via x402 protocol. No API keys. No accounts.">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f8f9fa;
-        }
-        
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-        
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 60px 0;
-            text-align: center;
-        }
-        
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-        
-        .tagline {
-            font-size: 1.2em;
-            opacity: 0.95;
-            margin-bottom: 30px;
-        }
-        
-        .badges {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 20px;
-        }
-        
-        .badge {
-            background: rgba(255,255,255,0.2);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            backdrop-filter: blur(10px);
-        }
-        
-        section {
-            background: white;
-            margin: 40px 0;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        h2 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.8em;
-        }
-        
-        h3 {
-            color: #444;
-            margin-top: 25px;
-            margin-bottom: 15px;
-            font-size: 1.3em;
-        }
-        
-        .endpoint-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        
-        .endpoint {
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 20px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        .endpoint:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        
-        .endpoint-title {
-            font-weight: 600;
-            color: #667eea;
-            margin-bottom: 8px;
-            font-size: 0.95em;
-        }
-        
-        .endpoint-price {
-            display: inline-block;
-            background: #f0f4ff;
-            color: #667eea;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            font-size: 0.9em;
-        }
-        
-        .endpoint-desc {
-            color: #666;
-            font-size: 0.9em;
-            line-height: 1.5;
-        }
-        
-        code {
-            background: #f5f5f5;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }
-        
-        pre {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 20px;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 15px 0;
-        }
-        
-        pre code {
-            background: none;
-            padding: 0;
-            color: inherit;
-        }
-        
-        .cta {
-            text-align: center;
-            padding: 60px 20px;
-        }
-        
-        .cta-button {
-            display: inline-block;
-            background: #667eea;
-            color: white;
-            padding: 15px 40px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: background 0.2s;
-            margin: 10px;
-        }
-        
-        .cta-button:hover {
-            background: #5568d3;
-        }
-        
-        .feature-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        
-        .feature {
-            padding: 15px;
-        }
-        
-        .feature-icon {
-            font-size: 2em;
-            margin-bottom: 10px;
-        }
-        
-        .feature-title {
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #333;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 40px 20px;
-            color: #666;
-            border-top: 1px solid #e0e0e0;
-            margin-top: 60px;
-        }
-        
-        .wallet-address {
-            background: #f0f4ff;
-            padding: 10px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 0.9em;
-            margin: 10px 0;
-            word-break: break-all;
-        }
-        
-        a {
-            color: #667eea;
-            text-decoration: none;
-        }
-        
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mercury402 — Financial data APIs. Pay-per-call.</title>
+<meta name="description" content="Treasury yields, macro data, composite scores for autonomous agents. Pay-per-call via x402. No API keys.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#ffffff;
+  --text:#0a0a0a;
+  --text-secondary:#374151;
+  --muted:#6b7280;
+  --border:#e5e7eb;
+  --border-subtle:#f3f4f6;
+  --accent:#2563eb;
+  --accent-hover:#1d4ed8;
+  --surface:#f9fafb;
+  --surface-hover:#f3f4f6;
+  --radius:6px;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+a{color:inherit;text-decoration:none;transition:color .15s ease}
+a:hover{color:var(--accent)}
+::selection{background:var(--accent);color:#fff}
+
+/* ── Nav ── */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border-subtle);
+  padding:0 2.5rem;
+  display:flex;align-items:center;justify-content:space-between;
+  height:56px;
+}
+.nav-links{display:flex;gap:2rem}
+.nav-links a{
+  color:var(--muted);
+  font-size:12px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.1em;
+  transition:color .2s ease;
+}
+.nav-links a:hover{color:var(--text)}
+.nav-right{display:flex;align-items:center;gap:1.25rem}
+.x-icon{width:16px;height:16px;fill:var(--muted);transition:fill .2s ease,transform .2s ease}
+.x-icon:hover{fill:var(--text);transform:scale(1.1)}
+
+/* ── Container ── */
+.container{max-width:840px;margin:0 auto;padding:0 2.5rem}
+
+/* ── Logo ── */
+.logo{
+  font-family:'JetBrains Mono','SF Mono','Fira Code','Courier New',monospace;
+  font-size:15px;font-weight:500;letter-spacing:.02em;
+  color:var(--text);
+}
+
+/* ── Features row ── */
+.features{
+  display:flex;justify-content:center;gap:3rem;
+  padding:4rem 2.5rem 2.5rem;
+  max-width:840px;margin:0 auto;
+}
+.feature{
+  display:flex;align-items:center;gap:.5rem;
+  transition:transform .2s ease;
+}
+.feature:hover{transform:translateY(-1px)}
+.feature-icon{font-size:15px;line-height:1}
+.feature-title{
+  font-size:11px;font-weight:600;
+  letter-spacing:.06em;color:var(--text-secondary);
+  text-transform:uppercase;
+}
+
+/* ── Hero ── */
+.hero{padding:3.5rem 0 4rem}
+.hero h1{
+  font-size:clamp(2.5rem,5.5vw,3.75rem);
+  font-weight:700;line-height:1.1;letter-spacing:-.035em;
+  margin-bottom:1.5rem;max-width:600px;
+  color:var(--text);
+}
+.hero .sub{
+  color:var(--muted);font-size:17px;
+  max-width:500px;margin-bottom:2.5rem;
+  line-height:1.75;
+}
+.hero-buttons{display:flex;gap:.75rem;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;
+  padding:.7rem 1.6rem;
+  border:1px solid var(--border);
+  font-family:inherit;font-size:13px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text-secondary);background:transparent;
+  cursor:pointer;
+  transition:all .2s ease;
+  border-radius:var(--radius);
+}
+.btn:hover{
+  border-color:var(--text-secondary);
+  color:var(--text);
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+.btn-primary{
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+.btn-primary:hover{
+  background:var(--accent-hover);border-color:var(--accent-hover);
+  box-shadow:0 2px 8px rgba(37,99,235,.25);
+}
+
+/* ── Quick start box ── */
+.quickstart{
+  background:var(--surface);
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius);
+  padding:1.5rem 2rem;
+  margin-top:3rem;
+  transition:border-color .2s ease;
+}
+.quickstart:hover{border-color:var(--border)}
+.quickstart-label{
+  font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.16em;
+  color:var(--muted);margin-bottom:.75rem;
+}
+.quickstart code{
+  font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;
+  font-size:13.5px;color:var(--text);word-break:break-all;
+  line-height:1.5;
+}
+.quickstart-copy{
+  display:inline-block;margin-left:.75rem;
+  font-size:11px;font-weight:500;
+  color:var(--accent);cursor:pointer;
+  border:1px solid rgba(37,99,235,.3);
+  padding:.2rem .65rem;border-radius:4px;
+  transition:all .2s ease;
+  vertical-align:middle;
+}
+.quickstart-copy:hover{
+  background:var(--accent);color:#fff;
+  border-color:var(--accent);
+}
+
+/* ── Layout with sidebar ── */
+.page-grid{display:grid;grid-template-columns:1fr 230px;gap:4.5rem}
+.flow-diagram{
+  position:sticky;top:80px;
+  padding-top:1.5rem;padding-left:2rem;
+  border-left:1px solid var(--border-subtle);
+}
+.flow-title{
+  font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.16em;
+  color:var(--muted);margin-bottom:2rem;
+}
+.flow-step{
+  display:flex;align-items:flex-start;gap:1rem;
+  padding:.85rem 0;position:relative;
+}
+.flow-step:not(:last-child)::after{
+  content:'';position:absolute;
+  left:15px;top:2.6rem;bottom:0;
+  width:1px;background:var(--border);
+}
+.flow-dot{
+  width:32px;height:32px;border-radius:50%;
+  border:1.5px solid var(--text-secondary);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:600;flex-shrink:0;
+  background:var(--bg);position:relative;z-index:1;
+  transition:border-color .2s ease,transform .2s ease;
+}
+.flow-step:hover .flow-dot{
+  border-color:var(--accent);
+  transform:scale(1.08);
+}
+.flow-text{font-size:12px;line-height:1.6;padding-top:.3rem;color:var(--muted)}
+.flow-text strong{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:.15rem}
+
+/* ── Sections ── */
+section{padding:3rem 0}
+.section-label{
+  font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.18em;
+  color:var(--muted);margin-bottom:2rem;
+  padding-bottom:.75rem;
+  border-bottom:1px solid var(--border-subtle);
+}
+
+/* ── Endpoint table ── */
+.endpoint-table{width:100%;border-collapse:collapse}
+.endpoint-table th{
+  text-align:left;
+  font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.14em;
+  color:var(--muted);
+  padding:.6rem 0 .75rem;
+  border-bottom:1px solid var(--border);
+}
+.endpoint-table td{
+  padding:.8rem 0;
+  border-bottom:1px solid var(--border-subtle);
+  font-size:13px;vertical-align:middle;
+}
+.endpoint-table tr{
+  transition:background .15s ease;
+}
+.endpoint-table tbody tr:hover{
+  background:var(--surface);
+}
+.endpoint-table tr:last-child td{border-bottom:none}
+.ep{
+  font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;
+  font-size:12px;color:var(--text);
+  letter-spacing:-.01em;
+}
+.price{
+  color:var(--accent);font-weight:600;
+  white-space:nowrap;padding-right:1.5rem;
+  font-size:12px;font-family:'JetBrains Mono',monospace;
+}
+.desc{color:var(--muted);font-size:13px}
+
+.cat-header{
+  font-size:12px;font-weight:600;letter-spacing:.06em;
+  color:var(--text-secondary);
+  padding:1.5rem 0 .5rem;margin-top:.75rem;
+  text-transform:uppercase;
+}
+.cat-header:first-child{margin-top:0}
+
+/* ── Stats ── */
+.stats{
+  font-size:13.5px;color:var(--muted);
+  line-height:2.2;
+}
+.stats span{color:var(--text);font-weight:500}
+.stats a{color:var(--accent);font-weight:500}
+.stats a:hover{text-decoration:underline}
+
+/* ── How It Works paragraph ── */
+.how-text{
+  color:var(--text-secondary);
+  font-size:15px;line-height:1.8;
+  max-width:560px;
+}
+
+/* ── Footer ── */
+footer{
+  border-top:1px solid var(--border-subtle);
+  padding:2.5rem 0;margin-top:2rem;
+}
+.footer-inner{
+  display:flex;justify-content:space-between;
+  align-items:center;flex-wrap:wrap;gap:1rem;
+}
+.footer-brand{font-size:13px;color:var(--muted);font-weight:400}
+.footer-links{display:flex;gap:1.5rem;align-items:center}
+.footer-links a{
+  color:var(--muted);transition:color .2s ease;
+}
+.footer-links a:hover{color:var(--text)}
+.footer-copy{
+  width:100%;text-align:center;
+  font-size:11px;color:var(--muted);
+  margin-top:1.5rem;opacity:.5;
+}
+
+/* ── Mobile ── */
+@media(max-width:900px){
+  .page-grid{grid-template-columns:1fr;gap:0}
+  .flow-diagram{display:none}
+  .features{flex-wrap:wrap;gap:1.25rem 2.5rem}
+}
+@media(max-width:640px){
+  nav{padding:0 1.25rem;height:52px}
+  .container{padding:0 1.25rem}
+  .hero{padding:2.5rem 0 2.5rem}
+  .hero h1{font-size:2.1rem}
+  .hero .sub{font-size:15px}
+  .features{padding:2.5rem 1.25rem 1.75rem;gap:1rem 1.75rem}
+  section{padding:2.5rem 0}
+  .desc{display:none}
+  .quickstart{padding:1.25rem 1.25rem}
+  .footer-inner{flex-direction:column;text-align:center}
+  .endpoint-table td{padding:.65rem 0}
+  .ep{font-size:11px}
+}
+
+/* ── Subtle entrance animation ── */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.hero{animation:fadeUp .5s ease both}
+.features{animation:fadeUp .5s ease .08s both}
+.quickstart{animation:fadeUp .4s ease .16s both}
+</style>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>Mercury402</h1>
-            <p class="tagline">Deterministic Finance Data for Autonomous Agents</p>
-            <p>US Treasury and macro data APIs • Pay-per-call via x402 • No API keys • No accounts</p>
-            <div class="badges">
-                <span class="badge">🔗 USDC on Base</span>
-                <span class="badge">📊 10 Endpoints</span>
-                <span class="badge">✅ Verifiable</span>
-                <span class="badge">⚡ Production Ready</span>
-            </div>
-        </div>
-    </header>
 
-    <div class="container">
-        <section>
-            <h2>Why Mercury402?</h2>
-            <div class="feature-list">
-                <div class="feature">
-                    <div class="feature-icon">🔐</div>
-                    <div class="feature-title">No API Keys</div>
-                    <div class="endpoint-desc">Pay with USDC via x402 protocol. No registration, no rate limits.</div>
-                </div>
-                <div class="feature">
-                    <div class="feature-icon">🎯</div>
-                    <div class="feature-title">Deterministic</div>
-                    <div class="endpoint-desc">Immutable data snapshots. Same input = same output, every time.</div>
-                </div>
-                <div class="feature">
-                    <div class="feature-icon">⚡</div>
-                    <div class="feature-title">Agent-First</div>
-                    <div class="endpoint-desc">Built for autonomous systems. Discoverable via x402scan.</div>
-                </div>
-                <div class="feature">
-                    <div class="feature-icon">💰</div>
-                    <div class="feature-title">Micropayments</div>
-                    <div class="endpoint-desc">$0.02–$0.50 per call. Only pay for what you use.</div>
-                </div>
-            </div>
-        </section>
+<nav>
+  <a href="#" class="logo">mercury402</a>
+  <div class="nav-links">
+    <a href="#how">How It Works</a>
+    <a href="#endpoints">Endpoints</a>
+    <a href="#stats">Stats</a>
+  </div>
+  <div class="nav-right">
+    <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank" style="font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.04em">x402scan</a>
+    <a href="https://github.com/dudman1" target="_blank" aria-label="GitHub">
+      <svg class="x-icon" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+    </a>
+    <a href="https://x.com/Mercuryclaw1" target="_blank" aria-label="X">
+      <svg class="x-icon" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    </a>
+  </div>
+</nav>
 
-        <section>
-            <h2>Endpoints</h2>
-            <p>All endpoints accept POST requests with x402 payment tokens.</p>
-            
-            <h3>Treasury Data ($0.02–$0.03)</h3>
-            <div class="endpoint-grid">
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/treasury/tips-rates/current</div>
-                    <div class="endpoint-price">$0.02</div>
-                    <div class="endpoint-desc">Current TIPS (inflation-protected securities) rates snapshot.</div>
-                </div>
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/treasury/auction-results/recent</div>
-                    <div class="endpoint-price">$0.02</div>
-                    <div class="endpoint-desc">Recent Treasury auction results from TreasuryDirect.</div>
-                </div>
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/treasury/yield-curve/daily-snapshot</div>
-                    <div class="endpoint-price">$0.03</div>
-                    <div class="endpoint-desc">US Treasury daily yield curve (11 maturities, 1M–30Y).</div>
-                </div>
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/treasury/yield-curve/historical</div>
-                    <div class="endpoint-price">$0.03</div>
-                    <div class="endpoint-desc">Historical yield curve snapshots with date range queries.</div>
-                </div>
-            </div>
+<!-- Features row -->
+<div class="features">
+  <div class="feature"><span class="feature-icon">🔐</span><span class="feature-title">No API Keys</span></div>
+  <div class="feature"><span class="feature-icon">🎯</span><span class="feature-title">Deterministic</span></div>
+  <div class="feature"><span class="feature-icon">⚡</span><span class="feature-title">Agent-First</span></div>
+  <div class="feature"><span class="feature-icon">💰</span><span class="feature-title">Micropayments</span></div>
+</div>
 
-            <h3>Macro Snapshot ($0.05)</h3>
-            <div class="endpoint-grid">
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/macro/snapshot/all</div>
-                    <div class="endpoint-price">$0.05</div>
-                    <div class="endpoint-desc">Mega-endpoint returning all Mercury Treasury data in one call.</div>
-                </div>
-            </div>
+<div class="container">
 
-            <h3>Composite Endpoints ($0.40–$0.50)</h3>
-            <div class="endpoint-grid">
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/composite/inflation-tracker</div>
-                    <div class="endpoint-price">$0.40</div>
-                    <div class="endpoint-desc">CPI, PCE, Core CPI — multi-source inflation dashboard.</div>
-                </div>
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/composite/labor-market</div>
-                    <div class="endpoint-price">$0.40</div>
-                    <div class="endpoint-desc">Unemployment rate, claims, payrolls — labor market snapshot.</div>
-                </div>
-                <div class="endpoint">
-                    <div class="endpoint-title">POST /v1/composite/economic-dashboard</div>
-                    <div class="endpoint-price">$0.50</div>
-                    <div class="endpoint-desc">GDP, CPI, unemployment — comprehensive macro overview.</div>
-                </div>
-            </div>
-        </section>
-
-        <section>
-            <h2>Quick Start</h2>
-            
-            <h3>For AI Agents</h3>
-            <p>Mercury402 is discoverable via <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a>. If your agent supports x402 protocol (e.g., Bankr, Dexter, Virtuals ACP), it can pay and call automatically.</p>
-            
-            <h3>Manual Integration</h3>
-            <p><strong>1. Discovery</strong></p>
-            <pre><code>curl https://mercury402.uk/.well-known/x402</code></pre>
-            
-            <p><strong>2. Generate x402 Payment Token</strong></p>
-            <p>Use an x402 facilitator (Coinbase Commerce, Dexter, PayAI) to generate a signed payment token on Base.</p>
-            
-            <p><strong>3. Call Endpoint</strong></p>
-            <pre><code>curl -X POST https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot \
-  -H "Content-Type: application/json" \
-  -H "Authorization: x402 YOUR_PAYMENT_TOKEN"</code></pre>
-            
-            <p><strong>Response (200 OK):</strong></p>
-            <pre><code>{
-  "curve_date": "2026-03-05",
-  "rates": {
-    "1M": 4.32,
-    "3M": 4.35,
-    "6M": 4.28,
-    "1Y": 4.15,
-    "2Y": 3.95,
-    "3Y": 3.82,
-    "5Y": 3.75,
-    "7Y": 3.78,
-    "10Y": 3.85,
-    "20Y": 4.12,
-    "30Y": 4.20
-  },
-  "source": "US Treasury",
-  "retrieved_at": "2026-03-05T12:00:00Z"
-}</code></pre>
-        </section>
-
-        <section>
-            <h2>Use Cases</h2>
-            <ul style="line-height: 2;">
-                <li><strong>Trading Bots:</strong> Real-time yield curve data for macro strategy execution</li>
-                <li><strong>Risk Models:</strong> Historical TIPS rates for inflation risk assessment</li>
-                <li><strong>Economic Dashboards:</strong> Composite endpoints for multi-source macro views</li>
-                <li><strong>Research Agents:</strong> Deterministic snapshots for reproducible analysis</li>
-                <li><strong>Portfolio Managers:</strong> Treasury auction results for bond positioning</li>
-            </ul>
-        </section>
-
-        <section>
-            <h2>Payment & Revenue</h2>
-            <p><strong>Merchant Wallet (Base):</strong></p>
-            <div class="wallet-address">0xF8d59270cBC746a7593D25b6569812eF1681C6D2</div>
-            <p>All x402 payments settle to this address on Base. Revenue is tracked on-chain and via <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a>.</p>
-            
-            <p><strong>Live Stats:</strong></p>
-            <ul style="line-height: 2; margin-top: 10px;">
-                <li>Verified Volume: $0.55</li>
-                <li>Total Calls: 10 (verified on-chain)</li>
-                <li>Unique Buyers: 3</li>
-                <li>Most Popular: <code>/v1/macro/snapshot/all</code></li>
-            </ul>
-        </section>
-
-        <div class="cta">
-            <h2 style="margin-bottom: 20px;">Ready to integrate?</h2>
-            <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" class="cta-button" target="_blank">View on x402scan</a>
-            <a href="https://mercury402.uk/.well-known/x402" class="cta-button">API Discovery</a>
-        </div>
+  <!-- Hero -->
+  <section class="hero">
+    <h1>Financial data APIs. Pay-per-call.</h1>
+    <p class="sub">Treasury yields, macro indicators, composite scores. Pay with USDC on Base. No API keys. No signup.</p>
+    <div class="hero-buttons">
+      <a href="#how" class="btn">How It Works</a>
+      <a href="https://mercury402.uk/.well-known/x402" class="btn btn-primary">API Discovery</a>
     </div>
 
-    <footer>
-        <p><strong>Mercury402</strong> — Built for the autonomous economy</p>
-        <p style="margin-top: 10px;">
-            <a href="https://x.com/Mercuryclaw1" target="_blank">@Mercuryclaw1</a> • 
-            <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a> • 
-            <a href="https://mercury402.uk/health" target="_blank">Health Check</a>
-        </p>
-    </footer>
+    <div class="quickstart">
+      <div class="quickstart-label">Quick Start</div>
+      <code>npx agentcash@latest discover https://mercury402.uk</code>
+      <span class="quickstart-copy" onclick="navigator.clipboard.writeText('npx agentcash@latest discover https://mercury402.uk')">Copy</span>
+    </div>
+  </section>
+
+  <!-- Main grid: content + flow diagram -->
+  <div class="page-grid">
+    <div class="main-content">
+
+      <section id="how">
+        <div class="section-label">How It Works</div>
+        <p class="how-text">Mercury402 uses the x402 protocol — an internet-native payment standard built on Base. No accounts, no API keys, no subscriptions. Pay per call with USDC.</p>
+      </section>
+
+      <section id="endpoints">
+        <div class="section-label">Endpoints</div>
+
+        <div class="cat-header">Treasury Data</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">POST /v1/treasury/tips-rates/current</td><td class="price">$0.05</td><td class="desc">TIPS rates snapshot</td></tr>
+            <tr><td class="ep">POST /v1/treasury/auction-results/recent</td><td class="price">$0.05</td><td class="desc">Treasury auction results</td></tr>
+            <tr><td class="ep">POST /v1/treasury/yield-curve/daily-snapshot</td><td class="price">$0.05</td><td class="desc">Daily yield curve (1M–30Y)</td></tr>
+            <tr><td class="ep">POST /v1/treasury/yield-curve/historical</td><td class="price">$0.05</td><td class="desc">Historical yield curve</td></tr>
+          </tbody>
+        </table>
+
+        <div class="cat-header">FRED & Macro</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">POST /v1/fred/{series_id}</td><td class="price">$0.05</td><td class="desc">800K+ FRED series — CPI, GDP, unemployment, PCE, and more</td></tr>
+            <tr><td class="ep">POST /v1/macro/snapshot/all</td><td class="price">$0.05</td><td class="desc">All Mercury data in one call</td></tr>
+          </tbody>
+        </table>
+
+        <div class="cat-header">Composite Indices</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">POST /v1/composite/inflation-tracker</td><td class="price">$0.40</td><td class="desc">CPI, PCE, Core CPI dashboard</td></tr>
+            <tr><td class="ep">POST /v1/composite/labor-market</td><td class="price">$0.40</td><td class="desc">Unemployment, claims, payrolls</td></tr>
+            <tr><td class="ep">POST /v1/composite/economic-dashboard</td><td class="price">$0.50</td><td class="desc">GDP, CPI, unemployment overview</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="stats">
+        <div class="section-label">Stats</div>
+        <div class="stats">
+          Merchant: <span>0xF8d5...6D2</span> (Base)<br>
+          Volume: <span id="uk-revenue">$0.60</span> • Calls: <span id="uk-calls">6</span> • Buyers: <span id="uk-buyers">3</span> • Next milestone: <span id="uk-milestone">$1.00</span><br>
+          <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">View on x402scan →</a>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Flow diagram sidebar -->
+    <div class="flow-diagram">
+      <div class="flow-title">Payment Flow</div>
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-text"><strong>Request</strong>POST to endpoint</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-text"><strong>402 Response</strong>Payment descriptor returned</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-text"><strong>Pay</strong>USDC on Base via x402</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-text"><strong>Retry</strong>Submit payment token</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">5</div>
+        <div class="flow-text"><strong>Data</strong>Deterministic JSON returned</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">mercury402 — Built for the autonomous economy</div>
+      <div class="footer-links">
+        <a href="https://github.com/dudman1" target="_blank" aria-label="GitHub">
+          <svg class="x-icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        </a>
+        <a href="https://x.com/Mercuryclaw1" target="_blank" aria-label="X">
+          <svg class="x-icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a>
+        <a href="https://mercury402.uk/health" target="_blank">Health</a>
+      </div>
+      <div class="footer-copy">mercury402 © 2026</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  function nextMilestone(r){var t=[1,5,10,25,50,100,250,500,1000];for(var i=0;i<t.length;i++){if(r<t[i])return'$'+t[i]+'.00';}return'$1,000+';}
+  fetch('/metrics',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var r=d.total_revenue_usd||0;
+    document.getElementById('uk-revenue').textContent='$'+r.toFixed(2);
+    document.getElementById('uk-calls').textContent=d.total_calls||0;
+    document.getElementById('uk-buyers').textContent=d.unique_wallets||0;
+    document.getElementById('uk-milestone').textContent=nextMilestone(r);
+  }).catch(function(){});
+})();
+</script>
+
 </body>
 </html>
