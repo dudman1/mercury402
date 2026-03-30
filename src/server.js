@@ -329,8 +329,8 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/treasury/yield-curve/historical': {
     info: {
-      input: { type: 'http', method: 'POST', bodyType: 'json', body: { start_date: '2024-01-01', end_date: '2024-12-31' } },
-      output: { type: 'json', example: { start_date: '2024-01-01', end_date: '2024-12-31', data: [] } }
+      input: { type: 'http', method: 'POST', bodyType: 'json', body: { start_date: '2024-01-01', end_date: '2024-03-31' } },
+      output: { type: 'json', example: { start_date: '2024-01-01', end_date: '2024-03-31', data: [] } }
     },
     schema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -1003,6 +1003,34 @@ function require402Payment(endpointPath, price) {
   };
 }
 
+function preValidateTreasuryHistorical(req, res, next) {
+  const { start_date, end_date } = req.body || {};
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({
+      error: { code: 'MISSING_PARAMS', message: 'start_date and end_date required (ISO format YYYY-MM-DD)' }
+    });
+  }
+
+  const start = new Date(start_date);
+  const end = new Date(end_date);
+  const daysDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+
+  if (daysDiff > 90) {
+    return res.status(400).json({
+      error: { code: 'RANGE_TOO_LARGE', message: 'Date range cannot exceed 90 days' }
+    });
+  }
+
+  if (daysDiff < 0) {
+    return res.status(400).json({
+      error: { code: 'INVALID_RANGE', message: 'start_date must be before end_date' }
+    });
+  }
+
+  next();
+}
+
 // ============================================
 // FRED ENDPOINT
 // ============================================
@@ -1618,7 +1646,7 @@ app.get('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', ge
 // TREASURY YIELD CURVE — HISTORICAL
 // ============================================
 
-app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical')), async (req, res) => {
+app.post('/v1/treasury/yield-curve/historical', preValidateTreasuryHistorical, require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical')), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1627,29 +1655,6 @@ app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/
     }
 
     const { start_date, end_date } = req.body || {};
-
-    if (!start_date || !end_date) {
-      return res.status(400).json({
-        error: { code: 'MISSING_PARAMS', message: 'start_date and end_date required (ISO format YYYY-MM-DD)' }
-      });
-    }
-
-    // Validate date range (max 90 days)
-    const start = new Date(start_date);
-    const end = new Date(end_date);
-    const daysDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-
-    if (daysDiff > 90) {
-      return res.status(400).json({
-        error: { code: 'RANGE_TOO_LARGE', message: 'Date range cannot exceed 90 days' }
-      });
-    }
-
-    if (daysDiff < 0) {
-      return res.status(400).json({
-        error: { code: 'INVALID_RANGE', message: 'start_date must be before end_date' }
-      });
-    }
 
     // Generate cache key
     const cacheKey = getCacheKey('treasury:historical', { start_date, end_date });
@@ -2156,11 +2161,11 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 **Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
 **Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
 
-### GET /v1/treasury/yield-curve/historical
-**Price:** $0.03
+### POST /v1/treasury/yield-curve/historical
+**Price:** $0.05
 **Description:** Historical yield curve data (max 90-day range)
-**Query params:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical?start_date=2026-01-01&end_date=2026-03-01", method="GET")\`
+**JSON body:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
 
 ### GET /v1/macro/snapshot/all
 **Price:** $0.05
@@ -2736,10 +2741,10 @@ Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
   <p class="addr">0xF8d59270cBC746a7593D25b6569812eF1681C6D2</p>
 
   <h2>Pricing</h2>
-  <p>FRED series (<code>/v1/fred/{series_id}</code>) — <strong>$0.01</strong> (amount: 10000 &mu;USDC)<br>
-  Treasury yield curve (<code>/v1/treasury/yield-curve/daily-snapshot</code>) — <strong>$0.02</strong> (amount: 20000 &mu;USDC)<br>
-  Treasury yield curve historical (<code>/v1/treasury/yield-curve/historical</code>) — <strong>$0.03</strong> (amount: 30000 &mu;USDC)<br>
-  Treasury auction results, TIPS rates (<code>/v1/treasury/auction-results/recent</code>, <code>/v1/treasury/tips-rates/current</code>) — <strong>$0.02</strong> each<br>
+  <p>FRED series (<code>/v1/fred/{series_id}</code>) — <strong>$0.05</strong> (amount: 50000 &mu;USDC)<br>
+  Treasury yield curve (<code>/v1/treasury/yield-curve/daily-snapshot</code>) — <strong>$0.05</strong> (amount: 50000 &mu;USDC)<br>
+  Treasury yield curve historical (<code>/v1/treasury/yield-curve/historical</code>) — <strong>$0.05</strong> (amount: 50000 &mu;USDC)<br>
+  Treasury auction results, TIPS rates (<code>/v1/treasury/auction-results/recent</code>, <code>/v1/treasury/tips-rates/current</code>) — <strong>$0.05</strong> each<br>
   Macro snapshot (<code>/v1/macro/snapshot/all</code>) — <strong>$0.05</strong> (amount: 50000 &mu;USDC)<br>
   Composite dashboards (economic, inflation, labor) — <strong>$0.40–$0.50</strong></p>
 

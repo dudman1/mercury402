@@ -617,7 +617,7 @@ paths:
         Returns daily yield curve snapshots for a specified date range.
         Fetches all 11 maturities (1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y).
         
-        **Price:** $0.03
+        **Price:** $0.05
         
         **Constraints:**
         - Maximum date range: 90 days
@@ -626,7 +626,7 @@ paths:
       operationId: getTreasuryHistorical
       x-payment-info:
         pricingMode: fixed
-        price: "0.030000"
+        price: "0.050000"
         protocols:
           - x402
           - mpp
@@ -656,7 +656,7 @@ paths:
             X-Mercury-Price:
               schema:
                 type: string
-                example: "$0.03"
+                example: "$0.05"
             X-Data-Age:
               schema:
                 type: integer
