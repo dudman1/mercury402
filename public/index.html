@@ -376,29 +376,83 @@ footer{
         <table class="endpoint-table">
           <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
           <tbody>
-            <tr><td class="ep">POST /v1/treasury/tips-rates/current</td><td class="price">$0.05</td><td class="desc">TIPS rates snapshot</td></tr>
-            <tr><td class="ep">POST /v1/treasury/auction-results/recent</td><td class="price">$0.05</td><td class="desc">Treasury auction results</td></tr>
-            <tr><td class="ep">POST /v1/treasury/yield-curve/daily-snapshot</td><td class="price">$0.05</td><td class="desc">Daily yield curve (1M–30Y)</td></tr>
+            <tr><td class="ep">GET /v1/treasury/tips-rates/current</td><td class="price">$0.05</td><td class="desc">TIPS rates snapshot</td></tr>
+            <tr><td class="ep">GET /v1/treasury/auction-results/recent</td><td class="price">$0.05</td><td class="desc">Treasury auction results</td></tr>
+            <tr><td class="ep">GET /v1/treasury/yield-curve/daily-snapshot</td><td class="price">$0.05</td><td class="desc">Daily yield curve (1M–30Y)</td></tr>
             <tr><td class="ep">POST /v1/treasury/yield-curve/historical</td><td class="price">$0.05</td><td class="desc">Historical yield curve</td></tr>
           </tbody>
         </table>
 
-        <div class="cat-header">FRED & Macro</div>
+        <div class="cat-header">FRED Series (52 named)</div>
         <table class="endpoint-table">
           <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
           <tbody>
-            <tr><td class="ep">POST /v1/fred/{series_id}</td><td class="price">$0.05</td><td class="desc">800K+ FRED series — CPI, GDP, unemployment, PCE, and more</td></tr>
-            <tr><td class="ep">POST /v1/macro/snapshot/all</td><td class="price">$0.05</td><td class="desc">All Mercury data in one call</td></tr>
+            <tr><td class="ep">GET /v1/fred/cpi</td><td class="price">$0.05</td><td class="desc">Consumer Price Index</td></tr>
+            <tr><td class="ep">GET /v1/fred/cpi-core</td><td class="price">$0.05</td><td class="desc">Core CPI (excl. food & energy)</td></tr>
+            <tr><td class="ep">GET /v1/fred/ppi</td><td class="price">$0.05</td><td class="desc">Producer Price Index</td></tr>
+            <tr><td class="ep">GET /v1/fred/pce</td><td class="price">$0.05</td><td class="desc">Personal Consumption Expenditures</td></tr>
+            <tr><td class="ep">GET /v1/fred/pce-core</td><td class="price">$0.05</td><td class="desc">Core PCE Price Index</td></tr>
+            <tr><td class="ep">GET /v1/fred/unemployment-rate</td><td class="price">$0.05</td><td class="desc">Civilian unemployment rate</td></tr>
+            <tr><td class="ep">GET /v1/fred/nonfarm-payrolls</td><td class="price">$0.05</td><td class="desc">Total nonfarm payrolls</td></tr>
+            <tr><td class="ep">GET /v1/fred/initial-claims</td><td class="price">$0.05</td><td class="desc">Initial jobless claims</td></tr>
+            <tr><td class="ep">GET /v1/fred/gdp</td><td class="price">$0.05</td><td class="desc">Real GDP</td></tr>
+            <tr><td class="ep">GET /v1/fred/gdp-growth</td><td class="price">$0.05</td><td class="desc">Real GDP growth, annualized</td></tr>
+            <tr><td class="ep">GET /v1/fred/fed-funds-rate</td><td class="price">$0.05</td><td class="desc">Effective federal funds rate</td></tr>
+            <tr><td class="ep">GET /v1/fred/m2-money-stock</td><td class="price">$0.05</td><td class="desc">M2 money stock</td></tr>
+            <tr><td class="ep">GET /v1/fred/consumer-confidence</td><td class="price">$0.05</td><td class="desc">U Michigan consumer sentiment</td></tr>
+            <tr><td class="ep">GET /v1/fred/housing-starts</td><td class="price">$0.05</td><td class="desc">New housing starts</td></tr>
+            <tr><td class="ep">GET /v1/fred/industrial-production</td><td class="price">$0.05</td><td class="desc">Industrial production index</td></tr>
+            <tr><td class="ep">GET /v1/fred/retail-sales</td><td class="price">$0.05</td><td class="desc">Retail sales</td></tr>
+            <tr><td class="ep">GET /v1/fred/trade-balance</td><td class="price">$0.05</td><td class="desc">Trade balance (goods & services)</td></tr>
+            <tr><td class="ep">GET /v1/fred/vix</td><td class="price">$0.05</td><td class="desc">CBOE Volatility Index</td></tr>
+            <tr><td class="ep">GET /v1/fred/{series_id}</td><td class="price">$0.05</td><td class="desc">Any of 800K+ FRED series</td></tr>
           </tbody>
         </table>
 
-        <div class="cat-header">Composite Indices</div>
+        <div class="cat-header">Forex Cross-Rates</div>
         <table class="endpoint-table">
           <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
           <tbody>
-            <tr><td class="ep">POST /v1/composite/inflation-tracker</td><td class="price">$0.40</td><td class="desc">CPI, PCE, Core CPI dashboard</td></tr>
-            <tr><td class="ep">POST /v1/composite/labor-market</td><td class="price">$0.40</td><td class="desc">Unemployment, claims, payrolls</td></tr>
-            <tr><td class="ep">POST /v1/composite/economic-dashboard</td><td class="price">$0.50</td><td class="desc">GDP, CPI, unemployment overview</td></tr>
+            <tr><td class="ep">GET /v1/forex/eur-usd</td><td class="price">$0.05</td><td class="desc">EUR/USD exchange rate</td></tr>
+            <tr><td class="ep">GET /v1/forex/gbp-usd</td><td class="price">$0.05</td><td class="desc">GBP/USD exchange rate</td></tr>
+            <tr><td class="ep">GET /v1/forex/usd-jpy</td><td class="price">$0.05</td><td class="desc">USD/JPY exchange rate</td></tr>
+            <tr><td class="ep">GET /v1/forex/usd-cny</td><td class="price">$0.05</td><td class="desc">USD/CNY exchange rate</td></tr>
+          </tbody>
+        </table>
+
+        <div class="cat-header">Yield Curve Spreads</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">GET /v1/yield-spread/10y-2y</td><td class="price">$0.05</td><td class="desc">10Y minus 2Y spread</td></tr>
+            <tr><td class="ep">GET /v1/yield-spread/10y-3m</td><td class="price">$0.05</td><td class="desc">10Y minus 3M spread</td></tr>
+            <tr><td class="ep">GET /v1/yield-spread/5y-2y</td><td class="price">$0.05</td><td class="desc">5Y minus 2Y spread</td></tr>
+            <tr><td class="ep">GET /v1/yield-spread/30y-5y</td><td class="price">$0.05</td><td class="desc">30Y minus 5Y spread</td></tr>
+            <tr><td class="ep">GET /v1/yield-spread/10y-5y</td><td class="price">$0.05</td><td class="desc">10Y minus 5Y spread</td></tr>
+          </tbody>
+        </table>
+
+        <div class="cat-header">Breakeven Inflation</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">GET /v1/breakeven/2y</td><td class="price">$0.05</td><td class="desc">2Y breakeven inflation rate</td></tr>
+            <tr><td class="ep">GET /v1/breakeven/5y</td><td class="price">$0.05</td><td class="desc">5Y breakeven inflation rate</td></tr>
+            <tr><td class="ep">GET /v1/breakeven/10y</td><td class="price">$0.05</td><td class="desc">10Y breakeven inflation rate</td></tr>
+            <tr><td class="ep">GET /v1/breakeven/5y5y</td><td class="price">$0.05</td><td class="desc">5Y5Y forward inflation expectations</td></tr>
+          </tbody>
+        </table>
+
+        <div class="cat-header">Macro & Composite</div>
+        <table class="endpoint-table">
+          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
+          <tbody>
+            <tr><td class="ep">GET /v1/macro/bundle</td><td class="price">$0.10</td><td class="desc">Treasury + CPI + GDP + Employment + Fed Funds</td></tr>
+            <tr><td class="ep">GET /v1/macro/recession-probability</td><td class="price">$0.10</td><td class="desc">Recession probability from yield curve + unemployment</td></tr>
+            <tr><td class="ep">GET /v1/macro/snapshot/all</td><td class="price">$0.05</td><td class="desc">Complete macro snapshot</td></tr>
+            <tr><td class="ep">GET /v1/composite/inflation-tracker</td><td class="price">$0.40</td><td class="desc">CPI, PCE, Core CPI dashboard</td></tr>
+            <tr><td class="ep">GET /v1/composite/labor-market</td><td class="price">$0.40</td><td class="desc">Unemployment, claims, payrolls</td></tr>
+            <tr><td class="ep">GET /v1/composite/economic-dashboard</td><td class="price">$0.50</td><td class="desc">GDP, CPI, unemployment overview</td></tr>
           </tbody>
         </table>
       </section>

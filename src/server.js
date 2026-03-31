@@ -738,6 +738,18 @@ function emitToConvex(endpoint, revenue_usd, wallet_address) {
 // x402 PAYMENT VALIDATION
 // ============================================
 
+const ENDPOINT_DESCRIPTIONS = {
+  '/v1/fred/{series_id}': 'Federal Reserve Economic Data (FRED) series',
+  '/v1/treasury/yield-curve/daily-snapshot': 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)',
+  '/v1/composite/economic-dashboard': 'Economic overview: GDP, CPI, and Unemployment in one call',
+  '/v1/composite/inflation-tracker': 'Inflation metrics: CPI, PCE, and Core CPI',
+  '/v1/composite/labor-market': 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls',
+  '/v1/macro/snapshot/all': 'Complete macro snapshot: GDP, CPI, UNRATE, yields, VIX',
+  '/v1/treasury/yield-curve/historical': 'Historical yield curve data (max 90-day range)',
+  '/v1/treasury/auction-results/recent': 'Recent Treasury auction results',
+  '/v1/treasury/tips-rates/current': 'Current TIPS rates (5, 7, 10, 20, 30-year)'
+};
+
 // Helper: Encode x402 payment info as base64url for Payment-Required header (v2 format)
 function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   const paymentRequiredV2 = {
@@ -777,7 +789,47 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   return base64url;
 }
 
-function require402Payment(endpointPath, price) {
+function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
+  const amount = String(Math.floor(price * 1000000));
+  const description = ENDPOINT_DESCRIPTIONS[endpointPath] || 'Deterministic financial data from official sources';
+  const normalizedMethod = method.toUpperCase();
+
+  return {
+    x402Version: 1,
+    error: 'payment required',
+    accepts: [{
+      scheme: 'exact',
+      network: 'base',
+      maxAmountRequired: amount,
+      resource: `https://mercury402.uk${resolvedPath}`,
+      description,
+      mimeType: 'application/json',
+      payTo: MERCHANT_WALLET,
+      maxTimeoutSeconds: 30,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      outputSchema: {
+        input: {
+          type: 'http',
+          method: normalizedMethod,
+          discoverable: true
+        },
+        output: {
+          input: {
+            type: 'http',
+            method: normalizedMethod,
+            discoverable: true
+          }
+        }
+      },
+      extra: {
+        name: 'USD Coin',
+        version: '2'
+      }
+    }]
+  };
+}
+
+function require402Payment(endpointPath, price, routeMethod = 'GET') {
   return async (req, res, next) => {
     const startTime = Date.now();
     
@@ -891,21 +943,13 @@ function require402Payment(endpointPath, price) {
         }
       }
       // No valid payment found
-      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
+      const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
         .set('Payment-Required', paymentRequired)
-        .json({
-          error: 'PAYMENT_REQUIRED',
-          message: 'Payment required. See Payment-Required header for x402 payment details.',
-          price: `$${price.toFixed(2)} USDC (Base)`,
-          x402: {
-            scheme: 'exact',
-            network: 'eip155:8453',
-            instructions: 'Parse the Payment-Required header (base64 JSON) for payment requirements. Use any x402-compatible client (https://github.com/coinbase/x402) to pay and retry automatically.'
-          }
-        });
+        .json(paymentRequiredBody);
     }
     
 
@@ -934,32 +978,26 @@ function require402Payment(endpointPath, price) {
     
     if (isTestToken && !allowTestTokens) {
       // Test token in production - reject
-      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
+      const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
       return res
         .status(402)
         .set('Payment-Required', paymentRequired)
-        .json({
-          error: 'INVALID_PAYMENT_TOKEN',
-          message: 'Test tokens not allowed in production',
-          price: `$${price.toFixed(2)} USDC (Base)`,
-          paymentUri: `https://mercury402.uk/pay?endpoint=${endpointPath}&price=${price.toFixed(2)}`
-        });
+        .json(paymentRequiredBody);
     }
     
     // PRODUCTION: Verify payment on-chain via Base RPC
-    const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, req.method);
+    const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
     
     if (!tokenMeta.tx_hash) {
       // Token parsed but no tx_hash found
       logPayment(endpointPath, 0, customerId, false, 'no_tx_hash_in_token');
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
-      return res.status(402).set('Payment-Required', paymentRequired).json({
-        error: 'INVALID_PAYMENT_TOKEN',
-        message: 'Token does not contain transaction hash',
-        price: `$${price.toFixed(2)} USDC (Base)`
-      });
+      return res.status(402).set('Payment-Required', paymentRequired).json(
+        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
+      );
     }
     
     // Verify transaction on-chain
@@ -979,12 +1017,9 @@ function require402Payment(endpointPath, price) {
         price_usd: 0 
       };
       
-      return res.status(402).set('Payment-Required', paymentRequired).json({
-        error: 'PAYMENT_VERIFICATION_FAILED',
-        message: `Transaction verification failed: ${verification.reason}`,
-        price: `$${price.toFixed(2)} USDC (Base)`,
-        tx_hash: tokenMeta.tx_hash
-      });
+      return res.status(402).set('Payment-Required', paymentRequired).json(
+        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
+      );
     }
     
     // VERIFIED ✅ - Log successful payment and proceed
@@ -1646,7 +1681,16 @@ app.get('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', ge
 // TREASURY YIELD CURVE — HISTORICAL
 // ============================================
 
-app.post('/v1/treasury/yield-curve/historical', preValidateTreasuryHistorical, require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical')), async (req, res) => {
+app.get('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), (req, res) => {
+  return res.status(405).json({
+    error: {
+      code: 'METHOD_NOT_ALLOWED',
+      message: 'Use POST for this endpoint'
+    }
+  });
+});
+
+app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), preValidateTreasuryHistorical, async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1943,6 +1987,23 @@ app.get('/v1/treasury/tips-rates/current', require402Payment('/v1/treasury/tips-
 });
 
 // ============================================
+// FRED EXPANSION — Named series, forex, spreads, breakeven, bundle, recession
+// ============================================
+
+const { registerNewRoutes, FRED_SERIES, FOREX_SERIES, SPREAD_ENDPOINTS, BREAKEVEN_ENDPOINTS, BUNDLE_SERIES, buildEndpointMeta } = require('./new-routes');
+const NEW_ENDPOINT_META = registerNewRoutes(app, {
+  require402Payment,
+  getPrice,
+  fetchFredData,
+  generateProvenance,
+  getCacheKey,
+  getCached,
+  setCache,
+  CACHE_TTL,
+  cacheStats
+});
+
+// ============================================
 // DISCOVERY & HEALTH
 // ============================================
 
@@ -1950,7 +2011,8 @@ app.get('/.well-known/x402', (req, res) => {
   const { PRICING } = require('./pricing');
   
   // Build accepts array — one entry per endpoint for correct per-resource price display
-  const ENDPOINT_DESCRIPTIONS = {
+  // Static descriptions for original endpoints, dynamic from NEW_ENDPOINT_META for expansion
+  const BASE_DESCRIPTIONS = {
     '/v1/fred/{series_id}': 'Federal Reserve Economic Data (FRED) series',
     '/v1/treasury/yield-curve/daily-snapshot': 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)',
     '/v1/treasury/yield-curve/historical': 'Historical yield curve data (max 90-day range)',
@@ -1961,12 +2023,19 @@ app.get('/.well-known/x402', (req, res) => {
     '/v1/composite/inflation-tracker': 'Inflation metrics: CPI, PCE, and Core CPI',
     '/v1/composite/labor-market': 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls',
   };
+  // Merge with expansion endpoints
+  const ENDPOINT_DESCRIPTIONS = { ...BASE_DESCRIPTIONS };
+  for (const [path, meta] of Object.entries(NEW_ENDPOINT_META)) {
+    ENDPOINT_DESCRIPTIONS[path] = meta.desc;
+  }
 
   const accepts = Object.entries(PRICING)
     .filter(([endpoint]) => endpoint !== 'default')
     .sort((a, b) => parseFloat(a[1]) - parseFloat(b[1]))
     .map(([endpoint, price]) => {
-      const method = endpoint === '/v1/treasury/yield-curve/historical' ? 'POST' : 'GET';
+      // Determine HTTP method: POST for Historical, GET for everything else
+      const meta = NEW_ENDPOINT_META[endpoint];
+      const method = endpoint === '/v1/treasury/yield-curve/historical' ? 'POST' : (meta ? meta.method : 'GET');
       return {
         scheme: 'exact',
         method: method, // x402scan reads this for HTTP method
@@ -2132,7 +2201,7 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 ## Available Endpoints
 
 ### GET /v1/fred/{series_id}
-**Price:** $0.01
+**Price:** $0.05
 **Description:** Fetch any FRED economic series by ID — accepts any valid FRED series_id as path parameter (800k+ series available)
 **Common series_id examples:**
 - UNRATE — Unemployment Rate
@@ -2142,21 +2211,23 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 - FEDFUNDS — Federal Funds Effective Rate
 - DGS2 — 2-Year Treasury Constant Maturity Rate
 
+**Named endpoints:** CPI, PCE, unemployment-rate, nonfarm-payrolls, fed-funds-rate, housing-starts, m2-money-stock, consumer-confidence, retail-sales, trade-balance, vix, and 41 more. See /v1/fred/{series_id} in API discovery.
+
 **Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/fred/UNRATE", method="GET")\`
 **Response:** JSON with series data, observations, and cryptographic signature
 
 ### GET /v1/treasury/auction-results/recent
-**Price:** $0.02
+**Price:** $0.05
 **Description:** Recent U.S. Treasury auction results
 **Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/auction-results/recent", method="GET")\`
 
 ### GET /v1/treasury/tips-rates/current
-**Price:** $0.02
+**Price:** $0.05
 **Description:** Current TIPS rates (5, 7, 10, 20, 30-year)
 **Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/tips-rates/current", method="GET")\`
 
 ### GET /v1/treasury/yield-curve/daily-snapshot
-**Price:** $0.02
+**Price:** $0.05
 **Description:** U.S. Treasury yield curve snapshot (11 maturities, FRED-sourced)
 **Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
 **Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
@@ -2224,15 +2295,19 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
 
 | Endpoint | Price |
 |----------|-------|
-| /v1/fred/{series_id} | $0.01 |
-| /v1/treasury/auction-results/recent | $0.02 |
-| /v1/treasury/tips-rates/current | $0.02 |
-| /v1/treasury/yield-curve/daily-snapshot | $0.02 |
-| /v1/treasury/yield-curve/historical | $0.03 |
+| FRED series (52 named + {series_id}) | $0.05 |
+| Forex cross-rates (EUR/USD, GBP/USD, USD/JPY, USD/CNY) | $0.05 |
+| Yield curve spreads (10Y-2Y, 10Y-3M, 5Y-2Y, etc.) | $0.05 |
+| Breakeven inflation (2Y, 5Y, 10Y, 5Y5Y) | $0.05 |
+| Treasury endpoints (yield curve, auctions, TIPS) | $0.05 |
+| /v1/macro/bundle | $0.10 |
+| /v1/macro/recession-probability | $0.10 |
 | /v1/macro/snapshot/all | $0.05 |
 | /v1/composite/inflation-tracker | $0.40 |
 | /v1/composite/labor-market | $0.40 |
 | /v1/composite/economic-dashboard | $0.50 |
+
+**Total: 76 endpoints** (72 standard at $0.05, 2 premium at $0.10, 3 composite at $0.40–$0.50)
 
 ## Use Cases
 
@@ -2641,28 +2716,28 @@ const LANDING_HTML = `<!DOCTYPE html>
   <div class="cards">
     <div class="card">
       <h3>FRED Series</h3>
-      <div class="price">$0.01<span>/call</span></div>
-      <p>Any FRED macroeconomic series (GDP, CPI, UNRATE, 800k+)</p>
+      <div class="price">$0.05<span>/call</span></div>
+      <p>52 named series + any of 800K+ FRED series (CPI, GDP, UNRATE, PCE, M2, VIX)</p>
     </div>
     <div class="card">
-      <h3>Treasury Yield Curve</h3>
-      <div class="price">$0.02<span>/call</span></div>
-      <p>Daily U.S. Treasury par yield curve snapshot</p>
+      <h3>Forex & Spreads</h3>
+      <div class="price">$0.05<span>/call</span></div>
+      <p>EUR/USD, GBP/USD, USD/JPY, USD/CNY + yield curve spreads</p>
+    </div>
+    <div class="card">
+      <h3>Macro Bundle</h3>
+      <div class="price">$0.10<span>/call</span></div>
+      <p>Treasury + CPI + GDP + Employment + Fed Funds in one call</p>
+    </div>
+    <div class="card">
+      <h3>Recession Probability</h3>
+      <div class="price">$0.10<span>/call</span></div>
+      <p>Yield curve + unemployment recession model (logistic v1)</p>
     </div>
     <div class="card">
       <h3>Economic Dashboard</h3>
       <div class="price">$0.50<span>/call</span></div>
       <p>GDP, CPI, and Unemployment in one composite call</p>
-    </div>
-    <div class="card">
-      <h3>Inflation Tracker</h3>
-      <div class="price">$0.40<span>/call</span></div>
-      <p>CPI, PCE, and Core CPI inflation metrics</p>
-    </div>
-    <div class="card">
-      <h3>Labor Market</h3>
-      <div class="price">$0.40<span>/call</span></div>
-      <p>Unemployment, Jobless Claims, and Nonfarm Payrolls</p>
     </div>
   </div>
   <p class="trust-line">Designed for builders who want agents that transact &mdash; not just query.</p>
@@ -2721,7 +2796,7 @@ Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
 
 {
   "error": "PAYMENT_REQUIRED",
-  "price": "$0.01 USDC (Base)",
+  "price": "$0.05 USDC (Base)",
   "paymentUri": "https://mercury402.uk/pay?..."
 }</code></pre>
 
