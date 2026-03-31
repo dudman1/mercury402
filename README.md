@@ -1,6 +1,6 @@
 # Mercury402
 
-![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-14-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
+![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-76-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
 
 ## Deterministic Finance Data for Autonomous Agents
 
@@ -29,7 +29,7 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 | `GET /openapi.json` | OpenAPI 3.1 spec | Free |
 | `GET /docs/api` | Interactive Swagger UI | Free |
 
-**14 total endpoints** (9 paid data endpoints + 5 free discovery/health endpoints)
+**76 total endpoints** (72 standard data endpoints + 2 premium composite + 2 free discovery/health endpoints)
 
 ---
 
@@ -95,7 +95,7 @@ See [`examples/`](./examples/) for agent integration code.
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/mercury402.git
+git clone https://github.com/dudman1/mercury402.git
 cd mercury402
 npm install
 
@@ -115,7 +115,7 @@ See [deployment docs](./docs/DEPLOYMENT.md) for production setup.
 
 ## Support
 
-**Issues:** [GitHub Issues](https://github.com/YOUR_USERNAME/mercury402/issues)  
+**Issues:** [GitHub Issues](https://github.com/dudman1/mercury402/issues)  
 **Funding:** https://mercury402.uk
 
 ---
