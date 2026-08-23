@@ -1245,6 +1245,11 @@ async function isValidFredSeries(seriesId) {
 
 async function fredSeriesGuard(req, res, next) {
   try {
+    const raw = req.params.series_id || '';
+    // Template placeholders ({series_id}, %7B...%7D, <id>) are crawler probes,
+    // not buyer typos -> let them through to the 402 paywall untouched.
+    if (/[%{}<>]/.test(raw)) return next();
+    req.params.series_id = raw.toUpperCase(); // FRED ids are case-insensitive upstream
     if (!(await isValidFredSeries(req.params.series_id))) {
       return res.status(400).json({
         error: {

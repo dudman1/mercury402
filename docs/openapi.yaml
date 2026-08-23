@@ -84,6 +84,7 @@ paths:
         - name: series_id
           in: path
           required: true
+          example: UNRATE
           schema:
             type: string
             example: UNRATE
