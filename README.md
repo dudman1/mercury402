@@ -6,7 +6,7 @@
 
 Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous systems. No API keys, no accounts, no rate limits—just pay in USDC on Base via the x402 protocol and get instant access to Federal Reserve data, Treasury yields, and macro indicators with cryptographic provenance.
 
-**Live at:** https://mercury402.uk
+**Live at:** https://api.mercury402.com
 
 ---
 
@@ -14,12 +14,12 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 
 | Endpoint | Data | Price (USDC) |
 |----------|------|--------------|
-| `GET /v1/fred/{series_id}` | Any FRED economic series | $0.01 |
-| `GET /v1/treasury/yield-curve/daily-snapshot` | Current Treasury yield curve (11 maturities) | $0.02 |
+| `GET /v1/fred/{series_id}` | Any FRED economic series | $0.05 |
+| `GET /v1/treasury/yield-curve/daily-snapshot` | Current Treasury yield curve (11 maturities) | $0.05 |
 | `POST /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
-| `POST /v1/treasury/yield-curve/historical` | Historical yield curves (max 90-day range) | $0.03 |
-| `POST /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.02 |
-| `POST /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.02 |
+| `POST /v1/treasury/yield-curve/historical` | Historical yield curves (max 90-day range) | $0.05 |
+| `POST /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.05 |
+| `POST /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.05 |
 | `POST /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
 | `POST /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
 | `POST /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
@@ -37,14 +37,14 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 
 ```bash
 # 1. Try a free health check
-curl https://mercury402.uk/health
+curl https://api.mercury402.com/health
 
 # 2. Attempt to access data (returns 402 Payment Required)
-curl https://mercury402.uk/v1/fred/UNRATE
+curl https://api.mercury402.com/v1/fred/UNRATE
 
-# 3. Pay via x402 and retry with your token
-curl -H "Authorization: Bearer x402_YOUR_TOKEN" \
-  https://mercury402.uk/v1/fred/UNRATE
+# 3. Pay via an x402-compatible client and retry with payment-signature
+curl -H "payment-signature: <base64_x402_payment_payload>" \
+  https://api.mercury402.com/v1/fred/UNRATE
 ```
 
 See [`examples/`](./examples/) for agent integration code.
@@ -53,11 +53,10 @@ See [`examples/`](./examples/) for agent integration code.
 
 ## x402 Payment Flow
 
-1. **Request data** → Server returns `402 Payment Required` with payment details
-2. **Pay in USDC** → Transfer via Base blockchain to merchant wallet
-3. **Get token** → x402 gateway verifies payment and issues bearer token
-4. **Retry request** → Include `Authorization: Bearer x402_<token>` header
-5. **Receive data** → Server validates token and returns data with cryptographic signature
+1. **Request data** → Server returns `402 Payment Required` with `Payment-Required` details
+2. **Pay in USDC** → Use an x402-compatible client on Base to build a signed payment payload
+3. **Retry request** → Include `payment-signature: <base64_x402_payment_payload>`
+4. **Receive data** → Server verifies and redeems the payment, then returns signed data
 
 **Marketplace listing:** https://www.x402scan.com/server/mercury402
 
@@ -65,8 +64,8 @@ See [`examples/`](./examples/) for agent integration code.
 
 ## Documentation
 
-- **Swagger UI:** https://mercury402.uk/docs/api
-- **OpenAPI Spec:** https://mercury402.uk/openapi.json
+- **Swagger UI:** https://api.mercury402.com/docs/api
+- **OpenAPI Spec:** https://api.mercury402.com/openapi.json
 - **x402scan Listing:** https://www.x402scan.com/server/mercury402
 - **Examples:** [`examples/README.md`](./examples/README.md)
 
@@ -116,10 +115,13 @@ See [deployment docs](./docs/DEPLOYMENT.md) for production setup.
 ## Support
 
 **Issues:** [GitHub Issues](https://github.com/dudman1/mercury402/issues)  
-**Funding:** https://mercury402.uk
+**Funding:** https://api.mercury402.com
 
 ---
 
 ## License
 
 MIT
+
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

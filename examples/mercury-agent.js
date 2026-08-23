@@ -10,16 +10,21 @@
 const https = require('https');
 const http = require('http');
 
-const MERCURY_API = process.env.MERCURY_API || 'https://mercury402.uk';
-const USE_TEST_TOKEN = process.env.USE_TEST_TOKEN === 'true';
+const MERCURY_API = process.env.MERCURY_API || 'https://api.mercury402.com';
+const PAYMENT_SIGNATURE = process.env.PAYMENT_SIGNATURE || null;
 
 // Track spending
 let totalSpent = 0;
 
+function decodePaymentRequired(headerValue) {
+  const normalized = headerValue + '='.repeat((4 - (headerValue.length % 4)) % 4);
+  return JSON.parse(Buffer.from(normalized, 'base64url').toString('utf8'));
+}
+
 /**
- * Make HTTP request with optional bearer token
+ * Make HTTP request with optional x402 payment-signature
  */
-function request(url, token = null) {
+function request(url, paymentSignature = null) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url);
     const isHttps = parsedUrl.protocol === 'https:';
@@ -33,8 +38,8 @@ function request(url, token = null) {
       headers: {}
     };
 
-    if (token) {
-      options.headers['Authorization'] = `Bearer ${token}`;
+    if (paymentSignature) {
+      options.headers['payment-signature'] = paymentSignature;
     }
 
     const req = client.request(options, (res) => {
@@ -70,8 +75,8 @@ function request(url, token = null) {
  * 1. GET endpoint → 402 Payment Required
  * 2. Parse Payment-Required header (base64url payment descriptor)
  * 3. Make USDC payment on Base to merchant wallet
- * 4. Receive x402 token from payment gateway
- * 5. Retry GET with Authorization: Bearer x402_<token>
+ * 4. Receive a signed x402 payment payload
+ * 5. Retry GET with payment-signature
  */
 async function fetchWithPayment(endpoint) {
   const url = `${MERCURY_API}${endpoint}`;
@@ -86,36 +91,26 @@ async function fetchWithPayment(endpoint) {
 
     // Step 2: Parse payment requirements
     const paymentHeader = response.headers['payment-required'];
+    let paymentInfo = null;
     if (paymentHeader) {
-      const paymentInfo = JSON.parse(
-        Buffer.from(paymentHeader, 'base64').toString('utf8')
-      );
-      console.log(`  💰 Price: ${response.data.price || 'unknown'}`);
-      console.log(`  📍 Network: ${paymentInfo.network || 'eip155:8453'}`);
-      console.log(`  💵 Asset: USDC`);
+      paymentInfo = decodePaymentRequired(paymentHeader);
+      const accepted = paymentInfo.accepts?.[0] || {};
+      console.log(`  💰 Price (μUSDC): ${accepted.maxAmountRequired || accepted.amount || 'unknown'}`);
+      console.log(`  📍 Network: ${accepted.network || 'eip155:8453'}`);
+      console.log(`  💵 Asset: ${accepted.asset || 'USDC'}`);
     }
 
-    // Step 3: Get payment token
-    let token;
-    if (USE_TEST_TOKEN) {
-      // DEV MODE: Use test token (requires ALLOW_TEST_TOKEN=true on server)
-      console.log('  🧪 Using test token (dev mode)');
-      token = 'x402_test';
-    } else {
-      // PRODUCTION: Make real USDC payment on Base
-      // This requires:
-      // - ethers.js for wallet/signing
-      // - USDC contract interaction (ERC-20 transfer or EIP-3009 permit)
-      // - x402 payment gateway call to register payment and get token
-      
-      console.log('  ⚠️  Real payments not yet implemented in this demo');
-      console.log('  ℹ️  Set USE_TEST_TOKEN=true to test with fake payments');
-      throw new Error('Real x402 payments require integration with payment gateway');
+    // Step 3: Get a signed x402 payment payload.
+    let paymentSignature = PAYMENT_SIGNATURE;
+    if (!paymentSignature) {
+      console.log('  ⚠️  No PAYMENT_SIGNATURE provided');
+      console.log('  ℹ️  Wire this demo to a real x402 wallet / processor that converts the Payment-Required descriptor into a signed payment payload');
+      throw new Error('Missing PAYMENT_SIGNATURE for payment-signature flow');
     }
 
-    // Step 4: Retry with payment token
-    console.log('  ↻ Retrying with payment token...');
-    response = await request(url, token);
+    // Step 4: Retry with payment-signature
+    console.log('  ↻ Retrying with payment-signature...');
+    response = await request(url, paymentSignature);
 
     if (response.status !== 200) {
       throw new Error(`Payment failed: ${response.status} ${JSON.stringify(response.data)}`);
@@ -209,7 +204,7 @@ async function main() {
   console.log('║   Mercury x402 Daily Economic Brief  ║');
   console.log('╚═══════════════════════════════════════╝');
   console.log(`API: ${MERCURY_API}`);
-  console.log(`Mode: ${USE_TEST_TOKEN ? 'Test Tokens (Dev)' : 'Real Payments (Prod)'}`);
+  console.log(`Mode: ${PAYMENT_SIGNATURE ? 'Injected payment-signature' : 'Awaiting payment-signature'}`);
 
   try {
     // Fetch Treasury yield curve
@@ -233,9 +228,9 @@ async function main() {
   } catch (error) {
     console.error('\n❌ Error:', error.message);
     console.log('\n💡 Tips:');
-    console.log('  - Set USE_TEST_TOKEN=true for dev mode');
-    console.log('  - Check server is running: curl https://mercury402.uk/health');
-    console.log('  - View docs: https://mercury402.uk/docs/api\n');
+    console.log('  - Export PAYMENT_SIGNATURE with a real x402 payment payload');
+    console.log('  - Check server is running: curl https://api.mercury402.com/health');
+    console.log('  - View docs: https://api.mercury402.com/docs/api\n');
     process.exit(1);
   }
 }
@@ -245,4 +240,7 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { request, fetchWithPayment };
+module.exports = { request, fetchWithPayment, decodePaymentRequired };
+
+// ---
+// *Last updated: 2026-04-20 22:53 ET | Updated by: Forge*

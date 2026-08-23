@@ -6,12 +6,12 @@ info:
     Deterministic financial data with cryptographic provenance.
     
     Payment required via x402 protocol (HTTP 402 + USDC on Base).
-    All paid endpoints require `Authorization: Bearer x402_<token>` header.
+    All paid endpoints require the `payment-signature` header in production.
     
     **Payment Flow:**
     1. Call endpoint without auth → receive 402 with Payment-Required header
     2. Pay via x402 protocol (USDC on Base mainnet)
-    3. Retry with Bearer token → receive 200 + data
+    3. Retry with `payment-signature` → receive 200 + data
     
     **Data Sources:**
     - FRED (Federal Reserve Economic Data): 800k+ economic series
@@ -19,22 +19,22 @@ info:
     
   contact:
     name: Mercury x402 Support
-    url: https://mercury402.uk
+    url: https://api.mercury402.com
   license:
     name: Proprietary
-  guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay USDC, retry with Bearer token."
+  guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay via an x402-compatible client, then retry with the payment-signature header."
     
 x-discovery:
   ownershipProofs: []
 
 servers:
-  - url: https://mercury402.uk
+  - url: https://api.mercury402.com
     description: Production
   - url: http://localhost:4020
     description: Local development
 
 security:
-  - x402Bearer: []
+  - x402PaymentSignature: []
 
 tags:
   - name: FRED
@@ -56,8 +56,8 @@ paths:
         Returns observations for any FRED series ID (GDP, UNRATE, DGS10, etc.).
         
         **Pricing:**
-        - Single date or latest: $0.01
-        - Date range (observation_start + observation_end): $0.02
+        - Single date or latest: $0.05
+        - Date range (observation_start + observation_end): $0.10
         
         **Common Series:**
         - UNRATE: Unemployment Rate
@@ -76,7 +76,7 @@ paths:
           - mpp
       tags: [FRED]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       parameters:
         - name: series_id
           in: path
@@ -218,7 +218,7 @@ paths:
           - mpp
       tags: [Treasury]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       parameters:
         - name: date
           in: query
@@ -342,7 +342,7 @@ paths:
           - mpp
       tags: [Composite]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Economic indicators dashboard
@@ -409,7 +409,7 @@ paths:
           - mpp
       tags: [Composite]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Inflation indicators
@@ -474,7 +474,7 @@ paths:
           - mpp
       tags: [Composite]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Labor market indicators
@@ -547,7 +547,7 @@ paths:
           - mpp
       tags: [Composite]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Macro snapshot with all indicators
@@ -632,7 +632,7 @@ paths:
           - mpp
       tags: [Treasury]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       requestBody:
         required: true
         content:
@@ -756,7 +756,7 @@ paths:
           - mpp
       tags: [Treasury]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Recent auction results
@@ -840,7 +840,7 @@ paths:
           - mpp
       tags: [Treasury]
       security:
-        - x402Bearer: []
+        - x402PaymentSignature: []
       responses:
         '200':
           description: Current TIPS rates
@@ -1004,24 +1004,23 @@ paths:
 
 components:
   securitySchemes:
-    x402Bearer:
-      type: http
-      scheme: bearer
-      bearerFormat: x402_<token>
+    x402PaymentSignature:
+      type: apiKey
+      in: header
+      name: payment-signature
       description: |
-        x402 payment token obtained after USDC payment on Base.
-        
-        **Format:** `Authorization: Bearer x402_<token>`
-        
-        **How to get a token:**
-        1. Call any paid endpoint without auth → receive 402
-        2. Extract `Payment-Required` header (base64url-encoded payment info)
-        3. Pay via x402 protocol (USDC on Base)
-        4. Receive token from payment gateway
-        5. Retry request with `Authorization: Bearer x402_<token>`
-        
-        **Test tokens (dev only):**
-        Set `ALLOW_TEST_TOKEN=true` to accept `x402_test` token.
+        Production Mercury expects an x402 payment payload in the `payment-signature` header.
+
+        **Format:** `payment-signature: <base64_x402_payment_payload>`
+
+        **How to pay:**
+        1. Call any paid endpoint without payment headers
+        2. Read the `Payment-Required` header (base64url x402 descriptor)
+        3. Use an x402-compatible client or payment processor to create a signed payment payload
+        4. Retry the request with `payment-signature`
+
+        **Legacy bearer compatibility:**
+        Unsigned `Authorization: Bearer x402_<token>` flow is disabled in production unless `ALLOW_LEGACY_BEARER=true`.
 
   schemas:
     FREDResponse:
@@ -1276,24 +1275,37 @@ components:
 
     PaymentRequired:
       type: object
-      required: [error, price]
+      required: [x402Version, error, accepts]
       properties:
+        x402Version:
+          type: integer
+          example: 1
         error:
           type: string
-          enum: [PAYMENT_REQUIRED, INVALID_PAYMENT_TOKEN, PAYMENT_VERIFICATION_UNAVAILABLE]
-        message:
-          type: string
-        price:
-          type: string
-          example: "$0.01 USDC (Base)"
-        paymentUri:
-          type: string
-          format: uri
-          example: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59..."
-        instructions:
+          enum: [payment required]
+        accepts:
           type: array
           items:
-            type: string
+            type: object
+            properties:
+              scheme:
+                type: string
+                example: exact
+              network:
+                type: string
+                example: base
+              maxAmountRequired:
+                type: string
+                example: "50000"
+              payTo:
+                type: string
+                example: "0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+              asset:
+                type: string
+                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+              maxTimeoutSeconds:
+                type: integer
+                example: 30
         status:
           type: string
           description: Additional status info (present for PAYMENT_VERIFICATION_UNAVAILABLE)
@@ -1311,15 +1323,15 @@ components:
           schema:
             $ref: '#/components/schemas/PaymentRequired'
           example:
-            error: PAYMENT_REQUIRED
-            message: Payment required to access this endpoint
-            price: "$0.01 USDC (Base)"
-            paymentUri: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
-            instructions:
-              - "1. Click the paymentUri link above or visit https://x402.io"
-              - "2. Select this endpoint and enter your Authorization header value"
-              - "3. Make payment (USDC on Base blockchain)"
-              - "4. Retry request with Authorization header: Bearer x402_<token>"
+            x402Version: 1
+            error: payment required
+            accepts:
+              - scheme: exact
+                network: base
+                maxAmountRequired: "50000"
+                payTo: "0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+                asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                maxTimeoutSeconds: 30
 
     InternalError:
       description: Internal server error
@@ -1353,3 +1365,6 @@ components:
                   message:
                     type: string
                     example: FRED API key not configured
+
+# ---
+# *Last updated: 2026-04-20 22:53 ET | Updated by: Forge*

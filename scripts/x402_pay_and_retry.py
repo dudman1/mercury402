@@ -1,69 +1,47 @@
 #!/usr/bin/env python3
 """
-x402_pay_and_retry.py — Headless x402 payment + retry for Mercury402
+x402_pay_and_retry.py — Inspect Mercury402 payment requirements and optionally retry
+with a supplied payment-signature header.
 
 Usage:
-  # Dry-run: parse descriptor, detect payment tooling, stop before paying
+  # Inspect descriptor only
   python3 x402_pay_and_retry.py
 
-  # Execute payment (requires APPROVE PAYMENT env flag or --pay flag)
-  python3 x402_pay_and_retry.py --pay
+  # Retry with an existing payment-signature
+  python3 x402_pay_and_retry.py --signature '<base64_x402_payment_payload>'
 
-  # Test with a specific endpoint
-  python3 x402_pay_and_retry.py --url https://mercury402.uk/v1/fred/UNRATE
+  # Or via env var
+  PAYMENT_SIGNATURE='<base64_x402_payment_payload>' python3 x402_pay_and_retry.py
 
-No external Python deps — only stdlib + subprocess calls to bankr/cast.
-
-Payment flow:
-  1. GET paid endpoint → expect HTTP 402 + payment-required header
-  2. Decode base64 descriptor → extract chain, asset, payTo, amount
-  3. Detect wallet tooling (bankr preferred, cast fallback)
-  4. Send USDC via chosen tool
-  5. Derive Authorization token from payment result
-  6. Retry paid endpoint with Authorization header → expect HTTP 200
-  7. Print first 300 chars of JSON response
-
-x402.io is optional: this script does NOT call x402.io.
-The payment descriptor in the 402 response contains everything needed.
-
-Authorization token convention used by this server:
-  Bearer x402_<anything-non-test>  → accepted (server TODO: validate against ledger)
-  The token we derive: x402_bankr_<txhash_prefix> or x402_cast_<txhash_prefix>
+This script no longer tries to mint legacy bearer tokens. Production Mercury expects
+`payment-signature`, not `Authorization: Bearer x402_...`.
 """
 
 import argparse
 import base64
 import json
 import os
-import re
-import subprocess
 import sys
-import time
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Optional
 
-MERCURY_BASE_URL = "https://mercury402.uk"
+MERCURY_BASE_URL = "https://api.mercury402.com"
 DEFAULT_ENDPOINT = "/v1/fred/CPIAUCSL"
+DEFAULT_HEADERS = {
+    "User-Agent": "curl/8.4.0",
+    "Accept": "*/*",
+}
 
-# ─── helpers ──────────────────────────────────────────────────────────────────
 
 def decode_payment_descriptor(b64_value: str) -> dict:
-    """Decode the base64url payment-required header."""
-    # Normalize base64url → standard base64
     padded = b64_value.replace("-", "+").replace("_", "/")
     padded += "=" * (4 - len(padded) % 4) if len(padded) % 4 else ""
     raw = base64.b64decode(padded)
     return json.loads(raw)
 
 
-DEFAULT_HEADERS = {
-    "User-Agent": "curl/8.4.0",
-    "Accept": "*/*",
-}
-
-def http_get(url: str, headers: Optional[dict] = None) -> tuple:
-    """Returns (status_code, headers_dict, body_bytes)."""
+def http_get(url: str, headers: Optional[dict] = None):
     merged = {**DEFAULT_HEADERS, **(headers or {})}
     req = urllib.request.Request(url, headers=merged)
     try:
@@ -73,276 +51,65 @@ def http_get(url: str, headers: Optional[dict] = None) -> tuple:
         return e.code, dict(e.headers), e.read()
 
 
-def find_bin(name: str) -> Optional[str]:
-    """Find a binary on PATH."""
-    result = subprocess.run(["which", name], capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else None
-
-
-def run(cmd: list, timeout: int = 60) -> tuple:
-    """Run a subprocess, return (returncode, stdout, stderr)."""
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    return result.returncode, result.stdout, result.stderr
-
-
-# ─── payment backends ─────────────────────────────────────────────────────────
-
-def pay_via_bankr(descriptor: dict) -> Optional[str]:
-    """
-    Use bankr CLI to send USDC on Base.
-    Returns txhash string on success, None on failure.
-    """
-    amount_raw = int(descriptor["amount"])          # e.g. 150000
-    amount_usdc = amount_raw / 1_000_000            # → 0.15
-    pay_to = descriptor["payTo"]
-
-    prompt = f"send {amount_usdc} USDC on base to {pay_to}"
-    print(f"  [bankr] Sending: {prompt}")
-
-    # bankr prompt outputs job status; poll until done
-    rc, stdout, stderr = run(["bankr", "prompt", prompt], timeout=90)
-    if rc != 0:
-        print(f"  [bankr] ERROR (exit {rc}): {stderr.strip()}")
-        return None
-
-    # Extract job ID if present for polling
-    job_id_match = re.search(r'job[_\s]?id[:\s]+([a-f0-9\-]{8,})', stdout, re.I)
-    tx_match = re.search(r'0x[a-fA-F0-9]{64}', stdout)
-
-    if tx_match:
-        txhash = tx_match.group(0)
-        print(f"  [bankr] tx hash: {txhash}")
-        return txhash
-
-    if job_id_match:
-        job_id = job_id_match.group(1)
-        print(f"  [bankr] Polling job {job_id} ...")
-        for _ in range(10):
-            time.sleep(4)
-            rc2, out2, _ = run(["bankr", "status", job_id])
-            tx2 = re.search(r'0x[a-fA-F0-9]{64}', out2)
-            if tx2:
-                txhash = tx2.group(0)
-                print(f"  [bankr] tx hash: {txhash}")
-                return txhash
-            if "failed" in out2.lower() or "error" in out2.lower():
-                print(f"  [bankr] job failed: {out2.strip()}")
-                return None
-        print("  [bankr] Job poll timed out after 40s")
-        return None
-
-    # bankr might print inline success without job_id
-    if "success" in stdout.lower() or "sent" in stdout.lower():
-        # No hash found — use timestamp as fallback token component
-        print(f"  [bankr] Payment reported success (no txhash extracted)")
-        return f"bankr_paid_{int(time.time())}"
-
-    print(f"  [bankr] Unexpected output:\n{stdout[:400]}")
+def extract_payment_required(headers: dict) -> Optional[str]:
+    for key, value in headers.items():
+        if key.lower() == "payment-required":
+            return value
     return None
 
-
-def pay_via_cast(descriptor: dict) -> Optional[str]:
-    """
-    Use foundry cast to send USDC ERC20 transfer on Base.
-    Requires WALLET_PRIVATE_KEY env var OR a cast wallet configured.
-    Returns txhash on success, None on failure.
-    """
-    amount_raw = descriptor["amount"]       # e.g. "150000"
-    token_addr = descriptor["asset"]        # USDC on Base
-    pay_to = descriptor["payTo"]
-    chain_id = descriptor["network"].split(":")[-1]  # "8453"
-
-    private_key = os.environ.get("WALLET_PRIVATE_KEY", "").strip()
-    if not private_key:
-        print("  [cast] WALLET_PRIVATE_KEY not set — cannot send via cast")
-        return None
-
-    # ERC20 transfer(address,uint256) = 0xa9059cbb
-    cmd = [
-        "cast", "send", token_addr,
-        "transfer(address,uint256)", pay_to, str(amount_raw),
-        "--private-key", private_key,
-        "--chain", chain_id,
-        "--rpc-url", f"https://mainnet.base.org",
-        "--json"
-    ]
-    print(f"  [cast] Sending {amount_raw} (6-dec) USDC on chain {chain_id} to {pay_to}")
-    rc, stdout, stderr = run(cmd, timeout=60)
-    if rc != 0:
-        print(f"  [cast] ERROR: {stderr.strip()}")
-        return None
-
-    try:
-        result = json.loads(stdout)
-        txhash = result.get("transactionHash", "")
-        if txhash:
-            print(f"  [cast] tx hash: {txhash}")
-            return txhash
-    except json.JSONDecodeError:
-        pass
-
-    tx_match = re.search(r'0x[a-fA-F0-9]{64}', stdout)
-    if tx_match:
-        return tx_match.group(0)
-
-    print(f"  [cast] Unexpected output: {stdout[:300]}")
-    return None
-
-
-# ─── main logic ───────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Headless x402 pay-and-retry for Mercury402")
-    parser.add_argument("--url", default=f"{MERCURY_BASE_URL}{DEFAULT_ENDPOINT}",
-                        help="Paid endpoint URL (default: FRED CPIAUCSL)")
-    parser.add_argument("--pay", action="store_true",
-                        help="Actually execute the payment (omit for dry-run)")
+    parser = argparse.ArgumentParser(description="Inspect Mercury402 x402 descriptor and optionally retry with payment-signature")
+    parser.add_argument("--url", default=f"{MERCURY_BASE_URL}{DEFAULT_ENDPOINT}", help="Paid endpoint URL")
+    parser.add_argument("--signature", default=os.environ.get("PAYMENT_SIGNATURE", ""), help="Base64 x402 payment payload for payment-signature header")
     args = parser.parse_args()
 
-    # Also accept APPROVE_PAYMENT env var (matches user convention)
-    approve = args.pay or os.environ.get("APPROVE_PAYMENT", "").strip().lower() in ("1", "true", "yes")
+    print("\n" + "=" * 60)
+    print("Mercury402 payment-signature helper")
+    print(f"Endpoint : {args.url}")
+    print(f"Mode     : {'RETRY' if args.signature else 'INSPECT'}")
+    print("=" * 60 + "\n")
 
-    target_url = args.url
-
-    print(f"\n{'='*60}")
-    print(f"x402 Headless Pay-and-Retry")
-    print(f"Endpoint : {target_url}")
-    print(f"Mode     : {'PAYMENT' if approve else 'DRY-RUN (pass --pay to execute)'}")
-    print(f"{'='*60}\n")
-
-    # ── STEP 1: Unpaid request ─────────────────────────────────────────────────
-    print("STEP 1 — Unpaid request (expect HTTP 402) ...")
-    status, resp_headers, body = http_get(target_url)
+    print("STEP 1 — Unpaid request (expect 402) ...")
+    status, headers, body = http_get(args.url)
+    print(f"  HTTP {status}")
 
     if status != 402:
-        if status == 200:
-            print(f"  HTTP {status} — endpoint returned 200 without payment (check server config)")
-        else:
-            print(f"  HTTP {status} — unexpected status, body: {body[:200]}")
+        preview = body.decode("utf-8", errors="replace")[:400]
+        print(f"  Unexpected response body:\n{preview}")
         sys.exit(1)
 
-    print(f"  HTTP {status} — payment required ✓")
-
-    # ── STEP 2: Decode descriptor ──────────────────────────────────────────────
-    pr_header = None
-    for k, v in resp_headers.items():
-        if k.lower() == "payment-required":
-            pr_header = v
-            break
-
-    if not pr_header:
-        print("  ERROR: no payment-required header found")
+    payment_required = extract_payment_required(headers)
+    if not payment_required:
+        print("  ERROR: no Payment-Required header found")
         sys.exit(1)
 
-    raw_descriptor = decode_payment_descriptor(pr_header)
+    raw_descriptor = decode_payment_descriptor(payment_required)
+    descriptor = raw_descriptor.get("accepts", [{}])[0] if raw_descriptor.get("accepts") else raw_descriptor
 
-    # Support x402 v1 (top-level amount) and v2 (accepts[0] array)
-    if "accepts" in raw_descriptor and raw_descriptor["accepts"]:
-        descriptor = raw_descriptor["accepts"][0]
-        x402_version = raw_descriptor.get("x402Version", 2)
-        print(f"  (x402 version: {x402_version})")
-    else:
-        descriptor = raw_descriptor
+    print("\nSTEP 2 — Payment descriptor")
+    print(json.dumps(raw_descriptor, indent=2))
 
-    amount_raw = int(descriptor["amount"])
-    amount_usdc = amount_raw / 1_000_000
-    chain_id = descriptor["network"].split(":")[-1]
-
-    print("\nSTEP 2 — Payment descriptor:")
-    print(f"  network       : {descriptor['network']} (chain {chain_id})")
-    print(f"  asset         : {descriptor['asset']}  (USDC on Base)")
-    print(f"  payTo         : {descriptor['payTo']}")
-    print(f"  amount (raw)  : {descriptor['amount']}  (6-dec USDC)")
-    print(f"  amount (USDC) : ${amount_usdc:.6f}")
-    print(f"  timeout       : {descriptor.get('maxTimeoutSeconds', '?')}s")
-
-    # Also parse body for paymentUri
-    try:
-        body_json = json.loads(body)
-        if "paymentUri" in body_json:
-            print(f"  paymentUri    : {body_json['paymentUri']}")
-            print(f"  (x402.io is optional — this script does NOT call x402.io)")
-    except Exception:
-        pass
-
-    # ── STEP 3: Detect wallet tooling ─────────────────────────────────────────
-    print("\nSTEP 3 — Detecting wallet tooling ...")
-    bankr_bin = find_bin("bankr")
-    cast_bin = find_bin("cast")
-
-    if bankr_bin:
-        print(f"  bankr : {bankr_bin}  ✓  (preferred)")
-    else:
-        print(f"  bankr : NOT FOUND")
-
-    if cast_bin:
-        key_set = bool(os.environ.get("WALLET_PRIVATE_KEY", "").strip())
-        print(f"  cast  : {cast_bin}  {'✓' if key_set else '(WALLET_PRIVATE_KEY not set)'}  (fallback)")
-    else:
-        print(f"  cast  : NOT FOUND")
-
-    if not bankr_bin and not cast_bin:
-        print("\n  BLOCKED: No payment tooling found.")
-        print("  Install bankr: npm i -g @bankr/cli")
-        print("  Install cast:  curl -L https://foundry.paradigm.xyz | bash && foundryup")
-        sys.exit(2)
-
-    # ── STEP 4: Payment (if approved) ─────────────────────────────────────────
-    if not approve:
-        print(f"\nDRY-RUN COMPLETE — all checks passed.")
-        print(f"To execute payment of ${amount_usdc:.2f} USDC on Base:")
-        print(f"  python3 {sys.argv[0]} --pay")
-        print(f"  (or set APPROVE_PAYMENT=1)")
+    if not args.signature:
+        print("\nNo payment-signature supplied.")
+        print("Use an x402-compatible client or wallet to turn the Payment-Required descriptor into a signed payment payload, then rerun with:")
+        print(f"  python3 {os.path.basename(__file__)} --url {args.url} --signature '<base64_x402_payment_payload>'")
         sys.exit(0)
 
-    print(f"\nSTEP 4 — Sending ${amount_usdc:.2f} USDC on Base to {descriptor['payTo']} ...")
-
-    txhash = None
-    if bankr_bin:
-        txhash = pay_via_bankr(descriptor)
-    if not txhash and cast_bin:
-        print("  Falling back to cast ...")
-        txhash = pay_via_cast(descriptor)
-
-    if not txhash:
-        print("\n  PAYMENT FAILED — see errors above")
-        sys.exit(1)
-
-    # ── STEP 5: Derive Authorization token ────────────────────────────────────
-    # Server expects x402_<base64JSON> with wallet + tx fields
-    import time as _time
-    token_payload = {
-        "wallet": os.environ.get("WALLET_ADDRESS", "0xF7eaaAD30cF55e014B0A72f8985C9CE349b8B2Bd"),
-        "tx": txhash,
-        "merchant": descriptor["payTo"],
-        "amount": amount_usdc,
-        "network": descriptor["network"],
-        "timestamp": int(_time.time())
-    }
-    import base64 as _b64
-    token_b64 = _b64.b64encode(json.dumps(token_payload).encode()).decode()
-    auth_token = f"x402_{token_b64}"
-    print(f"\nSTEP 5 — Authorization token: Bearer {auth_token[:60]}...")
-
-    # ── STEP 6: Paid retry ────────────────────────────────────────────────────
-    print("\nSTEP 6 — Retrying paid endpoint ...")
-    status2, _, body2 = http_get(target_url, {"Authorization": f"Bearer {auth_token}"})
+    print("\nSTEP 3 — Retrying with payment-signature ...")
+    status2, headers2, body2 = http_get(args.url, {"payment-signature": args.signature})
     print(f"  HTTP {status2}")
+    preview2 = body2.decode("utf-8", errors="replace")[:1200]
+    print(preview2)
 
     if status2 == 200:
-        print("  PAYMENT SUCCESS ✓")
-        try:
-            body2_json = json.loads(body2)
-            preview = json.dumps(body2_json, indent=2)[:300]
-            print(f"\nResponse (first 300 chars):\n{preview}")
-        except Exception:
-            print(f"\nResponse: {body2[:300]}")
         sys.exit(0)
-    else:
-        print(f"  UNEXPECTED STATUS {status2}")
-        print(f"  Body: {body2[:300]}")
-        sys.exit(1)
+
+    sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
+
+# ---
+# *Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

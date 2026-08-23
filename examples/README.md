@@ -8,33 +8,32 @@ This demo agent fetches Treasury yield curves, unemployment data, and macro indi
 
 ## Quick Start
 
-### 1. Dev Mode (Test Tokens)
+### 1. With a prebuilt payment-signature
 
 ```bash
 cd examples
-USE_TEST_TOKEN=true node mercury-agent.js
+PAYMENT_SIGNATURE='<base64_x402_payment_payload>' node mercury-agent.js
 ```
 
 **Requirements:**
 - Node.js 16+
 - No npm install needed (uses only Node built-ins)
-- Server must have `ALLOW_TEST_TOKEN=true` in `.env`
+- A valid x402 payment payload for the request you are making
 
 ### 2. Production Mode (Real Payments)
 
 ```bash
-# Coming soon - requires x402 payment bridge integration
 MERCURY_WALLET_KEY=0x... node mercury-agent.js
 ```
 
 **Requirements:**
 - Funded wallet with USDC on Base (chain 8453)
-- x402 payment gateway integration (not yet available)
+- x402 wallet / payment processor integration that builds the `payment-signature` header
 
 ### 3. Custom Server
 
 ```bash
-MERCURY_API=http://localhost:4020 USE_TEST_TOKEN=true node mercury-agent.js
+MERCURY_API=http://localhost:4020 PAYMENT_SIGNATURE='<base64_x402_payment_payload>' node mercury-agent.js
 ```
 
 ---
@@ -46,23 +45,23 @@ MERCURY_API=http://localhost:4020 USE_TEST_TOKEN=true node mercury-agent.js
 ```
 1. GET /v1/treasury/yield-curve/daily-snapshot
    ← 402 Payment Required
-   ← Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJlaXAxN... (base64)
+   ← Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19 (base64url)
 
 2. Decode payment descriptor
    {
      "scheme": "exact",
-     "network": "eip155:8453",  // Base mainnet
-     "amount": "20000",          // 0.02 USDC (6 decimals)
-     "payTo": "0xF8d59...",      // Merchant wallet
-     "asset": "0x83358..."       // USDC contract
+     "network": "eip155:8453",
+     "amount": "50000",
+     "payTo": "0xF8d59...",
+     "asset": "0x83358..."
    }
 
-3. Pay via x402 gateway (USDC transfer on Base)
-   ← x402 token: x402_abc123...
+3. Pay via an x402-compatible client / processor
+   ← base64 payment payload for payment-signature header
 
-4. Retry with token
+4. Retry with payment-signature
    GET /v1/treasury/yield-curve/daily-snapshot
-   Authorization: Bearer x402_abc123...
+   payment-signature: <base64_x402_payment_payload>
    ← 200 OK + data
 ```
 
@@ -74,13 +73,13 @@ MERCURY_API=http://localhost:4020 USE_TEST_TOKEN=true node mercury-agent.js
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MERCURY_API` | `https://mercury402.uk` | API base URL |
-| `USE_TEST_TOKEN` | `false` | Use `x402_test` token (dev only) |
-| `MERCURY_WALLET_KEY` | (none) | Private key for USDC payments (production) |
+| `MERCURY_API` | `https://api.mercury402.com` | API base URL |
+| `PAYMENT_SIGNATURE` | (none) | Optional prebuilt x402 payment payload for a demo request |
+| `MERCURY_WALLET_KEY` | (none) | Private key for real x402 payment signing/integration |
 
 ### Swap in Your Own Wallet
 
-**For production (once x402 bridge is live):**
+**For production:**
 
 1. Fund wallet with USDC on Base:
    ```
@@ -99,10 +98,10 @@ MERCURY_API=http://localhost:4020 USE_TEST_TOKEN=true node mercury-agent.js
    ```
 
 **Cost per run:**
-- Treasury yield curve: $0.02
-- FRED UNRATE: $0.15
-- Macro snapshot: $0.05 (when live)
-- **Total: ~$0.22 per daily brief**
+- Treasury yield curve: $0.05
+- FRED UNRATE: $0.05
+- Macro snapshot: $0.05
+- **Total: ~$0.15 per daily brief**
 
 ---
 
@@ -112,16 +111,16 @@ MERCURY_API=http://localhost:4020 USE_TEST_TOKEN=true node mercury-agent.js
 ╔═══════════════════════════════════════╗
 ║   Mercury x402 Daily Economic Brief  ║
 ╚═══════════════════════════════════════╝
-API: https://mercury402.uk
-Mode: Test Tokens (Dev)
+API: https://api.mercury402.com
+Mode: payment-signature flow
 
 → Fetching /v1/treasury/yield-curve/daily-snapshot...
   ← 402 Payment Required
-  💰 Price: $0.02 USDC (Base)
+  💰 Price quoted via Payment-Required
   📍 Network: eip155:8453
   💵 Asset: USDC
-  🧪 Using test token (dev mode)
-  ↻ Retrying with payment token...
+  🔐 Using payment-signature flow
+  ↻ Retrying with payment-signature...
   ✓ Success
 
   📊 U.S. Treasury Yield Curve
@@ -133,8 +132,8 @@ Mode: Test Tokens (Dev)
 
 → Fetching /v1/fred/UNRATE...
   ← 402 Payment Required
-  💰 Price: $0.15 USDC (Base)
-  ↻ Retrying with payment token...
+  💰 Price quoted via Payment-Required
+  ↻ Retrying with payment-signature...
   ✓ Success
 
   📈 Unemployment Rate
@@ -153,21 +152,21 @@ Mode: Test Tokens (Dev)
 ## Links
 
 - **x402scan Listing**: https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369
-- **Swagger UI (Interactive Docs)**: https://mercury402.uk/docs/api
-- **OpenAPI Spec (JSON)**: https://mercury402.uk/openapi.json
-- **Quickstart Guide**: https://mercury402.uk/docs
-- **Health Check**: https://mercury402.uk/health
+- **Swagger UI (Interactive Docs)**: https://api.mercury402.com/docs/api
+- **OpenAPI Spec (JSON)**: https://api.mercury402.com/openapi.json
+- **Quickstart Guide**: https://api.mercury402.com/docs
+- **Health Check**: https://api.mercury402.com/health
 - **x402 Protocol Spec**: https://x402.org
 
 ---
 
 ## Troubleshooting
 
-### `402 Payment Required` (Test Mode)
+### `402 Payment Required`
 
-**Problem:** Server rejects `x402_test` token
+**Problem:** Server keeps rejecting your request
 
-**Solution:** Server must set `ALLOW_TEST_TOKEN=true` in `.env`
+**Solution:** Your client must retry with a valid `payment-signature` generated from the current `Payment-Required` descriptor. Manually constructed `Authorization: Bearer x402_<token>` values are rejected in production.
 
 ### `Request timeout`
 
@@ -175,17 +174,14 @@ Mode: Test Tokens (Dev)
 
 **Solution:** Check server status:
 ```bash
-curl https://mercury402.uk/health
+curl https://api.mercury402.com/health
 ```
 
-### `Real payments not yet implemented`
+### `No payment-signature provided`
 
-**Problem:** Trying to use production mode
+**Problem:** Running the demo without a payment integration
 
-**Solution:** x402 payment bridge integration is in progress. Use test tokens for now:
-```bash
-USE_TEST_TOKEN=true node mercury-agent.js
-```
+**Solution:** Either export a valid `PAYMENT_SIGNATURE` for a single request or wire the demo to your x402 wallet / processor.
 
 ---
 
@@ -242,7 +238,7 @@ jobs:
       - uses: actions/checkout@v3
       - run: |
           cd examples
-          USE_TEST_TOKEN=true node mercury-agent.js
+          PAYMENT_SIGNATURE='${{ secrets.MERCURY_PAYMENT_SIGNATURE }}' node mercury-agent.js
 ```
 
 ### With Docker
@@ -264,3 +260,6 @@ https://github.com/your-repo/mercury-x402-service
 ---
 
 **Built with ❤️ using the x402 protocol**
+
+---
+*Last updated: 2026-04-20 22:53 ET | Updated by: Forge*

@@ -446,6 +446,70 @@ if (SERVER_PRIVATE_KEY) {
 }
 
 // ============================================
+// PAYMENT REDEMPTION LEDGER (anti-replay)
+// ============================================
+// Added 2026-04-20 — defends against payment-artifact replay.
+// Every accepted payment is bound to a one-time redemption key:
+//   - x402 signature settlements → `sig:<from_lower>:<nonce_lower>`
+//     (EIP-3009 from+nonce pair is unique per authorization)
+//   - Settled-tx bearer tokens   → `tx:<tx_hash_lower>`
+// Ledger is in-memory (Map) + append-only JSONL so replay protection
+// survives process restarts. TTL is long enough that expired entries
+// can never come back within any realistic reorg window.
+
+const REDEMPTION_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-redemptions.jsonl';
+const REDEMPTION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const redemptions = new Map(); // key -> { ts, endpoint }
+
+function loadRedemptions() {
+  try {
+    if (!fs.existsSync(REDEMPTION_LEDGER)) return;
+    const lines = fs.readFileSync(REDEMPTION_LEDGER, 'utf8').split('\n');
+    const cutoff = Date.now() - REDEMPTION_TTL_MS;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry && entry.key && entry.ts > cutoff) {
+          redemptions.set(entry.key, { ts: entry.ts, endpoint: entry.endpoint });
+        }
+      } catch (_) { /* skip malformed line */ }
+    }
+    if (redemptions.size > 0) {
+      console.log(`✅ Loaded ${redemptions.size} prior payment redemptions (anti-replay)`);
+    }
+  } catch (e) {
+    console.error('Failed to load redemption ledger:', e.message);
+  }
+}
+
+function isRedeemed(key) {
+  if (!key) return false;
+  const entry = redemptions.get(key);
+  if (!entry) return false;
+  if (Date.now() - entry.ts > REDEMPTION_TTL_MS) {
+    redemptions.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function markRedeemed(key, endpoint) {
+  if (!key) return;
+  const ts = Date.now();
+  redemptions.set(key, { ts, endpoint });
+  try {
+    const dir = path.dirname(REDEMPTION_LEDGER);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(REDEMPTION_LEDGER, JSON.stringify({ key, ts, endpoint }) + '\n');
+  } catch (e) {
+    console.error('Failed to persist redemption:', e.message);
+  }
+}
+
+loadRedemptions();
+
+// ============================================
 // REVENUE LOGGING
 // ============================================
 
@@ -547,7 +611,7 @@ function parsePaymentToken(token) {
 
 async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
   try {
-    const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+    const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
     const USDC_CONTRACT = process.env.USDC_CONTRACT_BASE;
     
     // Fetch transaction receipt (includes logs)
@@ -767,7 +831,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
       }
     }],
     resource: {
-      url: `https://mercury402.uk${resolvedPath}`,
+      url: `https://api.mercury402.com${resolvedPath}`,
       method: method.toUpperCase(),
       description: 'Deterministic financial data from official sources',
       mimeType: 'application/json'
@@ -801,7 +865,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       scheme: 'exact',
       network: 'base',
       maxAmountRequired: amount,
-      resource: `https://mercury402.uk${resolvedPath}`,
+      resource: `https://api.mercury402.com${resolvedPath}`,
       description,
       mimeType: 'application/json',
       payTo: MERCHANT_WALLET,
@@ -829,13 +893,18 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
   };
 }
 
-function require402Payment(endpointPath, price, routeMethod = 'GET') {
+function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
   return async (req, res, next) => {
     const startTime = Date.now();
-    
+
+    // SECURITY (2026-04-20): price may be a function of req so that range/tier
+    // pricing (e.g. FRED observation_start/observation_end) is enforced at
+    // payment time rather than silently applied in the handler.
+    const price = (typeof priceOrFn === 'function') ? priceOrFn(req) : priceOrFn;
+
     // Check for x402 payment token in Authorization header
     const authHeader = req.headers.authorization || '';
-    
+
     // Parse token from "Bearer x402_..." format
     const bearerMatch = authHeader.match(/^Bearer\s+(x402_\S+)$/);
     const token = bearerMatch ? bearerMatch[1] : null;
@@ -863,17 +932,30 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
             throw new Error('Missing authorization in payment payload');
           }
 
-          // Validate payment requirements match this endpoint
+          // Validate payment requirements match this endpoint.
+          // SECURITY (2026-04-20): amount must meet the *effective* price
+          // (including range multipliers) computed above, and payTo must match.
+          const requiredAmount = BigInt(Math.floor(price * 1000000));
+          const paidAmount = BigInt(authorization.value);
+          if (paidAmount < requiredAmount) {
+            throw new Error(`Insufficient payment: required ${requiredAmount}, got ${paidAmount}`);
+          }
           const accepted = paymentPayload.accepted;
-          if (accepted) {
-            const requiredAmount = BigInt(Math.floor(price * 1000000));
-            const paidAmount = BigInt(authorization.value);
-            if (paidAmount < requiredAmount) {
-              throw new Error(`Insufficient payment: required ${requiredAmount}, got ${paidAmount}`);
-            }
-            if (accepted.payTo && accepted.payTo.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
-              throw new Error(`Wrong payTo: expected ${MERCHANT_WALLET}, got ${accepted.payTo}`);
-            }
+          if (accepted && accepted.payTo && accepted.payTo.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
+            throw new Error(`Wrong payTo: expected ${MERCHANT_WALLET}, got ${accepted.payTo}`);
+          }
+          if (authorization.to && authorization.to.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
+            throw new Error(`Wrong authorization.to: expected ${MERCHANT_WALLET}, got ${authorization.to}`);
+          }
+
+          // SECURITY (2026-04-20): enforce one-time redemption of this
+          // authorization. Key is (from, nonce) — unique per EIP-3009 auth.
+          // The USDC contract also rejects reused nonces on-chain, but we
+          // pre-check to avoid paying gas for guaranteed-failing replays
+          // and to stop replays before any side-effects.
+          const redemptionKey = `sig:${String(authorization.from).toLowerCase()}:${String(authorization.nonce).toLowerCase()}`;
+          if (isRedeemed(redemptionKey)) {
+            throw new Error('Authorization already redeemed (replay rejected)');
           }
 
           // Parse EIP-3009 signature: single hex string → v, r, s
@@ -894,7 +976,7 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
           }
 
           // Execute transferWithAuthorization on-chain
-          const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+          const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
           const facilitatorWallet = new ethers.Wallet(
             process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
             provider
@@ -917,6 +999,13 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
           const receipt = await tx.wait();
           const verification = await verifyPaymentOnChain(receipt.hash, price, MERCHANT_WALLET);
           if (verification.verified) {
+            // SECURITY (2026-04-20): record both sig-nonce and tx-hash
+            // redemption keys. The sig key blocks replay of the same
+            // authorization; the tx key additionally blocks a bearer-token
+            // that merely references this settled tx from being reused.
+            markRedeemed(redemptionKey, endpointPath);
+            markRedeemed(`tx:${String(receipt.hash).toLowerCase()}`, endpointPath);
+
             // Set PAYMENT-RESPONSE header for x402 clients
             const settleResponse = Buffer.from(JSON.stringify({
               success: true,
@@ -986,11 +1075,29 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
         .set('Payment-Required', paymentRequired)
         .json(paymentRequiredBody);
     }
-    
-    // PRODUCTION: Verify payment on-chain via Base RPC
+
+    // SECURITY (2026-04-20): legacy unsigned `x402_<base64-json>` bearer tokens
+    // are trivially replayable — the token is just a pointer to an on-chain
+    // tx, carries no signature over the request, and anyone who obtains it
+    // can reuse the same tx against the API indefinitely. In production we
+    // reject them outright and require the x402 `payment-signature` flow.
+    // ALLOW_LEGACY_BEARER=true is an explicit escape hatch for dev/testing.
     const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
     const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    
+    const rejectLegacyBearer =
+      process.env.NODE_ENV === 'production' &&
+      process.env.ALLOW_LEGACY_BEARER !== 'true';
+
+    if (rejectLegacyBearer) {
+      logPayment(endpointPath, 0, customerId, false, 'legacy_bearer_rejected_in_production');
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
+      return res.status(402).set('Payment-Required', paymentRequired).json(
+        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
+      );
+    }
+
+    // DEV / OPT-IN LEGACY PATH: verify tx on-chain AND enforce one-time
+    // redemption so the same tx can't be replayed across requests.
     if (!tokenMeta.tx_hash) {
       // Token parsed but no tx_hash found
       logPayment(endpointPath, 0, customerId, false, 'no_tx_hash_in_token');
@@ -999,32 +1106,49 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
         buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
       );
     }
-    
-    // Verify transaction on-chain
-    const verification = await verifyPaymentOnChain(
-      tokenMeta.tx_hash, 
-      price, 
-      MERCHANT_WALLET
-    );
-    
-    if (!verification.verified) {
-      // Verification failed - log and reject
-      logPayment(endpointPath, 0, customerId, false, verification.reason);
-      res.locals.paymentMeta = { 
+
+    const legacyRedemptionKey = `tx:${String(tokenMeta.tx_hash).toLowerCase()}`;
+    if (isRedeemed(legacyRedemptionKey)) {
+      // SECURITY (2026-04-20): this tx has already been redeemed at this
+      // or another endpoint; reject replay.
+      logPayment(endpointPath, 0, customerId, false, 'replay_rejected_tx_already_redeemed');
+      res.locals.paymentMeta = {
         wallet_address: tokenMeta.wallet_address,
         tx_hash: tokenMeta.tx_hash,
-        verified: false, 
-        price_usd: 0 
+        verified: false,
+        price_usd: 0
       };
-      
       return res.status(402).set('Payment-Required', paymentRequired).json(
         buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
       );
     }
-    
-    // VERIFIED ✅ - Log successful payment and proceed
+
+    // Verify transaction on-chain
+    const verification = await verifyPaymentOnChain(
+      tokenMeta.tx_hash,
+      price,
+      MERCHANT_WALLET
+    );
+
+    if (!verification.verified) {
+      // Verification failed - log and reject
+      logPayment(endpointPath, 0, customerId, false, verification.reason);
+      res.locals.paymentMeta = {
+        wallet_address: tokenMeta.wallet_address,
+        tx_hash: tokenMeta.tx_hash,
+        verified: false,
+        price_usd: 0
+      };
+
+      return res.status(402).set('Payment-Required', paymentRequired).json(
+        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
+      );
+    }
+
+    // VERIFIED ✅ - mark one-time redemption, log, and proceed
+    markRedeemed(legacyRedemptionKey, endpointPath);
     logPayment(endpointPath, price, customerId, true, null);
-    
+
     res.locals.paymentMeta = {
       wallet_address: tokenMeta.wallet_address,
       tx_hash: tokenMeta.tx_hash,
@@ -1033,7 +1157,7 @@ function require402Payment(endpointPath, price, routeMethod = 'GET') {
       price_usd: price,
       block_number: verification.block_number
     };
-    
+
     return next();
   };
 }
@@ -1069,6 +1193,55 @@ function preValidateTreasuryHistorical(req, res, next) {
 // ============================================
 // FRED ENDPOINT
 // ============================================
+
+// ---- Pre-payment FRED series validation ------------------------------------
+// Prevents charging buyers for invalid series ids: the guard runs BEFORE the
+// 402 challenge, so garbage requests get a clean 400 and no money moves.
+const seriesValidationCache = new Map(); // seriesId -> { valid, expires }
+const SERIES_CACHE_TTL = { valid: 24 * 60 * 60 * 1000, invalid: 60 * 60 * 1000 };
+
+async function isValidFredSeries(seriesId) {
+  // FRED ids are uppercase alphanumerics/underscores (e.g. CPIAUCSL, DGS10)
+  if (!seriesId || !/^[A-Z0-9_]{1,20}$/.test(seriesId)) return false;
+  const hit = seriesValidationCache.get(seriesId);
+  const now = Date.now();
+  if (hit && hit.expires > now) return hit.valid;
+  try {
+    const resp = await fredLimit.run(() => axios.get('https://api.stlouisfed.org/fred/series', {
+      params: { api_key: FRED_API_KEY, series_id: seriesId, file_type: 'json' },
+      timeout: 5000
+    }));
+    const valid = resp.status === 200 && Array.isArray(resp.data.seriess) && resp.data.seriess.length > 0;
+    seriesValidationCache.set(seriesId, { valid, expires: now + (valid ? SERIES_CACHE_TTL.valid : SERIES_CACHE_TTL.invalid) });
+    return valid;
+  } catch (err) {
+    if (err.response && err.response.status === 400) {
+      // FRED explicitly rejected the id -> definitively invalid
+      seriesValidationCache.set(seriesId, { valid: false, expires: now + SERIES_CACHE_TTL.invalid });
+      return false;
+    }
+    // FRED outage/rate-limit: fail OPEN so paying buyers are never blocked by our guard
+    return true;
+  }
+}
+
+async function fredSeriesGuard(req, res, next) {
+  try {
+    if (!(await isValidFredSeries(req.params.series_id))) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_SERIES',
+          message: `Unknown FRED series "${req.params.series_id}". No payment was requested. Browse valid series ids at https://fred.stlouisfed.org/`,
+          series_id: req.params.series_id,
+          charged: false
+        }
+      });
+    }
+    next();
+  } catch (e) {
+    next(); // guard must never take down the revenue path
+  }
+}
 
 async function fetchFredData(seriesId, params) {
   // Generate cache key
@@ -1147,7 +1320,16 @@ function generateProvenance(data, seriesId, params) {
   return provenance;
 }
 
-app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', getPrice('/v1/fred/{series_id}')), async (req, res) => {
+// SECURITY (2026-04-20): pass a dynamic price resolver so range queries
+// (observation_start + observation_end) are actually charged at 2× the
+// single-point price. Previously the middleware charged the base price
+// while the handler internally computed 2×, letting callers pay for 1
+// observation and receive an unbounded window.
+app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
+  const basePrice = getPrice('/v1/fred/{series_id}');
+  const isRange = req.query && req.query.observation_start && req.query.observation_end;
+  return isRange ? basePrice * 2 : basePrice;
+}), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1681,7 +1863,10 @@ app.get('/v1/macro/snapshot/all', require402Payment('/v1/macro/snapshot/all', ge
 // TREASURY YIELD CURVE — HISTORICAL
 // ============================================
 
-app.get('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), (req, res) => {
+// SECURITY (2026-04-20): wrong-method GET no longer runs the payment
+// middleware — previously a caller could be charged before the 405 was
+// emitted. Method validation is free and must precede settlement.
+app.get('/v1/treasury/yield-curve/historical', (req, res) => {
   return res.status(405).json({
     error: {
       code: 'METHOD_NOT_ALLOWED',
@@ -1690,7 +1875,10 @@ app.get('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/y
   });
 });
 
-app.post('/v1/treasury/yield-curve/historical', require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), preValidateTreasuryHistorical, async (req, res) => {
+// SECURITY (2026-04-20): preValidateTreasuryHistorical now runs BEFORE
+// require402Payment so malformed/invalid date-range requests return 400
+// without consuming the caller's payment.
+app.post('/v1/treasury/yield-curve/historical', preValidateTreasuryHistorical, require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -2004,6 +2192,23 @@ const NEW_ENDPOINT_META = registerNewRoutes(app, {
 });
 
 // ============================================
+// AI ROUTES — ox-alpha powered (2026-08-22)
+// ============================================
+const { registerAiRoutes } = require("./ai-routes");
+const AI_ENDPOINT_META = registerAiRoutes(app, {
+  require402Payment,
+  getPrice,
+  fetchFredData,
+  generateProvenance,
+  getCacheKey,
+  getCached,
+  setCache,
+  CACHE_TTL,
+  FRED_SERIES
+});
+Object.assign(NEW_ENDPOINT_META, AI_ENDPOINT_META);
+
+// ============================================
 // DISCOVERY & HEALTH
 // ============================================
 
@@ -2054,7 +2259,7 @@ app.get('/.well-known/x402', (req, res) => {
     });
   
   // Build resources array for x402scan v1 compatibility
-  const BASE_URL = 'https://mercury402.uk';
+  const BASE_URL = 'https://api.mercury402.com';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2154,7 +2359,7 @@ app.get('/.well-known/x402-agentcash', (req, res) => {
   const { PRICING } = require('./pricing');
   
   // Build resources array (v1 format) — flat list of full URLs
-  const BASE_URL = 'https://mercury402.uk';
+  const BASE_URL = 'https://api.mercury402.com';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2181,18 +2386,18 @@ Mercury402 provides deterministic financial data via x402 micropayments (USDC on
 
 No API keys required. Payment flow:
 1. Call endpoint without auth → receive 402 with Payment-Required header
-2. Pay via x402 protocol (USDC on Base mainnet)
-3. Retry with Bearer token → receive 200 + data
+2. Use an x402-compatible client to build a signed payment payload
+3. Retry with payment-signature → receive 200 + data
 
 ## Base URL
 
-https://mercury402.uk
+https://api.mercury402.com
 
 All endpoints are relative to this base URL.
 
 ## Agent Workflow
 
-1. Use \`mcp__agentcash__discover_api_endpoints("https://mercury402.uk")\` to see available endpoints and pricing.
+1. Use \`mcp__agentcash__discover_api_endpoints("https://api.mercury402.com")\` to see available endpoints and pricing.
 2. For POST/PUT/PATCH endpoints, call \`mcp__agentcash__check_endpoint_schema\` to confirm request schema before first fetch.
 3. Execute with \`mcp__agentcash__fetch(url, method="GET")\`.
 
@@ -2213,51 +2418,51 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 
 **Named endpoints:** CPI, PCE, unemployment-rate, nonfarm-payrolls, fed-funds-rate, housing-starts, m2-money-stock, consumer-confidence, retail-sales, trade-balance, vix, and 41 more. See /v1/fred/{series_id} in API discovery.
 
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/fred/UNRATE", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/fred/UNRATE", method="GET")\`
 **Response:** JSON with series data, observations, and cryptographic signature
 
 ### GET /v1/treasury/auction-results/recent
 **Price:** $0.05
 **Description:** Recent U.S. Treasury auction results
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/auction-results/recent", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/auction-results/recent", method="GET")\`
 
 ### GET /v1/treasury/tips-rates/current
 **Price:** $0.05
 **Description:** Current TIPS rates (5, 7, 10, 20, 30-year)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/tips-rates/current", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/tips-rates/current", method="GET")\`
 
 ### GET /v1/treasury/yield-curve/daily-snapshot
 **Price:** $0.05
 **Description:** U.S. Treasury yield curve snapshot (11 maturities, FRED-sourced)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
 **Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
 
 ### POST /v1/treasury/yield-curve/historical
 **Price:** $0.05
 **Description:** Historical yield curve data (max 90-day range)
 **JSON body:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
 
 ### GET /v1/macro/snapshot/all
 **Price:** $0.05
 **Description:** Complete macro snapshot (GDP, CPI, UNRATE, yields, VIX)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/macro/snapshot/all", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/macro/snapshot/all", method="GET")\`
 **Response:** Multi-series bundle with provenance
 
 ### GET /v1/composite/inflation-tracker
 **Price:** $0.40
 **Description:** Inflation metrics bundle (CPI, PCE, Core CPI)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/inflation-tracker", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/inflation-tracker", method="GET")\`
 
 ### GET /v1/composite/labor-market
 **Price:** $0.40
 **Description:** Labor market health (Unemployment, Jobless Claims, Nonfarm Payrolls)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/labor-market", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/labor-market", method="GET")\`
 
 ### GET /v1/composite/economic-dashboard
 **Price:** $0.50
 **Description:** Economic overview (GDP, CPI, Unemployment in one call)
-**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/economic-dashboard", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/economic-dashboard", method="GET")\`
 
 ## Data Provenance
 
@@ -2325,7 +2530,7 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
 
 ## Documentation
 
-- Swagger UI: https://mercury402.uk/docs
+- Swagger UI: https://api.mercury402.com/docs
 - GitHub: https://github.com/dudman1/mercury402
 - x402scan: https://x402scan.com/server/mercury402
 `
@@ -2614,9 +2819,9 @@ const JSON_MANIFEST = {
     }
   },
   docs: {
-    quickstart: 'https://mercury402.uk/docs',
-    apiReference: 'https://mercury402.uk/docs/api',
-    openapi: 'https://mercury402.uk/openapi.json'
+    quickstart: 'https://api.mercury402.com/docs',
+    apiReference: 'https://api.mercury402.com/docs/api',
+    openapi: 'https://api.mercury402.com/openapi.json'
   }
 };
 
@@ -2630,12 +2835,12 @@ const LANDING_HTML = `<!DOCTYPE html>
 <meta name="keywords" content="AI agents, micropayments, HTTP 402, USDC, Base, financial API, payment-native data, x402">
 <meta property="og:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta property="og:description" content="Payment-native financial data with HTTP 402 enforcement and on-chain USDC settlement. View demo of payment flow.">
-<meta property="og:image" content="https://mercury402.uk/payment-flow-preview.png">
-<meta property="og:url" content="https://mercury402.uk/">
+<meta property="og:image" content="https://api.mercury402.com/payment-flow-preview.png">
+<meta property="og:url" content="https://api.mercury402.com/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta name="twitter:description" content="Payment-native financial data via HTTP 402 micropayments with on-chain USDC settlement.">
-<meta name="twitter:image" content="https://mercury402.uk/payment-flow-preview.png">
+<meta name="twitter:image" content="https://api.mercury402.com/payment-flow-preview.png">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;background:radial-gradient(circle at 20% 0%,rgba(31,111,235,0.15),transparent 40%),radial-gradient(circle at 80% 100%,rgba(56,139,253,0.12),transparent 40%),#0d1117;color:#e6edf3;min-height:100vh;padding:3rem 1rem}
@@ -2789,25 +2994,32 @@ const DOCS_HTML = `<!DOCTYPE html>
   <p>Mercury exposes financial time-series data (FRED, U.S. Treasury) via HTTP endpoints protected by the x402 micropayment standard. Each call costs a small amount of USDC on Base (chain 8453). No API keys. No subscriptions. Every response carries a cryptographic provenance signature.</p>
 
   <h2>Step 1 — Make an unpaid request (see the 402)</h2>
-  <pre><code>curl -i https://mercury402.uk/v1/fred/UNRATE</code></pre>
+  <pre><code>curl -i https://api.mercury402.com/v1/fred/UNRATE</code></pre>
   <p>You will get back <code>HTTP 402 Payment Required</code> with a <code>Payment-Required</code> header containing a base64url-encoded payment descriptor:</p>
   <pre><code>HTTP/2 402
-Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
+Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
 
 {
-  "error": "PAYMENT_REQUIRED",
-  "price": "$0.05 USDC (Base)",
-  "paymentUri": "https://mercury402.uk/pay?..."
+  "x402Version": 1,
+  "error": "payment required",
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "base",
+      "maxAmountRequired": "50000",
+      "payTo": "0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+    }
+  ]
 }</code></pre>
 
-  <h2>Step 2 — Pay and get a token</h2>
-  <p>Visit the <code>paymentUri</code> for payment instructions. After paying, create your x402 token and retry the request.</p>
+  <h2>Step 2 — Pay with an x402-compatible client</h2>
+  <p>Use the descriptor from <code>Payment-Required</code> to create a signed x402 payment payload. Mercury production now expects that payload in the <code>payment-signature</code> header. Legacy manually generated bearer tokens are deprecated.</p>
 
-  <h2>Step 3 — Make a paid request</h2>
-  <pre><code>curl -H "Authorization: Bearer x402_&lt;token&gt;" \\
-  https://mercury402.uk/v1/fred/UNRATE</code></pre>
-  <pre><code>curl -H "Authorization: Bearer x402_&lt;token&gt;" \\
-  https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot</code></pre>
+  <h2>Step 3 — Retry with <code>payment-signature</code></h2>
+  <pre><code>curl https://api.mercury402.com/v1/fred/UNRATE \\
+  -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
+  <pre><code>curl https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot \\
+  -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
 
   <h2>Payment details</h2>
   <p>USDC contract on Base:</p>
@@ -2824,7 +3036,7 @@ Payment-Required: eyJzY2hlbWUiOiJleGFjdCIsIm5...
   Composite dashboards (economic, inflation, labor) — <strong>$0.40–$0.50</strong></p>
 
   <h2>Discovery</h2>
-  <pre><code>curl https://mercury402.uk/.well-known/x402 | jq .</code></pre>
+  <pre><code>curl https://api.mercury402.com/.well-known/x402 | jq .</code></pre>
 
   <h2>SDK Examples</h2>
   <p>Full copy-paste examples for Node.js and Python: <a href="/sdk-examples">SDK Examples</a></p>
@@ -3011,3 +3223,6 @@ app.listen(PORT, '127.0.0.1', () => {
 });
 
 module.exports = app;
+
+// ---
+// *Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

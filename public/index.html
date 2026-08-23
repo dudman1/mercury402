@@ -3,530 +3,1018 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>mercury402 — Financial data APIs. Pay-per-call.</title>
-<meta name="description" content="Treasury yields, macro data, composite scores for autonomous agents. Pay-per-call via x402. No API keys.">
+<title>Mercury402 — Financial Intelligence for Autonomous Agents</title>
+<meta name="description" content="76 live pay-per-call financial data APIs for AI agents. Treasury, FRED, forex, spreads, breakeven inflation, macro bundles, and composite dashboards. USDC on Base.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#ffffff;
-  --text:#0a0a0a;
-  --text-secondary:#374151;
-  --muted:#6b7280;
-  --border:#e5e7eb;
-  --border-subtle:#f3f4f6;
-  --accent:#2563eb;
-  --accent-hover:#1d4ed8;
-  --surface:#f9fafb;
-  --surface-hover:#f3f4f6;
-  --radius:6px;
-}
-html{scroll-behavior:smooth;font-size:16px}
-body{
-  background:var(--bg);
-  color:var(--text);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
-  line-height:1.65;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
-}
-a{color:inherit;text-decoration:none;transition:color .15s ease}
-a:hover{color:var(--accent)}
-::selection{background:var(--accent);color:#fff}
-
-/* ── Nav ── */
-nav{
-  position:sticky;top:0;z-index:100;
-  background:rgba(255,255,255,.88);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--border-subtle);
-  padding:0 2.5rem;
-  display:flex;align-items:center;justify-content:space-between;
-  height:56px;
-}
-.nav-links{display:flex;gap:2rem}
-.nav-links a{
-  color:var(--muted);
-  font-size:12px;font-weight:500;
-  text-transform:uppercase;letter-spacing:.1em;
-  transition:color .2s ease;
-}
-.nav-links a:hover{color:var(--text)}
-.nav-right{display:flex;align-items:center;gap:1.25rem}
-.x-icon{width:16px;height:16px;fill:var(--muted);transition:fill .2s ease,transform .2s ease}
-.x-icon:hover{fill:var(--text);transform:scale(1.1)}
-
-/* ── Container ── */
-.container{max-width:840px;margin:0 auto;padding:0 2.5rem}
-
-/* ── Logo ── */
-.logo{
-  font-family:'JetBrains Mono','SF Mono','Fira Code','Courier New',monospace;
-  font-size:15px;font-weight:500;letter-spacing:.02em;
-  color:var(--text);
-}
-
-/* ── Features row ── */
-.features{
-  display:flex;justify-content:center;gap:3rem;
-  padding:4rem 2.5rem 2.5rem;
-  max-width:840px;margin:0 auto;
-}
-.feature{
-  display:flex;align-items:center;gap:.5rem;
-  transition:transform .2s ease;
-}
-.feature:hover{transform:translateY(-1px)}
-.feature-icon{font-size:15px;line-height:1}
-.feature-title{
-  font-size:11px;font-weight:600;
-  letter-spacing:.06em;color:var(--text-secondary);
-  text-transform:uppercase;
-}
-
-/* ── Hero ── */
-.hero{padding:3.5rem 0 4rem}
-.hero h1{
-  font-size:clamp(2.5rem,5.5vw,3.75rem);
-  font-weight:700;line-height:1.1;letter-spacing:-.035em;
-  margin-bottom:1.5rem;max-width:600px;
-  color:var(--text);
-}
-.hero .sub{
-  color:var(--muted);font-size:17px;
-  max-width:500px;margin-bottom:2.5rem;
-  line-height:1.75;
-}
-.hero-buttons{display:flex;gap:.75rem;flex-wrap:wrap}
-.btn{
-  display:inline-flex;align-items:center;
-  padding:.7rem 1.6rem;
-  border:1px solid var(--border);
-  font-family:inherit;font-size:13px;font-weight:500;
-  text-transform:uppercase;letter-spacing:.08em;
-  color:var(--text-secondary);background:transparent;
-  cursor:pointer;
-  transition:all .2s ease;
-  border-radius:var(--radius);
-}
-.btn:hover{
-  border-color:var(--text-secondary);
-  color:var(--text);
-  box-shadow:0 1px 3px rgba(0,0,0,.06);
-}
-.btn-primary{
-  background:var(--accent);border-color:var(--accent);color:#fff;
-}
-.btn-primary:hover{
-  background:var(--accent-hover);border-color:var(--accent-hover);
-  box-shadow:0 2px 8px rgba(37,99,235,.25);
-}
-
-/* ── Quick start box ── */
-.quickstart{
-  background:var(--surface);
-  border:1px solid var(--border-subtle);
-  border-radius:var(--radius);
-  padding:1.5rem 2rem;
-  margin-top:3rem;
-  transition:border-color .2s ease;
-}
-.quickstart:hover{border-color:var(--border)}
-.quickstart-label{
-  font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.16em;
-  color:var(--muted);margin-bottom:.75rem;
-}
-.quickstart code{
-  font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;
-  font-size:13.5px;color:var(--text);word-break:break-all;
-  line-height:1.5;
-}
-.quickstart-copy{
-  display:inline-block;margin-left:.75rem;
-  font-size:11px;font-weight:500;
-  color:var(--accent);cursor:pointer;
-  border:1px solid rgba(37,99,235,.3);
-  padding:.2rem .65rem;border-radius:4px;
-  transition:all .2s ease;
-  vertical-align:middle;
-}
-.quickstart-copy:hover{
-  background:var(--accent);color:#fff;
-  border-color:var(--accent);
-}
-
-/* ── Layout with sidebar ── */
-.page-grid{display:grid;grid-template-columns:1fr 230px;gap:4.5rem}
-.flow-diagram{
-  position:sticky;top:80px;
-  padding-top:1.5rem;padding-left:2rem;
-  border-left:1px solid var(--border-subtle);
-}
-.flow-title{
-  font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.16em;
-  color:var(--muted);margin-bottom:2rem;
-}
-.flow-step{
-  display:flex;align-items:flex-start;gap:1rem;
-  padding:.85rem 0;position:relative;
-}
-.flow-step:not(:last-child)::after{
-  content:'';position:absolute;
-  left:15px;top:2.6rem;bottom:0;
-  width:1px;background:var(--border);
-}
-.flow-dot{
-  width:32px;height:32px;border-radius:50%;
-  border:1.5px solid var(--text-secondary);
-  display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:600;flex-shrink:0;
-  background:var(--bg);position:relative;z-index:1;
-  transition:border-color .2s ease,transform .2s ease;
-}
-.flow-step:hover .flow-dot{
-  border-color:var(--accent);
-  transform:scale(1.08);
-}
-.flow-text{font-size:12px;line-height:1.6;padding-top:.3rem;color:var(--muted)}
-.flow-text strong{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:.15rem}
-
-/* ── Sections ── */
-section{padding:3rem 0}
-.section-label{
-  font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.18em;
-  color:var(--muted);margin-bottom:2rem;
-  padding-bottom:.75rem;
-  border-bottom:1px solid var(--border-subtle);
-}
-
-/* ── Endpoint table ── */
-.endpoint-table{width:100%;border-collapse:collapse}
-.endpoint-table th{
-  text-align:left;
-  font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.14em;
-  color:var(--muted);
-  padding:.6rem 0 .75rem;
-  border-bottom:1px solid var(--border);
-}
-.endpoint-table td{
-  padding:.8rem 0;
-  border-bottom:1px solid var(--border-subtle);
-  font-size:13px;vertical-align:middle;
-}
-.endpoint-table tr{
-  transition:background .15s ease;
-}
-.endpoint-table tbody tr:hover{
-  background:var(--surface);
-}
-.endpoint-table tr:last-child td{border-bottom:none}
-.ep{
-  font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;
-  font-size:12px;color:var(--text);
-  letter-spacing:-.01em;
-}
-.price{
-  color:var(--accent);font-weight:600;
-  white-space:nowrap;padding-right:1.5rem;
-  font-size:12px;font-family:'JetBrains Mono',monospace;
-}
-.desc{color:var(--muted);font-size:13px}
-
-.cat-header{
-  font-size:12px;font-weight:600;letter-spacing:.06em;
-  color:var(--text-secondary);
-  padding:1.5rem 0 .5rem;margin-top:.75rem;
-  text-transform:uppercase;
-}
-.cat-header:first-child{margin-top:0}
-
-/* ── Stats ── */
-.stats{
-  font-size:13.5px;color:var(--muted);
-  line-height:2.2;
-}
-.stats span{color:var(--text);font-weight:500}
-.stats a{color:var(--accent);font-weight:500}
-.stats a:hover{text-decoration:underline}
-
-/* ── How It Works paragraph ── */
-.how-text{
-  color:var(--text-secondary);
-  font-size:15px;line-height:1.8;
-  max-width:560px;
-}
-
-/* ── Footer ── */
-footer{
-  border-top:1px solid var(--border-subtle);
-  padding:2.5rem 0;margin-top:2rem;
-}
-.footer-inner{
-  display:flex;justify-content:space-between;
-  align-items:center;flex-wrap:wrap;gap:1rem;
-}
-.footer-brand{font-size:13px;color:var(--muted);font-weight:400}
-.footer-links{display:flex;gap:1.5rem;align-items:center}
-.footer-links a{
-  color:var(--muted);transition:color .2s ease;
-}
-.footer-links a:hover{color:var(--text)}
-.footer-copy{
-  width:100%;text-align:center;
-  font-size:11px;color:var(--muted);
-  margin-top:1.5rem;opacity:.5;
-}
-
-/* ── Mobile ── */
-@media(max-width:900px){
-  .page-grid{grid-template-columns:1fr;gap:0}
-  .flow-diagram{display:none}
-  .features{flex-wrap:wrap;gap:1.25rem 2.5rem}
-}
-@media(max-width:640px){
-  nav{padding:0 1.25rem;height:52px}
-  .container{padding:0 1.25rem}
-  .hero{padding:2.5rem 0 2.5rem}
-  .hero h1{font-size:2.1rem}
-  .hero .sub{font-size:15px}
-  .features{padding:2.5rem 1.25rem 1.75rem;gap:1rem 1.75rem}
-  section{padding:2.5rem 0}
-  .desc{display:none}
-  .quickstart{padding:1.25rem 1.25rem}
-  .footer-inner{flex-direction:column;text-align:center}
-  .endpoint-table td{padding:.65rem 0}
-  .ep{font-size:11px}
-}
-
-/* ── Subtle entrance animation ── */
-@keyframes fadeUp{
-  from{opacity:0;transform:translateY(12px)}
-  to{opacity:1;transform:translateY(0)}
-}
-.hero{animation:fadeUp .5s ease both}
-.features{animation:fadeUp .5s ease .08s both}
-.quickstart{animation:fadeUp .4s ease .16s both}
+  :root {
+    --bg: #080808;
+    --bg-2: #0f0f0f;
+    --bg-3: #161616;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.14);
+    --text: #e8e8e8;
+    --text-2: #888;
+    --text-3: #555;
+    --accent: #c8a96e;
+    --accent-dim: rgba(200,169,110,0.15);
+    --accent-border: rgba(200,169,110,0.25);
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.1);
+    --mono: 'Geist Mono', monospace;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --sans: 'Geist', -apple-system, sans-serif;
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
+  }
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; border-bottom: 1px solid var(--border); background: rgba(8,8,8,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .nav-inner { max-width: 1100px; margin: 0 auto; padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: var(--serif); font-size: 1.15rem; color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
+  .logo em { font-style: italic; color: var(--accent); }
+  .nav-links { display: flex; align-items: center; gap: 6px; list-style: none; }
+  .nav-links a { color: var(--text-2); text-decoration: none; font-size: 0.82rem; font-weight: 400; padding: 5px 10px; border-radius: 6px; transition: color 0.15s; letter-spacing: 0.01em; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links .nav-cta { color: var(--bg); background: var(--text); font-weight: 500; font-size: 0.8rem; padding: 6px 14px; border-radius: 6px; transition: opacity 0.15s; }
+  .nav-links .nav-cta:hover { opacity: 0.85; color: var(--bg); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+  .hero { padding: 160px 0 100px; position: relative; text-align: center; }
+  .hero::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 600px; height: 400px; background: radial-gradient(ellipse at center top, rgba(200,169,110,0.06) 0%, transparent 70%); pointer-events: none; }
+  .live-badge { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--accent-border); background: var(--accent-dim); border-radius: 100px; padding: 5px 14px 5px 10px; font-size: 0.72rem; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; margin-bottom: 36px; font-family: var(--mono); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); } 50% { opacity: 0.5; box-shadow: 0 0 3px var(--green); } }
+  .hero h1 { font-family: var(--serif); font-size: clamp(2.8rem, 6vw, 4.5rem); font-weight: 400; line-height: 1.08; letter-spacing: -0.03em; color: var(--text); margin-bottom: 22px; }
+  .hero h1 em { font-style: italic; color: var(--accent); }
+  .hero-sub { font-size: 1.05rem; color: var(--text-2); max-width: 640px; margin: 0 auto 40px; font-weight: 300; line-height: 1.65; letter-spacing: 0.005em; }
+  .hero-actions { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .btn-primary { background: var(--accent); color: #080808; font-family: var(--sans); font-size: 0.85rem; font-weight: 600; padding: 10px 22px; border-radius: 7px; text-decoration: none; letter-spacing: 0.01em; transition: opacity 0.15s, transform 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary { background: transparent; color: var(--text-2); font-family: var(--sans); font-size: 0.85rem; font-weight: 400; padding: 10px 22px; border-radius: 7px; border: 1px solid var(--border-hover); text-decoration: none; transition: color 0.15s, border-color 0.15s; }
+  .btn-secondary:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .quickstart { margin-top: 56px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .qs-label { font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--mono); }
+  .qs-code { display: flex; align-items: center; gap: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-family: var(--mono); font-size: 0.82rem; flex-wrap: wrap; justify-content: center; }
+  .qs-prompt { color: var(--text-3); }
+  .qs-cmd { color: var(--text-2); }
+  .qs-url { color: var(--accent); }
+  .qs-copy { background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2); font-family: var(--mono); font-size: 0.7rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: color 0.15s; letter-spacing: 0.03em; }
+  .qs-copy:hover { color: var(--text); }
+  .stats-bar { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-2); padding: 32px 0; }
+  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; }
+  .stat { text-align: center; padding: 8px 24px; border-right: 1px solid var(--border); }
+  .stat:last-child { border-right: none; }
+  .stat-value { font-family: var(--serif); font-size: 1.9rem; color: var(--text); letter-spacing: -0.03em; line-height: 1; margin-bottom: 5px; }
+  .stat-value em { font-style: italic; color: var(--accent); }
+  .stat-label { font-size: 0.72rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--mono); }
+  section { padding: 96px 0; }
+  .section-eyebrow { font-family: var(--mono); font-size: 0.68rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .section-eyebrow::before { content: ''; width: 20px; height: 1px; background: var(--accent); opacity: 0.5; }
+  .section-title { font-family: var(--serif); font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 400; letter-spacing: -0.03em; line-height: 1.15; color: var(--text); margin-bottom: 14px; }
+  .section-title em { font-style: italic; color: var(--accent); }
+  .section-desc { font-size: 0.95rem; color: var(--text-2); max-width: 640px; font-weight: 300; line-height: 1.65; }
+  .how-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: start; margin-top: 56px; }
+  .steps-list { display: flex; flex-direction: column; gap: 0; }
+  .step-item { display: flex; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .step-item:first-child { padding-top: 0; }
+  .step-item:last-child { border-bottom: none; }
+  .step-num { font-family: var(--mono); font-size: 0.72rem; color: var(--text-3); min-width: 24px; padding-top: 2px; }
+  .step-content h4 { font-size: 0.9rem; font-weight: 500; color: var(--text); margin-bottom: 4px; letter-spacing: -0.01em; }
+  .step-content p { font-size: 0.83rem; color: var(--text-2); font-weight: 300; line-height: 1.55; }
+  .flow-visual { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 28px; font-family: var(--mono); font-size: 0.76rem; }
+  .flow-line { display: flex; align-items: flex-start; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .flow-line:last-child { border-bottom: none; }
+  .flow-tag { min-width: 60px; font-size: 0.65rem; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 1px; }
+  .tag-req { color: var(--text-3); }
+  .tag-res { color: #f97316; }
+  .tag-pay { color: var(--green); }
+  .tag-data { color: var(--accent); }
+  .flow-code { color: var(--text-2); line-height: 1.5; }
+  .flow-code span { color: var(--accent); }
+  .flow-code .val { color: var(--green); }
+  .endpoints-header { margin-bottom: 48px; }
+  .endpoint-groups { display: flex; flex-direction: column; gap: 40px; }
+  .endpoint-group-title { font-family: var(--mono); font-size: 0.68rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+  .endpoint-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .endpoint-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 20px; padding: 14px 20px; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  .endpoint-row:last-child { border-bottom: none; }
+  .endpoint-row:hover { background: var(--bg-2); }
+  .endpoint-path { font-family: var(--mono); font-size: 0.76rem; color: var(--text-2); }
+  .endpoint-path strong { color: var(--accent); font-weight: 400; }
+  .endpoint-name { font-size: 0.82rem; color: var(--text); font-weight: 400; }
+  .endpoint-desc { font-size: 0.75rem; color: var(--text-3); margin-top: 2px; }
+  .endpoint-price { font-family: var(--mono); font-size: 0.78rem; color: var(--accent); white-space: nowrap; }
+  .endpoint-tag { font-family: var(--mono); font-size: 0.65rem; color: var(--text-3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .flow-steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin-top: 48px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .flow-step { padding: 24px 20px; border-right: 1px solid var(--border); position: relative; }
+  .flow-step:last-child { border-right: none; }
+  .flow-step-num { font-family: var(--mono); font-size: 0.65rem; color: var(--text-3); margin-bottom: 10px; letter-spacing: 0.05em; }
+  .flow-step-title { font-size: 0.85rem; font-weight: 500; color: var(--text); margin-bottom: 4px; letter-spacing: -0.01em; }
+  .flow-step-desc { font-size: 0.73rem; color: var(--text-3); line-height: 1.5; font-family: var(--mono); }
+  .flow-step-desc span { color: var(--accent); }
+  .flow-arrow { position: absolute; right: -8px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 2; font-size: 0.55rem; color: var(--text-3); }
+  footer { border-top: 1px solid var(--border); padding: 40px 0; }
+  .footer-inner { display: flex; align-items: center; justify-content: space-between; }
+  .footer-logo { font-family: var(--serif); font-size: 0.95rem; color: var(--text-2); text-decoration: none; }
+  .footer-logo em { font-style: italic; color: var(--accent); }
+  .footer-links { display: flex; gap: 24px; list-style: none; }
+  .footer-links a { font-size: 0.78rem; color: var(--text-3); text-decoration: none; transition: color 0.15s; font-family: var(--mono); letter-spacing: 0.02em; }
+  .footer-links a:hover { color: var(--text-2); }
+  .footer-copy { font-size: 0.72rem; color: var(--text-3); font-family: var(--mono); }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .hero { padding: 120px 0 60px; }
+    .how-grid { grid-template-columns: 1fr; gap: 40px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat { border-right: none; border-bottom: 1px solid var(--border); }
+    .stat:nth-child(5), .stat:last-child { border-bottom: none; }
+    .flow-steps { grid-template-columns: 1fr; }
+    .flow-step { border-right: none; border-bottom: 1px solid var(--border); }
+    .flow-step:last-child { border-bottom: none; }
+    .flow-arrow { display: none; }
+    .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+    .endpoint-row { grid-template-columns: 1fr auto; }
+    .endpoint-tag { display: none; }
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .hero > * { animation: fadeUp 0.6s ease both; }
+  .live-badge { animation-delay: 0.05s; }
+  .hero h1 { animation-delay: 0.15s; }
+  .hero-sub { animation-delay: 0.25s; }
+  .hero-actions { animation-delay: 0.32s; }
+  .quickstart { animation-delay: 0.38s; }
 </style>
 </head>
 <body>
-
 <nav>
-  <a href="#" class="logo">mercury402</a>
-  <div class="nav-links">
-    <a href="#how">How It Works</a>
-    <a href="#endpoints">Endpoints</a>
-    <a href="#stats">Stats</a>
-  </div>
-  <div class="nav-right">
-    <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank" style="font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.04em">x402scan</a>
-    <a href="https://github.com/dudman1" target="_blank" aria-label="GitHub">
-      <svg class="x-icon" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-    </a>
-    <a href="https://x.com/Mercuryclaw1" target="_blank" aria-label="X">
-      <svg class="x-icon" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-    </a>
+  <div class="nav-inner">
+    <a href="/" class="logo">mercury<em>402</em></a>
+    <ul class="nav-links">
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#endpoints">Endpoints</a></li>
+      <li><a href="#stats">Stats</a></li>
+      <li><a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a></li>
+      <li><a href="https://github.com/dudman1/mercury402" target="_blank">GitHub</a></li>
+      <li><a href="https://x.com/Mercuryclaw1" target="_blank" style="color: var(--accent)">X</a></li>
+      <li><a href="https://api.mercury402.com" class="nav-cta">API Docs →</a></li>
+    </ul>
   </div>
 </nav>
-
-<!-- Features row -->
-<div class="features">
-  <div class="feature"><span class="feature-icon">🔐</span><span class="feature-title">No API Keys</span></div>
-  <div class="feature"><span class="feature-icon">🎯</span><span class="feature-title">Deterministic</span></div>
-  <div class="feature"><span class="feature-icon">⚡</span><span class="feature-title">Agent-First</span></div>
-  <div class="feature"><span class="feature-icon">💰</span><span class="feature-title">Micropayments</span></div>
-</div>
-
-<div class="container">
-
-  <!-- Hero -->
-  <section class="hero">
-    <h1>Financial data APIs. Pay-per-call.</h1>
-    <p class="sub">Treasury yields, macro indicators, composite scores. Pay with USDC on Base. No API keys. No signup.</p>
-    <div class="hero-buttons">
-      <a href="#how" class="btn">How It Works</a>
-      <a href="https://mercury402.uk/.well-known/x402" class="btn btn-primary">API Discovery</a>
+<div class="hero">
+  <div class="container">
+    <div class="live-badge"><span class="live-dot"></span>Live on Base Mainnet</div>
+    <h1>76 live endpoints<br>for <em>autonomous agents</em></h1>
+    <p class="hero-sub">Treasury curves, 53 FRED series endpoints, forex, yield spreads, breakeven inflation, macro bundles, recession probability, and composite dashboards. Pay per call with USDC on Base. No API keys. No subscriptions. No accounts.</p>
+    <div class="hero-actions">
+      <a href="https://api.mercury402.com" class="btn-primary">API Discovery →</a>
+      <a href="#endpoints" class="btn-secondary">Browse endpoints</a>
     </div>
-
     <div class="quickstart">
-      <div class="quickstart-label">Quick Start</div>
-      <code>npx agentcash@latest discover https://mercury402.uk</code>
-      <span class="quickstart-copy" onclick="navigator.clipboard.writeText('npx agentcash@latest discover https://mercury402.uk')">Copy</span>
-    </div>
-  </section>
-
-  <!-- Main grid: content + flow diagram -->
-  <div class="page-grid">
-    <div class="main-content">
-
-      <section id="how">
-        <div class="section-label">How It Works</div>
-        <p class="how-text">Mercury402 uses the x402 protocol — an internet-native payment standard built on Base. No accounts, no API keys, no subscriptions. Pay per call with USDC.</p>
-      </section>
-
-      <section id="endpoints">
-        <div class="section-label">Endpoints</div>
-
-        <div class="cat-header">Treasury Data</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/treasury/tips-rates/current</td><td class="price">$0.05</td><td class="desc">TIPS rates snapshot</td></tr>
-            <tr><td class="ep">GET /v1/treasury/auction-results/recent</td><td class="price">$0.05</td><td class="desc">Treasury auction results</td></tr>
-            <tr><td class="ep">GET /v1/treasury/yield-curve/daily-snapshot</td><td class="price">$0.05</td><td class="desc">Daily yield curve (1M–30Y)</td></tr>
-            <tr><td class="ep">POST /v1/treasury/yield-curve/historical</td><td class="price">$0.05</td><td class="desc">Historical yield curve</td></tr>
-          </tbody>
-        </table>
-
-        <div class="cat-header">FRED Series (52 named)</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/fred/cpi</td><td class="price">$0.05</td><td class="desc">Consumer Price Index</td></tr>
-            <tr><td class="ep">GET /v1/fred/cpi-core</td><td class="price">$0.05</td><td class="desc">Core CPI (excl. food & energy)</td></tr>
-            <tr><td class="ep">GET /v1/fred/ppi</td><td class="price">$0.05</td><td class="desc">Producer Price Index</td></tr>
-            <tr><td class="ep">GET /v1/fred/pce</td><td class="price">$0.05</td><td class="desc">Personal Consumption Expenditures</td></tr>
-            <tr><td class="ep">GET /v1/fred/pce-core</td><td class="price">$0.05</td><td class="desc">Core PCE Price Index</td></tr>
-            <tr><td class="ep">GET /v1/fred/unemployment-rate</td><td class="price">$0.05</td><td class="desc">Civilian unemployment rate</td></tr>
-            <tr><td class="ep">GET /v1/fred/nonfarm-payrolls</td><td class="price">$0.05</td><td class="desc">Total nonfarm payrolls</td></tr>
-            <tr><td class="ep">GET /v1/fred/initial-claims</td><td class="price">$0.05</td><td class="desc">Initial jobless claims</td></tr>
-            <tr><td class="ep">GET /v1/fred/gdp</td><td class="price">$0.05</td><td class="desc">Real GDP</td></tr>
-            <tr><td class="ep">GET /v1/fred/gdp-growth</td><td class="price">$0.05</td><td class="desc">Real GDP growth, annualized</td></tr>
-            <tr><td class="ep">GET /v1/fred/fed-funds-rate</td><td class="price">$0.05</td><td class="desc">Effective federal funds rate</td></tr>
-            <tr><td class="ep">GET /v1/fred/m2-money-stock</td><td class="price">$0.05</td><td class="desc">M2 money stock</td></tr>
-            <tr><td class="ep">GET /v1/fred/consumer-confidence</td><td class="price">$0.05</td><td class="desc">U Michigan consumer sentiment</td></tr>
-            <tr><td class="ep">GET /v1/fred/housing-starts</td><td class="price">$0.05</td><td class="desc">New housing starts</td></tr>
-            <tr><td class="ep">GET /v1/fred/industrial-production</td><td class="price">$0.05</td><td class="desc">Industrial production index</td></tr>
-            <tr><td class="ep">GET /v1/fred/retail-sales</td><td class="price">$0.05</td><td class="desc">Retail sales</td></tr>
-            <tr><td class="ep">GET /v1/fred/trade-balance</td><td class="price">$0.05</td><td class="desc">Trade balance (goods & services)</td></tr>
-            <tr><td class="ep">GET /v1/fred/vix</td><td class="price">$0.05</td><td class="desc">CBOE Volatility Index</td></tr>
-            <tr><td class="ep">GET /v1/fred/{series_id}</td><td class="price">$0.05</td><td class="desc">Any of 800K+ FRED series</td></tr>
-          </tbody>
-        </table>
-
-        <div class="cat-header">Forex Cross-Rates</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/forex/eur-usd</td><td class="price">$0.05</td><td class="desc">EUR/USD exchange rate</td></tr>
-            <tr><td class="ep">GET /v1/forex/gbp-usd</td><td class="price">$0.05</td><td class="desc">GBP/USD exchange rate</td></tr>
-            <tr><td class="ep">GET /v1/forex/usd-jpy</td><td class="price">$0.05</td><td class="desc">USD/JPY exchange rate</td></tr>
-            <tr><td class="ep">GET /v1/forex/usd-cny</td><td class="price">$0.05</td><td class="desc">USD/CNY exchange rate</td></tr>
-          </tbody>
-        </table>
-
-        <div class="cat-header">Yield Curve Spreads</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/yield-spread/10y-2y</td><td class="price">$0.05</td><td class="desc">10Y minus 2Y spread</td></tr>
-            <tr><td class="ep">GET /v1/yield-spread/10y-3m</td><td class="price">$0.05</td><td class="desc">10Y minus 3M spread</td></tr>
-            <tr><td class="ep">GET /v1/yield-spread/5y-2y</td><td class="price">$0.05</td><td class="desc">5Y minus 2Y spread</td></tr>
-            <tr><td class="ep">GET /v1/yield-spread/30y-5y</td><td class="price">$0.05</td><td class="desc">30Y minus 5Y spread</td></tr>
-            <tr><td class="ep">GET /v1/yield-spread/10y-5y</td><td class="price">$0.05</td><td class="desc">10Y minus 5Y spread</td></tr>
-          </tbody>
-        </table>
-
-        <div class="cat-header">Breakeven Inflation</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/breakeven/2y</td><td class="price">$0.05</td><td class="desc">2Y breakeven inflation rate</td></tr>
-            <tr><td class="ep">GET /v1/breakeven/5y</td><td class="price">$0.05</td><td class="desc">5Y breakeven inflation rate</td></tr>
-            <tr><td class="ep">GET /v1/breakeven/10y</td><td class="price">$0.05</td><td class="desc">10Y breakeven inflation rate</td></tr>
-            <tr><td class="ep">GET /v1/breakeven/5y5y</td><td class="price">$0.05</td><td class="desc">5Y5Y forward inflation expectations</td></tr>
-          </tbody>
-        </table>
-
-        <div class="cat-header">Macro & Composite</div>
-        <table class="endpoint-table">
-          <thead><tr><th>Endpoint</th><th>Price</th><th class="desc">Description</th></tr></thead>
-          <tbody>
-            <tr><td class="ep">GET /v1/macro/bundle</td><td class="price">$0.10</td><td class="desc">Treasury + CPI + GDP + Employment + Fed Funds</td></tr>
-            <tr><td class="ep">GET /v1/macro/recession-probability</td><td class="price">$0.10</td><td class="desc">Recession probability from yield curve + unemployment</td></tr>
-            <tr><td class="ep">GET /v1/macro/snapshot/all</td><td class="price">$0.05</td><td class="desc">Complete macro snapshot</td></tr>
-            <tr><td class="ep">GET /v1/composite/inflation-tracker</td><td class="price">$0.40</td><td class="desc">CPI, PCE, Core CPI dashboard</td></tr>
-            <tr><td class="ep">GET /v1/composite/labor-market</td><td class="price">$0.40</td><td class="desc">Unemployment, claims, payrolls</td></tr>
-            <tr><td class="ep">GET /v1/composite/economic-dashboard</td><td class="price">$0.50</td><td class="desc">GDP, CPI, unemployment overview</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section id="stats">
-        <div class="section-label">Stats</div>
-        <div class="stats">
-          Merchant: <span>0xF8d5...6D2</span> (Base)<br>
-          Volume: <span id="uk-revenue">$0.60</span> • Calls: <span id="uk-calls">6</span> • Buyers: <span id="uk-buyers">3</span> • Next milestone: <span id="uk-milestone">$1.00</span><br>
-          <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">View on x402scan →</a>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- Flow diagram sidebar -->
-    <div class="flow-diagram">
-      <div class="flow-title">Payment Flow</div>
-      <div class="flow-step">
-        <div class="flow-dot">1</div>
-        <div class="flow-text"><strong>Request</strong>POST to endpoint</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-dot">2</div>
-        <div class="flow-text"><strong>402 Response</strong>Payment descriptor returned</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-dot">3</div>
-        <div class="flow-text"><strong>Pay</strong>USDC on Base via x402</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-dot">4</div>
-        <div class="flow-text"><strong>Retry</strong>Submit payment token</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-dot">5</div>
-        <div class="flow-text"><strong>Data</strong>Deterministic JSON returned</div>
+      <span class="qs-label">Quick start</span>
+      <div class="qs-code">
+        <span class="qs-prompt">$</span>
+        <span class="qs-cmd">npx agentcash@latest discover </span><span class="qs-url">https://api.mercury402.com</span>
+        <button class="qs-copy" onclick="navigator.clipboard.writeText('npx agentcash@latest discover https://api.mercury402.com'); this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
       </div>
     </div>
   </div>
-
 </div>
+<div class="stats-bar" id="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-value"><em>76</em></div><div class="stat-label">Live Endpoints</div></div>
+      <div class="stat"><div class="stat-value" id="stat-revenue"><em>$0.60</em></div><div class="stat-label">Revenue</div></div>
+      <div class="stat"><div class="stat-value" id="stat-calls">6</div><div class="stat-label">API Calls</div></div>
+      <div class="stat"><div class="stat-value" id="stat-customers">3</div><div class="stat-label">Customers</div></div>
+      <div class="stat"><div class="stat-value" id="stat-milestone"><em>$1.00</em></div><div class="stat-label">Next Milestone</div></div>
+    </div>
+  </div>
+</div>
+<section id="how-it-works">
+  <div class="container">
+    <div class="section-eyebrow">How it works</div>
+    <h2 class="section-title">One call. One payment.<br><em>76 routes live.</em></h2>
+    <p class="section-desc">Mercury402 implements the x402 payment protocol for deterministic financial data: one endpoint, one price, one USDC payment on Base, one signed JSON response.</p>
+    <div class="how-grid">
+      <div class="steps-list">
+        <div class="step-item"><span class="step-num">01</span><div class="step-content"><h4>Discover 76 endpoints</h4><p>Treasury, FRED, forex, spreads, breakeven inflation, macro intelligence, and composite dashboards are exposed as direct HTTP routes.</p></div></div>
+        <div class="step-item"><span class="step-num">02</span><div class="step-content"><h4>Receive 402 Payment Required</h4><p>Your client gets a precise payment descriptor for the requested route, including the exact price and Base USDC settlement details.</p></div></div>
+        <div class="step-item"><span class="step-num">03</span><div class="step-content"><h4>Pay with USDC on Base</h4><p>Your agent submits the x402 payment and Mercury verifies settlement before serving data. No API keys or account provisioning.</p></div></div>
+        <div class="step-item"><span class="step-num">04</span><div class="step-content"><h4>Consume deterministic JSON</h4><p>The response includes structured data and provenance so automated strategies, dashboards, and agent workflows stay reproducible.</p></div></div>
+      </div>
+      <div class="flow-visual">
+        <div class="flow-line"><span class="flow-tag tag-req">REQUEST</span><span class="flow-code">GET <span>/v1/macro/bundle</span></span></div>
+        <div class="flow-line"><span class="flow-tag tag-res">402</span><span class="flow-code">{ "amount": <span class="val">"100000"</span>, "token": <span>"USDC"</span> }</span></div>
+        <div class="flow-line"><span class="flow-tag tag-pay">PAYMENT</span><span class="flow-code">x402 settlement → Base L2<br><span class="val">✓ verified on-chain</span></span></div>
+        <div class="flow-line"><span class="flow-tag tag-data">200 OK</span><span class="flow-code">{ "treasury_10y": <span class="val">4.24</span>, "cpi_yoy": <span class="val">3.2</span>,<br>&nbsp;&nbsp;"vix": <span class="val">14.8</span>, "yield_spread_10y_2y": <span class="val">0.30</span> }</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+<hr class="section-divider">
+<section id="endpoints">
+  <div class="container">
+    <div class="endpoints-header">
+      <div class="section-eyebrow">Endpoints</div>
+      <h2 class="section-title">76 live endpoints.<br><em>Real financial data.</em></h2>
+      <p class="section-desc">Complete coverage across 7 core categories: Treasury (4), FRED Series (53), Forex (4), Yield Spreads (5), Breakeven Inflation (4), Macro Intelligence (3), and Composite (3). Pricing is $0.05 base, $0.10 for macro premium endpoints, $0.40 for inflation and labor composites, and $0.50 for the economic dashboard.</p>
+    </div>
+    <div class="endpoint-groups">
+      <div>
+        <div class="endpoint-group-title">Treasury (4)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Yield Curve (Daily)</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/treasury/yield-curve/daily-snapshot</div>
+              <div class="endpoint-desc">U.S. Treasury par yield curve snapshot across 11 maturities.</div>
+            </div>
+            <span class="endpoint-tag">Treasury</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Yield Curve (Historical)</div>
+              <div class="endpoint-path"><strong>POST</strong> /v1/treasury/yield-curve/historical</div>
+              <div class="endpoint-desc">Historical Treasury curve snapshots for a requested date range.</div>
+            </div>
+            <span class="endpoint-tag">Treasury</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Auction Results</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/treasury/auction-results/recent</div>
+              <div class="endpoint-desc">Recent Treasury auction results and proxy issuance data.</div>
+            </div>
+            <span class="endpoint-tag">Treasury</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">TIPS Rates</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/treasury/tips-rates/current</div>
+              <div class="endpoint-desc">Current TIPS real yields across key maturities.</div>
+            </div>
+            <span class="endpoint-tag">Treasury</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+        </div>
+      </div>
 
+      <div>
+        <div class="endpoint-group-title">FRED Series (53)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Any FRED Series</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/{series_id}</div>
+              <div class="endpoint-desc">Direct access to any valid FRED series ID, including the full 800k+ catalog.</div>
+            </div>
+            <span class="endpoint-tag">FRED</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Consumer Price Index (CPI)</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/cpi</div>
+              <div class="endpoint-desc">Consumer Price Index for All Urban Consumers (CPIAUCSL)</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Core CPI</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/cpi-core</div>
+              <div class="endpoint-desc">Core CPI (excl. food &amp; energy, CPILFESL)</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Producer Price Index (PPI)</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/ppi</div>
+              <div class="endpoint-desc">Producer Price Index for All Commodities</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Personal Consumption Expenditures</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/pce</div>
+              <div class="endpoint-desc">Personal Consumption Expenditures (PCE)</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Core PCE Price Index</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/pce-core</div>
+              <div class="endpoint-desc">Core PCE Price Index (excl. food &amp; energy)</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">PCE Deflator</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/pce-deflator</div>
+              <div class="endpoint-desc">PCE deflator, percent change from year ago</div>
+            </div>
+            <span class="endpoint-tag">Prices</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Unemployment Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/unemployment-rate</div>
+              <div class="endpoint-desc">Civilian unemployment rate</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Nonfarm Payrolls</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/nonfarm-payrolls</div>
+              <div class="endpoint-desc">Total nonfarm payrolls (thousands)</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Initial Jobless Claims</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/initial-claims</div>
+              <div class="endpoint-desc">Initial jobless claims, weekly</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Continuing Jobless Claims</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/continuing-claims</div>
+              <div class="endpoint-desc">Continued claims, weekly</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Labor Force Participation Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/labor-force-participation</div>
+              <div class="endpoint-desc">Labor force participation rate</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Average Hourly Earnings</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/average-hourly-earnings</div>
+              <div class="endpoint-desc">Average hourly earnings of all employees, total private</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">JOLTS Job Openings</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/jolts-openings</div>
+              <div class="endpoint-desc">Job Openings and Labor Turnover Survey</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Quits Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/quits-rate</div>
+              <div class="endpoint-desc">Quits rate (JOLTS)</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">U-6 Unemployment</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/u6-unemployment</div>
+              <div class="endpoint-desc">Total unemployed + marginally attached + part-time for economic reasons</div>
+            </div>
+            <span class="endpoint-tag">Employment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Gross Domestic Product</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/gdp</div>
+              <div class="endpoint-desc">Real GDP, billions of chained 2017 dollars</div>
+            </div>
+            <span class="endpoint-tag">Growth</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Real GDP Growth</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/gdp-growth</div>
+              <div class="endpoint-desc">Real GDP percent change, annualized</div>
+            </div>
+            <span class="endpoint-tag">Growth</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Gross Domestic Income</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/gdi</div>
+              <div class="endpoint-desc">Real GDI</div>
+            </div>
+            <span class="endpoint-tag">Growth</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">GDP Deflator</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/gdp-deflator</div>
+              <div class="endpoint-desc">Gross domestic product: implicit price deflator</div>
+            </div>
+            <span class="endpoint-tag">Growth</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Corporate Profits</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/corporate-profits</div>
+              <div class="endpoint-desc">Corporate profits after tax</div>
+            </div>
+            <span class="endpoint-tag">Growth</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">M1 Money Stock</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/m1-money-stock</div>
+              <div class="endpoint-desc">M1 money stock, seasonally adjusted</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">M2 Money Stock</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/m2-money-stock</div>
+              <div class="endpoint-desc">M2 money stock, seasonally adjusted</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Federal Funds Effective Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/fed-funds-rate</div>
+              <div class="endpoint-desc">Effective federal funds rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Fed Funds Target Upper</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/fed-funds-target-upper</div>
+              <div class="endpoint-desc">Federal funds target rate, upper bound</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">3-Month Treasury</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/treasury-3m</div>
+              <div class="endpoint-desc">3-month Treasury constant maturity rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">2-Year Treasury</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/treasury-2y</div>
+              <div class="endpoint-desc">2-year Treasury constant maturity rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">5-Year Treasury</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/treasury-5y</div>
+              <div class="endpoint-desc">5-year Treasury constant maturity rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">10-Year Treasury</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/treasury-10y</div>
+              <div class="endpoint-desc">10-year Treasury constant maturity rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">30-Year Treasury</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/treasury-30y</div>
+              <div class="endpoint-desc">30-year Treasury constant maturity rate</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">30-Year Fixed Mortgage</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/mortgage-30y</div>
+              <div class="endpoint-desc">30-year fixed-rate mortgage average</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">BBB Corporate Yield</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/bbb-corporate-yield</div>
+              <div class="endpoint-desc">ICE BofA BBB US Corporate Index Option-Adjusted Yield</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">High Yield Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/high-yield-spread</div>
+              <div class="endpoint-desc">ICE BofA US High Yield Index Option-Adjusted Spread</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">A-Rated Corporate Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/a-rated-spread</div>
+              <div class="endpoint-desc">ICE BofA Single-A US Corporate Index OAS</div>
+            </div>
+            <span class="endpoint-tag">Rates</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">U Michigan Consumer Sentiment</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/consumer-confidence</div>
+              <div class="endpoint-desc">University of Michigan consumer sentiment index</div>
+            </div>
+            <span class="endpoint-tag">Sentiment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Conference Board CI</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/conference-board-ci</div>
+              <div class="endpoint-desc">Conference Board consumer confidence index (OECD)</div>
+            </div>
+            <span class="endpoint-tag">Sentiment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Inflation Expectations</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/inflation-expectations</div>
+              <div class="endpoint-desc">University of Michigan 1-year inflation expectations</div>
+            </div>
+            <span class="endpoint-tag">Sentiment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Leading Economic Index</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/leading-indicators</div>
+              <div class="endpoint-desc">Conference Board Leading Economic Index for the US</div>
+            </div>
+            <span class="endpoint-tag">Sentiment</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Trade Balance</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/trade-balance</div>
+              <div class="endpoint-desc">Trade balance: goods and services, millions of USD</div>
+            </div>
+            <span class="endpoint-tag">Trade</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Current Account Balance</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/current-account</div>
+              <div class="endpoint-desc">Current account balance, billions of USD</div>
+            </div>
+            <span class="endpoint-tag">Trade</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Housing Starts</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/housing-starts</div>
+              <div class="endpoint-desc">New privately-owned housing units started (thousands)</div>
+            </div>
+            <span class="endpoint-tag">Housing</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Building Permits</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/building-permits</div>
+              <div class="endpoint-desc">New privately-owned housing units authorized (thousands)</div>
+            </div>
+            <span class="endpoint-tag">Housing</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Existing Home Sales</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/existing-home-sales</div>
+              <div class="endpoint-desc">Existing home sales, millions (SAAR)</div>
+            </div>
+            <span class="endpoint-tag">Housing</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Case-Shiller Home Price Index</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/case-shiller</div>
+              <div class="endpoint-desc">S&amp;P/Case-Shiller US National Home Price Index</div>
+            </div>
+            <span class="endpoint-tag">Housing</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Homeownership Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/homeownership-rate</div>
+              <div class="endpoint-desc">Homeownership rate for the US</div>
+            </div>
+            <span class="endpoint-tag">Housing</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Industrial Production Index</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/industrial-production</div>
+              <div class="endpoint-desc">Industrial production: total index</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Retail Sales</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/retail-sales</div>
+              <div class="endpoint-desc">Advance retail sales: retail and food services (millions)</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Personal Income</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/personal-income</div>
+              <div class="endpoint-desc">Personal income, billions of USD</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Personal Saving Rate</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/personal-saving-rate</div>
+              <div class="endpoint-desc">Personal saving rate (percent)</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Total Vehicle Sales</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/total-vehicle-sales</div>
+              <div class="endpoint-desc">Total vehicle sales, millions (SAAR)</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Federal Debt-to-GDP</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/federal-debt</div>
+              <div class="endpoint-desc">Federal debt as percent of GDP</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Federal Surplus/Deficit</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/federal-deficit</div>
+              <div class="endpoint-desc">Federal surplus or deficit, billions</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">VIX Index</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/fred/vix</div>
+              <div class="endpoint-desc">CBOE Volatility Index: VIX</div>
+            </div>
+            <span class="endpoint-tag">Activity</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="endpoint-group-title">Forex (4)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">EUR/USD</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/forex/eur-usd</div>
+              <div class="endpoint-desc">Euro area / US dollar exchange rate (DEXUSEU)</div>
+            </div>
+            <span class="endpoint-tag">Forex</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">GBP/USD</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/forex/gbp-usd</div>
+              <div class="endpoint-desc">US / UK pound exchange rate (DEXUSUK)</div>
+            </div>
+            <span class="endpoint-tag">Forex</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">USD/JPY</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/forex/usd-jpy</div>
+              <div class="endpoint-desc">Japan / US dollar exchange rate (DEXJPUS)</div>
+            </div>
+            <span class="endpoint-tag">Forex</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">USD/CNY</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/forex/usd-cny</div>
+              <div class="endpoint-desc">China / US dollar exchange rate (DEXCHUS)</div>
+            </div>
+            <span class="endpoint-tag">Forex</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="endpoint-group-title">Yield Spreads (5)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">10Y-2Y Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/yield-spread/10y-2y</div>
+              <div class="endpoint-desc">10-year minus 2-year Treasury yield spread</div>
+            </div>
+            <span class="endpoint-tag">Spread</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">10Y-3M Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/yield-spread/10y-3m</div>
+              <div class="endpoint-desc">10-year minus 3-month Treasury yield spread</div>
+            </div>
+            <span class="endpoint-tag">Spread</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">5Y-2Y Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/yield-spread/5y-2y</div>
+              <div class="endpoint-desc">5-year minus 2-year Treasury yield spread</div>
+            </div>
+            <span class="endpoint-tag">Spread</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">30Y-5Y Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/yield-spread/30y-5y</div>
+              <div class="endpoint-desc">30-year minus 5-year Treasury yield spread</div>
+            </div>
+            <span class="endpoint-tag">Spread</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">10Y-5Y Spread</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/yield-spread/10y-5y</div>
+              <div class="endpoint-desc">10-year minus 5-year Treasury yield spread</div>
+            </div>
+            <span class="endpoint-tag">Spread</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="endpoint-group-title">Breakeven Inflation (4)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">5Y Breakeven Inflation</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/breakeven/5y</div>
+              <div class="endpoint-desc">5-year breakeven inflation rate (TIPS)</div>
+            </div>
+            <span class="endpoint-tag">TIPS</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">10Y Breakeven Inflation</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/breakeven/10y</div>
+              <div class="endpoint-desc">10-year breakeven inflation rate (TIPS)</div>
+            </div>
+            <span class="endpoint-tag">TIPS</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">2Y Breakeven Inflation</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/breakeven/2y</div>
+              <div class="endpoint-desc">2-year breakeven inflation rate (TIPS)</div>
+            </div>
+            <span class="endpoint-tag">TIPS</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">5Y5Y Forward Inflation</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/breakeven/5y5y</div>
+              <div class="endpoint-desc">5-year, 5-year forward inflation expectation rate</div>
+            </div>
+            <span class="endpoint-tag">TIPS</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="endpoint-group-title">Macro Intelligence (3)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Macro Snapshot</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/macro/snapshot/all</div>
+              <div class="endpoint-desc">Single-call macro snapshot for GDP, CPI, rates, yields, VIX, dollar index, and sentiment.</div>
+            </div>
+            <span class="endpoint-tag">Bundle</span>
+            <span class="endpoint-price">$0.05 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Macro Bundle</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/macro/bundle</div>
+              <div class="endpoint-desc">Treasury, CPI, GDP, employment, Fed funds, M2, VIX, and trade in one response.</div>
+            </div>
+            <span class="endpoint-tag">Premium</span>
+            <span class="endpoint-price">$0.10 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Recession Probability</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/macro/recession-probability</div>
+              <div class="endpoint-desc">Logistic recession probability model built from the yield curve and labor data.</div>
+            </div>
+            <span class="endpoint-tag">Premium</span>
+            <span class="endpoint-price">$0.10 / call</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="endpoint-group-title">Composite (3)</div>
+        <div class="endpoint-table">
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Inflation Tracker</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/composite/inflation-tracker</div>
+              <div class="endpoint-desc">Composite inflation dashboard for CPI, PCE, and core CPI.</div>
+            </div>
+            <span class="endpoint-tag">Composite</span>
+            <span class="endpoint-price">$0.40 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Labor Market</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/composite/labor-market</div>
+              <div class="endpoint-desc">Composite labor dashboard for unemployment, claims, and payrolls.</div>
+            </div>
+            <span class="endpoint-tag">Composite</span>
+            <span class="endpoint-price">$0.40 / call</span>
+          </div>
+          <div class="endpoint-row">
+            <div>
+              <div class="endpoint-name">Economic Dashboard</div>
+              <div class="endpoint-path"><strong>GET</strong> /v1/composite/economic-dashboard</div>
+              <div class="endpoint-desc">Premium macro overview combining GDP, CPI, and unemployment.</div>
+            </div>
+            <span class="endpoint-tag">Composite</span>
+            <span class="endpoint-price">$0.50 / call</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<hr class="section-divider">
+<section id="payment-flow">
+  <div class="container">
+    <div class="section-eyebrow">Payment flow</div>
+    <h2 class="section-title">How <em>x402</em> micropayments work</h2>
+    <p class="section-desc">USDC on Base. Sub-second settlement. One deterministic response per call, from $0.05 single-series pulls to premium macro and composite products.</p>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-step-num">01</div><div class="flow-step-title">Request</div><div class="flow-step-desc"><span>GET</span> /endpoint</div><div class="flow-arrow">→</div></div>
+      <div class="flow-step"><div class="flow-step-num">02</div><div class="flow-step-title">402 Response</div><div class="flow-step-desc">Payment descriptor returned</div><div class="flow-arrow">→</div></div>
+      <div class="flow-step"><div class="flow-step-num">03</div><div class="flow-step-title">Pay USDC</div><div class="flow-step-desc">On <span>Base L2</span> via x402</div><div class="flow-arrow">→</div></div>
+      <div class="flow-step"><div class="flow-step-num">04</div><div class="flow-step-title">Verify</div><div class="flow-step-desc">On-chain in <span>~1.4s</span></div><div class="flow-arrow">→</div></div>
+      <div class="flow-step"><div class="flow-step-num">05</div><div class="flow-step-title">Data</div><div class="flow-step-desc">Deterministic <span>JSON</span> returned</div></div>
+    </div>
+  </div>
+</section>
 <footer>
   <div class="container">
     <div class="footer-inner">
-      <div class="footer-brand">mercury402 — Built for the autonomous economy</div>
-      <div class="footer-links">
-        <a href="https://github.com/dudman1" target="_blank" aria-label="GitHub">
-          <svg class="x-icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-        </a>
-        <a href="https://x.com/Mercuryclaw1" target="_blank" aria-label="X">
-          <svg class="x-icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-        </a>
-        <a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a>
-        <a href="https://mercury402.uk/health" target="_blank">Health</a>
-      </div>
-      <div class="footer-copy">mercury402 © 2026</div>
+      <a href="/" class="footer-logo">mercury<em>402</em></a>
+      <ul class="footer-links">
+        <li><a href="https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369" target="_blank">x402scan</a></li>
+        <li><a href="https://api.mercury402.com" target="_blank">API Docs</a></li>
+        <li><a href="https://x.com/Mercuryclaw1" target="_blank">X</a></li>
+        <li><a href="https://github.com/dudman1/mercury402" target="_blank">GitHub</a></li>
+      </ul>
+      <span class="footer-copy">© 2026 Mercury402</span>
     </div>
   </div>
 </footer>
-
 <script>
-(function(){
-  function nextMilestone(r){var t=[1,5,10,25,50,100,250,500,1000];for(var i=0;i<t.length;i++){if(r<t[i])return'$'+t[i]+'.00';}return'$1,000+';}
-  fetch('/metrics',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
-    var r=d.total_revenue_usd||0;
-    document.getElementById('uk-revenue').textContent='$'+r.toFixed(2);
-    document.getElementById('uk-calls').textContent=d.total_calls||0;
-    document.getElementById('uk-buyers').textContent=d.unique_wallets||0;
-    document.getElementById('uk-milestone').textContent=nextMilestone(r);
-  }).catch(function(){});
+(function() {
+  function nextMilestone(rev) {
+    var tiers = [1, 5, 10, 25, 50, 100, 250, 500, 1000];
+    for (var i = 0; i < tiers.length; i++) {
+      if (rev < tiers[i]) return '$' + tiers[i] + '.00';
+    }
+    return '$1,000+';
+  }
+  fetch('https://api.mercury402.com/metrics', { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var rev = d.total_revenue_usd || 0;
+      document.getElementById('stat-revenue').innerHTML = '<em>$' + rev.toFixed(2) + '</em>';
+      document.getElementById('stat-calls').textContent = d.total_calls || 0;
+      document.getElementById('stat-customers').textContent = d.unique_wallets || 0;
+      document.getElementById('stat-milestone').innerHTML = '<em>' + nextMilestone(rev) + '</em>';
+    })
+    .catch(function() {});
 })();
 </script>
-
 </body>
 </html>

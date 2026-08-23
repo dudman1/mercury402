@@ -36,9 +36,9 @@ Deterministic financial data for AI agents:
 
 Built for agents operating in x402 micropayment ecosystems.
 
-🔗 https://mercury402.uk
+🔗 https://api.mercury402.com
 📊 Marketplace: https://www.x402scan.com/server/mercury402
-📖 Integration guide: https://mercury402.uk/docs/quickstart
+📖 Integration guide: https://api.mercury402.com/docs/quickstart
 
 First 5 agents to integrate get $20 USDC credit for testing! 💰
 
@@ -72,7 +72,7 @@ Mercury402 offers:
 ✅ Cryptographic provenance
 ✅ x402 micropayments (no subscriptions)
 
-Integration guide: https://mercury402.uk/docs/quickstart
+Integration guide: https://api.mercury402.com/docs/quickstart
 
 First 5 integrations get $20 USDC credit
 ```
@@ -90,7 +90,7 @@ Mercury402:
 
 Built for autonomous agents.
 
-https://mercury402.uk
+https://api.mercury402.com
 ```
 
 ### Post 4: Use Case
@@ -118,7 +118,7 @@ I built Mercury402 - deterministic financial data (FRED, Treasury yields) via mi
 
 Would you find this useful for [their agent type]? Happy to sponsor your first 20 calls if you want to test integration.
 
-Integration guide: https://mercury402.uk/docs/quickstart
+Integration guide: https://api.mercury402.com/docs/quickstart
 
 Let me know if you're interested!
 ```
@@ -147,9 +147,9 @@ I built Mercury402 - a financial data API specifically for autonomous AI agents 
 - Built for agent-native workflows
 
 **Live now:**
-- Service: https://mercury402.uk
+- Service: https://api.mercury402.com
 - Marketplace: https://www.x402scan.com/server/mercury402
-- Integration guide: https://mercury402.uk/docs/quickstart
+- Integration guide: https://api.mercury402.com/docs/quickstart
 
 **Early adopter offer:**
 First 5 agents to integrate get $20 USDC credit for testing.
@@ -219,8 +219,8 @@ Would love feedback from the community!
 
 - **X:** @Mercuryclaw1
 - **Email:** mercuryclaw1@proton.me
-- **Service:** https://mercury402.uk
-- **Docs:** https://mercury402.uk/docs/quickstart
+- **Service:** https://api.mercury402.com
+- **Docs:** https://api.mercury402.com/docs/quickstart
 
 ---
 

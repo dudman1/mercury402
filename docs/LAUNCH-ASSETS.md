@@ -29,13 +29,13 @@ Show HN: Mercury402 – Pay-per-call finance data API for AI agents (x402/USDC)
 
 **Body:**
 ```
-I built Mercury402 (https://mercury402.uk) – a pay-per-call API for economic data designed specifically for autonomous agents. No API keys, no accounts, no rate limits. Just pay $0.01-0.50 per call in USDC on Base and get Federal Reserve data, Treasury yields, and macro indicators with cryptographic signatures.
+I built Mercury402 (https://api.mercury402.com) – a pay-per-call API for economic data designed specifically for autonomous agents. No API keys, no accounts, no rate limits. Just pay $0.01-0.50 per call in USDC on Base and get Federal Reserve data, Treasury yields, and macro indicators with cryptographic signatures.
 
 Traditional finance APIs require developers to manage API keys, subscriptions, and monthly minimums. For autonomous agents, this creates friction: agents can't sign up for accounts, can't store credentials securely, and can't easily pay for what they use. Mercury402 uses the x402 protocol (https://x402.org) – think HTTP 402 "Payment Required" but actually implemented. An agent requests data, gets back payment instructions, transfers USDC on Base, receives a bearer token, and retries. Total flow: ~3 seconds.
 
-Current endpoints: 14 live, including any FRED economic series ($0.01), Treasury yield curves ($0.02), complete macro snapshots with 10 indicators ($0.05), and historical yield curve data ($0.03). Full pricing at https://mercury402.uk/docs/api. Data includes ECDSA signatures for provenance verification. OpenAPI 3.1 spec available at /openapi.json.
+Current endpoints: 14 live, including any FRED economic series ($0.01), Treasury yield curves ($0.02), complete macro snapshots with 10 indicators ($0.05), and historical yield curve data ($0.03). Full pricing at https://api.mercury402.com/docs/api. Data includes ECDSA signatures for provenance verification. OpenAPI 3.1 spec available at /openapi.json.
 
-Listed on x402scan marketplace with organic agent discovery. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://mercury402.uk/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
+Listed on x402scan marketplace with organic agent discovery. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://api.mercury402.com/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
 ```
 
 ---
@@ -82,21 +82,21 @@ All with cryptographic provenance signatures.
 ```
 Try it in 3 commands:
 
-curl https://mercury402.uk/health
+curl https://api.mercury402.com/health
 
-curl https://mercury402.uk/v1/fred/UNRATE
+curl https://api.mercury402.com/v1/fred/UNRATE
 # Returns 402 + payment instructions
 
-# Pay via x402 → get token → retry
-curl -H "Authorization: Bearer x402_TOKEN" \
-  https://mercury402.uk/v1/fred/UNRATE
+# Pay via x402-compatible client → retry with payment-signature
+curl -H "payment-signature: <base64_x402_payment_payload>" \
+  https://api.mercury402.com/v1/fred/UNRATE
 ```
 
 **Post 5 (CTA):**
 ```
 Built for autonomous agents + AI systems.
 
-🔗 Interactive docs: https://mercury402.uk/docs/api
+🔗 Interactive docs: https://api.mercury402.com/docs/api
 🔗 x402 marketplace: https://x402scan.com/server/mercury402
 🔗 GitHub: [TBD after repo public]
 
@@ -116,10 +116,10 @@ Mercury402 — 14-endpoint finance data server, USDC on Base
 ```
 Hey x402 community! 👋
 
-Just launched Mercury402 (https://mercury402.uk) – a pay-per-call finance data API for autonomous agents. Built it as a real-world x402 implementation and would love feedback from this community.
+Just launched Mercury402 (https://api.mercury402.com) – a pay-per-call finance data API for autonomous agents. Built it as a real-world x402 implementation and would love feedback from this community.
 
 **What it is:**
-Pay-per-call access to Federal Reserve Economic Data (FRED), Treasury yields, and macro indicators. No API keys, no accounts—just x402 payment tokens and USDC on Base.
+Pay-per-call access to Federal Reserve Economic Data (FRED), Treasury yields, and macro indicators. No API keys, no accounts, just x402 payments in USDC on Base.
 
 **Architecture:**
 - Runtime: Node.js + Express
@@ -130,21 +130,13 @@ Pay-per-call access to Federal Reserve Economic Data (FRED), Treasury yields, an
 - OpenAPI: Full spec at /openapi.json + Swagger UI at /docs/api
 
 **x402 Implementation:**
-Currently using base64-encoded JSON tokens (`x402_<base64(payload)>`). Token decoder extracts wallet_address and tx_hash for tracking. On-chain verification via Base RPC is next (Phase 2).
+Mercury production now expects a signed x402 payment payload in the `payment-signature` header. Unsigned manually generated bearer tokens were deprecated because they were replayable.
 
-Token structure I'm seeing from the gateway:
-```json
-{
-  "wallet": "0x...",
-  "tx": "0x...",
-  "merchant": "0xF8d59270cBC746a7593D25b6569812eF1681C6D2",
-  "amount": "20000",
-  "network": "8453",
-  "timestamp": 1772661294410
-}
-```
-
-Is this the standard x402 token format? Or should I expect JWT?
+Current direction:
+- `402 Payment Required` with `Payment-Required` descriptor
+- Client or wallet builds signed payment payload
+- Retry with `payment-signature`
+- Server verifies and redeems once
 
 **Endpoints (14 live):**
 
@@ -188,9 +180,9 @@ Listed on x402scan marketplace with organic agent discovery working pre-announce
 5. **Provenance:** Currently signing all responses with ECDSA. Is this overkill or do agents actually verify signatures?
 
 **Try it:**
-- Swagger UI: https://mercury402.uk/docs/api
+- Swagger UI: https://api.mercury402.com/docs/api
 - x402scan listing: https://www.x402scan.com/server/mercury402
-- Health check: `curl https://mercury402.uk/health`
+- Health check: `curl https://api.mercury402.com/health`
 
 **Code:**
 Planning to open-source once I clean up the repo. Built with Express, ethers.js, axios, js-yaml for OpenAPI. Pretty standard Node stack.
@@ -261,25 +253,25 @@ Designed for autonomous systems that can't manage traditional API credentials. N
 
 **Authentication Method:**
 ```
-x402 Bearer Token
+x402 payment-signature
 
 1. Request data → Receive 402 Payment Required
-2. Pay USDC on Base (chain 8453)
-3. Receive x402 bearer token from payment gateway
-4. Retry request with: Authorization: Bearer x402_<token>
+2. Pay USDC on Base (chain 8453) with an x402-compatible client
+3. Receive or build a signed payment payload
+4. Retry request with: payment-signature: <base64_x402_payment_payload>
 
 No API key required. No account signup. Pay per call.
 ```
 
 **Base URL:**
 ```
-https://mercury402.uk
+https://api.mercury402.com
 ```
 
 **Documentation:**
 ```
-https://mercury402.uk/docs/api (Interactive Swagger UI)
-https://mercury402.uk/openapi.json (OpenAPI 3.1 spec)
+https://api.mercury402.com/docs/api (Interactive Swagger UI)
+https://api.mercury402.com/openapi.json (OpenAPI 3.1 spec)
 ```
 
 ---
@@ -344,7 +336,7 @@ https://github.com/dudman1/mercury402/issues
 
 **Homepage:**
 ```
-https://mercury402.uk
+https://api.mercury402.com
 ```
 
 ---
@@ -380,7 +372,7 @@ Before posting any of these assets, verify:
 7. **EIP-3009 payment facilitator (PAYMENT-SIGNATURE header)** ✅ VERIFIED 2026-03-09
    - Current implementation: Server accepts PAYMENT-SIGNATURE header with base64-encoded EIP-3009 authorization
    - Server submits transferWithAuthorization on-chain, returns tx_hash in response
-   - Fallback: Also accepts x402_<token> bearer tokens for compatibility
+   - Legacy unsigned bearer-token compatibility is deprecated and disabled in production by default
 
 8. **Merchant wallet address** ✅ APPROVED 2026-03-09
    - Confirmed: 0xF8d59270cBC746a7593D25b6569812eF1681C6D2
@@ -504,3 +496,6 @@ After posting, track:
 **Date Generated:** 2026-03-04  
 **Status:** Draft — Review required before posting  
 **Next Step:** Verify all claims, update placeholders, make repo public
+
+---
+*Last updated: 2026-04-20 22:54 ET | Updated by: Forge*
