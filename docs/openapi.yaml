@@ -20,6 +20,7 @@ info:
   contact:
     name: Mercury x402 Support
     url: https://api.mercury402.com
+    email: support@mercury402.com
   license:
     name: Proprietary
   guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay via an x402-compatible client, then retry with the payment-signature header."
