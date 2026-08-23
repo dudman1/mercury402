@@ -426,28 +426,6 @@ const BAZAAR_SCHEMAS = {
   }
 };
 
-// Normalize bazaar schema to validator-expected nesting:
-// extensions.bazaar.schema.properties.{input,output}.properties.*
-function bazaarForEndpoint(endpointPath) {
-  const bz = BAZAAR_SCHEMAS[endpointPath];
-  if (!bz) return null;
-  const norm = JSON.parse(JSON.stringify(bz));
-  if (norm.schema && norm.schema.properties) {
-    const p = norm.schema.properties;
-    const hasExample = p.output && p.output.properties && p.output.properties.example;
-    if (!hasExample) {
-      const ex = norm.info && norm.info.output && norm.info.output.example ? norm.info.output.example : {};
-      p.output = { type: 'object', properties: { example: ex } };
-    }
-    if (p.input && !p.input.properties) p.input = { type: 'object', properties: {} };
-    if (p.input && p.input.properties && !p.input.properties.queryParams && !p.input.properties.body) {
-      p.input.properties.queryParams = { type: 'object', properties: {} };
-    }
-  }
-  return norm;
-}
-
-
 if (!FRED_API_KEY) {
   console.warn('⚠️  FRED_API_KEY not set - FRED endpoint will fail');
 }
@@ -861,7 +839,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   };
 
   // Add Bazaar extensions if schema exists for this endpoint
-  const bazaarSchema = bazaarForEndpoint(endpointPath);
+  const bazaarSchema = BAZAAR_SCHEMAS[endpointPath];
   if (bazaarSchema) {
     paymentRequiredV2.extensions = {
       bazaar: bazaarSchema
@@ -893,21 +871,25 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       payTo: MERCHANT_WALLET,
       maxTimeoutSeconds: 30,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      outputSchema: (() => {
-        const bz = bazaarForEndpoint(endpointPath);
-        const ex = bz && bz.schema && bz.schema.properties && bz.schema.properties.output;
-        const exampleVal = ex && ex.properties && ex.properties.example ? ex.properties.example : {};
-        return {
-          input: bz && bz.info ? bz.info.input : { type: 'http', method: normalizedMethod, discoverable: true },
-          output: { properties: { example: exampleVal } }
-        };
-      })(),
+      outputSchema: {
+        input: {
+          type: 'http',
+          method: normalizedMethod,
+          discoverable: true
+        },
+        output: {
+          input: {
+            type: 'http',
+            method: normalizedMethod,
+            discoverable: true
+          }
+        }
+      },
       extra: {
         name: 'USD Coin',
         version: '2'
       }
-    }],
-    ...(bazaarForEndpoint(endpointPath) ? { extensions: { bazaar: bazaarForEndpoint(endpointPath) } } : {})
+    }]
   };
 }
 
@@ -1212,55 +1194,6 @@ function preValidateTreasuryHistorical(req, res, next) {
 // FRED ENDPOINT
 // ============================================
 
-// ---- Pre-payment FRED series validation ------------------------------------
-// Prevents charging buyers for invalid series ids: the guard runs BEFORE the
-// 402 challenge, so garbage requests get a clean 400 and no money moves.
-const seriesValidationCache = new Map(); // seriesId -> { valid, expires }
-const SERIES_CACHE_TTL = { valid: 24 * 60 * 60 * 1000, invalid: 60 * 60 * 1000 };
-
-async function isValidFredSeries(seriesId) {
-  // FRED ids are uppercase alphanumerics/underscores (e.g. CPIAUCSL, DGS10)
-  if (!seriesId || !/^[A-Z0-9_]{1,20}$/.test(seriesId)) return false;
-  const hit = seriesValidationCache.get(seriesId);
-  const now = Date.now();
-  if (hit && hit.expires > now) return hit.valid;
-  try {
-    const resp = await fredLimit.run(() => axios.get('https://api.stlouisfed.org/fred/series', {
-      params: { api_key: FRED_API_KEY, series_id: seriesId, file_type: 'json' },
-      timeout: 5000
-    }));
-    const valid = resp.status === 200 && Array.isArray(resp.data.seriess) && resp.data.seriess.length > 0;
-    seriesValidationCache.set(seriesId, { valid, expires: now + (valid ? SERIES_CACHE_TTL.valid : SERIES_CACHE_TTL.invalid) });
-    return valid;
-  } catch (err) {
-    if (err.response && err.response.status === 400) {
-      // FRED explicitly rejected the id -> definitively invalid
-      seriesValidationCache.set(seriesId, { valid: false, expires: now + SERIES_CACHE_TTL.invalid });
-      return false;
-    }
-    // FRED outage/rate-limit: fail OPEN so paying buyers are never blocked by our guard
-    return true;
-  }
-}
-
-async function fredSeriesGuard(req, res, next) {
-  try {
-    if (!(await isValidFredSeries(req.params.series_id))) {
-      return res.status(400).json({
-        error: {
-          code: 'INVALID_SERIES',
-          message: `Unknown FRED series "${req.params.series_id}". No payment was requested. Browse valid series ids at https://fred.stlouisfed.org/`,
-          series_id: req.params.series_id,
-          charged: false
-        }
-      });
-    }
-    next();
-  } catch (e) {
-    next(); // guard must never take down the revenue path
-  }
-}
-
 async function fetchFredData(seriesId, params) {
   // Generate cache key
   const cacheKey = getCacheKey(`fred:${seriesId}`, params);
@@ -1343,7 +1276,7 @@ function generateProvenance(data, seriesId, params) {
 // single-point price. Previously the middleware charged the base price
 // while the handler internally computed 2×, letting callers pay for 1
 // observation and receive an unbounded window.
-app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', (req) => {
   const basePrice = getPrice('/v1/fred/{series_id}');
   const isRange = req.query && req.query.observation_start && req.query.observation_end;
   return isRange ? basePrice * 2 : basePrice;
@@ -2272,24 +2205,7 @@ app.get('/.well-known/x402', (req, res) => {
           path: endpoint,
           method: method,
           price_usd: price
-        },
-        // Bazaar discovery metadata — required by x402scan/Bazaar validators
-        ...(bazaarForEndpoint(endpoint)
-          ? { extensions: { bazaar: bazaarForEndpoint(endpoint) } }
-          : {
-              extensions: {
-                bazaar: {
-                  info: { input: { type: 'http', method: method } },
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      input: { type: 'object', properties: { queryParams: { type: 'object', properties: {} } } },
-                      output: { type: 'object', properties: { example: { source: 'mercury402', endpoint: endpoint, description: ENDPOINT_DESCRIPTIONS[endpoint] || '' } } }
-                    }
-                  }
-                }
-              }
-            })
+        }
       };
     });
   

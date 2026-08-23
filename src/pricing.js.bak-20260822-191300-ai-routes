@@ -5,10 +5,6 @@
 // making them unpurchasable via Bankr. All sub-$0.05 prices raised to $0.05.
 
 const PRICING = {
-  // ── AI endpoints (ox-alpha via OpenRouter) ──
-  '/v1/ai/briefing':                    0.10,
-  '/v1/ai/ask':                         0.15,
-
   // FRED series (must be explicit for x402 manifest discovery)
   // WAS: $0.01 — raised to meet Bankr $0.05 minimum
   '/v1/fred/{series_id}': 0.05,

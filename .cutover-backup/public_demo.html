@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mercury x402 Payment Flow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0a1628 0%, #0d2147 40%, #1a3a7a 70%, #2563eb 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      color: #fff;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #94a3b8;
+      font-size: 18px;
+    }
+
+    .flow-container {
+      background: rgba(10, 14, 26, 0.6);
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      border-radius: 16px;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 32px;
+      opacity: 0;
+      transform: translateX(-30px);
+      transition: all 0.6s ease;
+    }
+
+    .step.active {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .step-1 .step-number { background: rgba(37, 99, 235, 0.3); color: #60a5fa; }
+    .step-2 .step-number { background: rgba(234, 179, 8, 0.3); color: #facc15; }
+    .step-3 .step-number { background: rgba(168, 85, 247, 0.3); color: #c084fc; }
+    .step-4 .step-number { background: rgba(34, 197, 94, 0.3); color: #4ade80; }
+    .step-5 .step-number { background: rgba(34, 197, 94, 0.3); color: #4ade80; }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .step-detail {
+      font-size: 14px;
+      color: #94a3b8;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .arrow {
+      text-align: center;
+      font-size: 24px;
+      color: #60a5fa;
+      margin: -16px 0;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .arrow.active {
+      opacity: 1;
+    }
+
+    .code-block {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      color: #93c5fd;
+      opacity: 0;
+      transform: scale(0.95);
+      transition: all 0.4s ease;
+    }
+
+    .code-block.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .highlight {
+      color: #facc15;
+      font-weight: 600;
+    }
+
+    .success {
+      color: #4ade80;
+      font-weight: 600;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 32px;
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    .footer a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: #93c5fd;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .step.active .step-number {
+      animation: pulse 2s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>x402 Payment Flow</h1>
+      <p>How Mercury processes requests</p>
+    </div>
+
+    <div class="flow-container">
+      <div class="step step-1" id="step1">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <div class="step-title">Client sends GET request</div>
+          <div class="step-detail">Agent requests Treasury yield curve data</div>
+          <div class="code-block" id="code1">
+            GET /v1/treasury/yield-curve/daily-snapshot
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow" id="arrow1">↓</div>
+
+      <div class="step step-2" id="step2">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <div class="step-title">Server returns 402 Payment Required</div>
+          <div class="step-detail">Payment terms included in response</div>
+          <div class="code-block" id="code2">
+            HTTP/2 <span class="highlight">402</span><br>
+            amount: "10000" // $0.01 USDC<br>
+            payTo: "0xf8d5...81c6d2"
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow" id="arrow2">↓</div>
+
+      <div class="step step-3" id="step3">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <div class="step-title">Client signs USDC authorization</div>
+          <div class="step-detail">EIP-3009 signature on Base mainnet</div>
+          <div class="code-block" id="code3">
+            network: "eip155:8453" // Base<br>
+            asset: "USDC"<br>
+            signature: "0x..."
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow" id="arrow3">↓</div>
+
+      <div class="step step-4" id="step4">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <div class="step-title">Client replays request with proof</div>
+          <div class="step-detail">Same endpoint, now with payment signature</div>
+          <div class="code-block" id="code4">
+            GET /v1/treasury/yield-curve/daily-snapshot<br>
+            payment-signature: "0x..."
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow" id="arrow4">↓</div>
+
+      <div class="step step-5" id="step5">
+        <div class="step-number">5</div>
+        <div class="step-content">
+          <div class="step-title">Server returns 200 OK + data</div>
+          <div class="step-detail">Deterministic JSON snapshot</div>
+          <div class="code-block" id="code5">
+            HTTP/2 <span class="success">200</span><br>
+            { "curve_date": "2026-02-10",<br>
+            &nbsp;&nbsp;"rates": {...} }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>One request. One microtransaction. Immutable data.</p>
+      <p><a href="https://mercury402.uk" target="_blank">mercury402.uk</a></p>
+    </div>
+  </div>
+
+  <script>
+    const steps = [
+      { step: 'step1', code: 'code1', arrow: null, delay: 0 },
+      { step: null, code: null, arrow: 'arrow1', delay: 800 },
+      { step: 'step2', code: 'code2', arrow: null, delay: 1200 },
+      { step: null, code: null, arrow: 'arrow2', delay: 2000 },
+      { step: 'step3', code: 'code3', arrow: null, delay: 2400 },
+      { step: null, code: null, arrow: 'arrow3', delay: 3200 },
+      { step: 'step4', code: 'code4', arrow: null, delay: 3600 },
+      { step: null, code: null, arrow: 'arrow4', delay: 4400 },
+      { step: 'step5', code: 'code5', arrow: null, delay: 4800 },
+    ];
+
+    function animate() {
+      document.querySelectorAll('.step, .arrow, .code-block').forEach(el => {
+        el.classList.remove('active');
+      });
+
+      steps.forEach(({ step, code, arrow, delay }) => {
+        setTimeout(() => {
+          if (step) document.getElementById(step).classList.add('active');
+          if (code) {
+            setTimeout(() => {
+              document.getElementById(code).classList.add('active');
+            }, 200);
+          }
+          if (arrow) document.getElementById(arrow).classList.add('active');
+        }, delay);
+      });
+
+      setTimeout(animate, 7000);
+    }
+
+    window.addEventListener('load', () => {
+      setTimeout(animate, 500);
+    });
+  </script>
+</body>
+</html>

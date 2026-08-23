@@ -1,1 +1,7 @@
-{"last_check_ts": 1773363767332, "last_milestone_amount": 0.02, "note": "Revenue $0.02, next milestone $0.50. No change since 11:32 AM."}
+{
+  "last_check_ts": 1777533160434,
+  "last_milestone_amount": 1.0,
+  "note": "Revenue $1.95 verified (17 calls, 4 customers). Last milestone $1 crossed. Next milestone: $5.",
+  "last heartbeat check": "2026-04-20T01:43:47.810482+00:00",
+  "lastMilestone": 1
+}

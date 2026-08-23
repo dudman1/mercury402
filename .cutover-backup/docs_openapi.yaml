@@ -19,7 +19,7 @@ info:
     
   contact:
     name: Mercury x402 Support
-    url: https://api.mercury402.com
+    url: https://mercury402.uk
   license:
     name: Proprietary
   guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay via an x402-compatible client, then retry with the payment-signature header."
@@ -28,7 +28,7 @@ x-discovery:
   ownershipProofs: []
 
 servers:
-  - url: https://api.mercury402.com
+  - url: https://mercury402.uk
     description: Production
   - url: http://localhost:4020
     description: Local development
@@ -69,13 +69,11 @@ paths:
         Browse all series: https://fred.stlouisfed.org/
       operationId: getFredSeries
       x-payment-info:
-        price:
-          currency: USD
-          mode: dynamic
-          min: "0.05"
-          max: "0.10"
+        pricingMode: fixed
+        price: "0.010000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [FRED]
       security:
         - x402PaymentSignature: []
@@ -213,12 +211,11 @@ paths:
         **Data quality:** Returns 404 if fewer than 5 maturities available.
       operationId: getTreasuryYieldCurve
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.020000"
+        pricingMode: fixed
+        price: "0.020000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Treasury]
       security:
         - x402PaymentSignature: []
@@ -338,12 +335,11 @@ paths:
         Returns latest observation for each series.
       operationId: getEconomicDashboard
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.500000"
+        pricingMode: fixed
+        price: "0.500000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Composite]
       security:
         - x402PaymentSignature: []
@@ -406,12 +402,11 @@ paths:
         - CPILFESL (Core CPI - Less Food & Energy)
       operationId: getInflationTracker
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.400000"
+        pricingMode: fixed
+        price: "0.400000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Composite]
       security:
         - x402PaymentSignature: []
@@ -472,12 +467,11 @@ paths:
         - PAYEMS (Total Nonfarm Payrolls)
       operationId: getLaborMarket
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.400000"
+        pricingMode: fixed
+        price: "0.400000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Composite]
       security:
         - x402PaymentSignature: []
@@ -546,12 +540,11 @@ paths:
         - UMCSENT: Consumer Sentiment Index
       operationId: getMacroSnapshot
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.050000"
+        pricingMode: fixed
+        price: "0.050000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Composite]
       security:
         - x402PaymentSignature: []
@@ -632,12 +625,11 @@ paths:
         - start_date must be before end_date
       operationId: getTreasuryHistorical
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.050000"
+        pricingMode: fixed
+        price: "0.050000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Treasury]
       security:
         - x402PaymentSignature: []
@@ -757,12 +749,11 @@ paths:
         **Note:** Uses FRED HQM series as proxy for actual auction data.
       operationId: getTreasuryAuctions
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.020000"
+        pricingMode: fixed
+        price: "0.020000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Treasury]
       security:
         - x402PaymentSignature: []
@@ -842,12 +833,11 @@ paths:
         - 30-Year (DFII30)
       operationId: getTreasuryTIPS
       x-payment-info:
-        price:
-          currency: USD
-          mode: fixed
-          amount: "0.020000"
+        pricingMode: fixed
+        price: "0.020000"
         protocols:
-          - x402: {}
+          - x402
+          - mpp
       tags: [Treasury]
       security:
         - x402PaymentSignature: []

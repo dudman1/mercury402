@@ -426,28 +426,6 @@ const BAZAAR_SCHEMAS = {
   }
 };
 
-// Normalize bazaar schema to validator-expected nesting:
-// extensions.bazaar.schema.properties.{input,output}.properties.*
-function bazaarForEndpoint(endpointPath) {
-  const bz = BAZAAR_SCHEMAS[endpointPath];
-  if (!bz) return null;
-  const norm = JSON.parse(JSON.stringify(bz));
-  if (norm.schema && norm.schema.properties) {
-    const p = norm.schema.properties;
-    const hasExample = p.output && p.output.properties && p.output.properties.example;
-    if (!hasExample) {
-      const ex = norm.info && norm.info.output && norm.info.output.example ? norm.info.output.example : {};
-      p.output = { type: 'object', properties: { example: ex } };
-    }
-    if (p.input && !p.input.properties) p.input = { type: 'object', properties: {} };
-    if (p.input && p.input.properties && !p.input.properties.queryParams && !p.input.properties.body) {
-      p.input.properties.queryParams = { type: 'object', properties: {} };
-    }
-  }
-  return norm;
-}
-
-
 if (!FRED_API_KEY) {
   console.warn('⚠️  FRED_API_KEY not set - FRED endpoint will fail');
 }
@@ -853,7 +831,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
       }
     }],
     resource: {
-      url: `https://api.mercury402.com${resolvedPath}`,
+      url: `https://mercury402.uk${resolvedPath}`,
       method: method.toUpperCase(),
       description: 'Deterministic financial data from official sources',
       mimeType: 'application/json'
@@ -861,7 +839,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   };
 
   // Add Bazaar extensions if schema exists for this endpoint
-  const bazaarSchema = bazaarForEndpoint(endpointPath);
+  const bazaarSchema = BAZAAR_SCHEMAS[endpointPath];
   if (bazaarSchema) {
     paymentRequiredV2.extensions = {
       bazaar: bazaarSchema
@@ -887,27 +865,31 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       scheme: 'exact',
       network: 'base',
       maxAmountRequired: amount,
-      resource: `https://api.mercury402.com${resolvedPath}`,
+      resource: `https://mercury402.uk${resolvedPath}`,
       description,
       mimeType: 'application/json',
       payTo: MERCHANT_WALLET,
       maxTimeoutSeconds: 30,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      outputSchema: (() => {
-        const bz = bazaarForEndpoint(endpointPath);
-        const ex = bz && bz.schema && bz.schema.properties && bz.schema.properties.output;
-        const exampleVal = ex && ex.properties && ex.properties.example ? ex.properties.example : {};
-        return {
-          input: bz && bz.info ? bz.info.input : { type: 'http', method: normalizedMethod, discoverable: true },
-          output: { properties: { example: exampleVal } }
-        };
-      })(),
+      outputSchema: {
+        input: {
+          type: 'http',
+          method: normalizedMethod,
+          discoverable: true
+        },
+        output: {
+          input: {
+            type: 'http',
+            method: normalizedMethod,
+            discoverable: true
+          }
+        }
+      },
       extra: {
         name: 'USD Coin',
         version: '2'
       }
-    }],
-    ...(bazaarForEndpoint(endpointPath) ? { extensions: { bazaar: bazaarForEndpoint(endpointPath) } } : {})
+    }]
   };
 }
 
@@ -1212,55 +1194,6 @@ function preValidateTreasuryHistorical(req, res, next) {
 // FRED ENDPOINT
 // ============================================
 
-// ---- Pre-payment FRED series validation ------------------------------------
-// Prevents charging buyers for invalid series ids: the guard runs BEFORE the
-// 402 challenge, so garbage requests get a clean 400 and no money moves.
-const seriesValidationCache = new Map(); // seriesId -> { valid, expires }
-const SERIES_CACHE_TTL = { valid: 24 * 60 * 60 * 1000, invalid: 60 * 60 * 1000 };
-
-async function isValidFredSeries(seriesId) {
-  // FRED ids are uppercase alphanumerics/underscores (e.g. CPIAUCSL, DGS10)
-  if (!seriesId || !/^[A-Z0-9_]{1,20}$/.test(seriesId)) return false;
-  const hit = seriesValidationCache.get(seriesId);
-  const now = Date.now();
-  if (hit && hit.expires > now) return hit.valid;
-  try {
-    const resp = await fredLimit.run(() => axios.get('https://api.stlouisfed.org/fred/series', {
-      params: { api_key: FRED_API_KEY, series_id: seriesId, file_type: 'json' },
-      timeout: 5000
-    }));
-    const valid = resp.status === 200 && Array.isArray(resp.data.seriess) && resp.data.seriess.length > 0;
-    seriesValidationCache.set(seriesId, { valid, expires: now + (valid ? SERIES_CACHE_TTL.valid : SERIES_CACHE_TTL.invalid) });
-    return valid;
-  } catch (err) {
-    if (err.response && err.response.status === 400) {
-      // FRED explicitly rejected the id -> definitively invalid
-      seriesValidationCache.set(seriesId, { valid: false, expires: now + SERIES_CACHE_TTL.invalid });
-      return false;
-    }
-    // FRED outage/rate-limit: fail OPEN so paying buyers are never blocked by our guard
-    return true;
-  }
-}
-
-async function fredSeriesGuard(req, res, next) {
-  try {
-    if (!(await isValidFredSeries(req.params.series_id))) {
-      return res.status(400).json({
-        error: {
-          code: 'INVALID_SERIES',
-          message: `Unknown FRED series "${req.params.series_id}". No payment was requested. Browse valid series ids at https://fred.stlouisfed.org/`,
-          series_id: req.params.series_id,
-          charged: false
-        }
-      });
-    }
-    next();
-  } catch (e) {
-    next(); // guard must never take down the revenue path
-  }
-}
-
 async function fetchFredData(seriesId, params) {
   // Generate cache key
   const cacheKey = getCacheKey(`fred:${seriesId}`, params);
@@ -1343,7 +1276,7 @@ function generateProvenance(data, seriesId, params) {
 // single-point price. Previously the middleware charged the base price
 // while the handler internally computed 2×, letting callers pay for 1
 // observation and receive an unbounded window.
-app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', (req) => {
   const basePrice = getPrice('/v1/fred/{series_id}');
   const isRange = req.query && req.query.observation_start && req.query.observation_end;
   return isRange ? basePrice * 2 : basePrice;
@@ -2210,23 +2143,6 @@ const NEW_ENDPOINT_META = registerNewRoutes(app, {
 });
 
 // ============================================
-// AI ROUTES — ox-alpha powered (2026-08-22)
-// ============================================
-const { registerAiRoutes } = require("./ai-routes");
-const AI_ENDPOINT_META = registerAiRoutes(app, {
-  require402Payment,
-  getPrice,
-  fetchFredData,
-  generateProvenance,
-  getCacheKey,
-  getCached,
-  setCache,
-  CACHE_TTL,
-  FRED_SERIES
-});
-Object.assign(NEW_ENDPOINT_META, AI_ENDPOINT_META);
-
-// ============================================
 // DISCOVERY & HEALTH
 // ============================================
 
@@ -2272,29 +2188,12 @@ app.get('/.well-known/x402', (req, res) => {
           path: endpoint,
           method: method,
           price_usd: price
-        },
-        // Bazaar discovery metadata — required by x402scan/Bazaar validators
-        ...(bazaarForEndpoint(endpoint)
-          ? { extensions: { bazaar: bazaarForEndpoint(endpoint) } }
-          : {
-              extensions: {
-                bazaar: {
-                  info: { input: { type: 'http', method: method } },
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      input: { type: 'object', properties: { queryParams: { type: 'object', properties: {} } } },
-                      output: { type: 'object', properties: { example: { source: 'mercury402', endpoint: endpoint, description: ENDPOINT_DESCRIPTIONS[endpoint] || '' } } }
-                    }
-                  }
-                }
-              }
-            })
+        }
       };
     });
   
   // Build resources array for x402scan v1 compatibility
-  const BASE_URL = 'https://api.mercury402.com';
+  const BASE_URL = 'https://mercury402.uk';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2394,7 +2293,7 @@ app.get('/.well-known/x402-agentcash', (req, res) => {
   const { PRICING } = require('./pricing');
   
   // Build resources array (v1 format) — flat list of full URLs
-  const BASE_URL = 'https://api.mercury402.com';
+  const BASE_URL = 'https://mercury402.uk';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2426,13 +2325,13 @@ No API keys required. Payment flow:
 
 ## Base URL
 
-https://api.mercury402.com
+https://mercury402.uk
 
 All endpoints are relative to this base URL.
 
 ## Agent Workflow
 
-1. Use \`mcp__agentcash__discover_api_endpoints("https://api.mercury402.com")\` to see available endpoints and pricing.
+1. Use \`mcp__agentcash__discover_api_endpoints("https://mercury402.uk")\` to see available endpoints and pricing.
 2. For POST/PUT/PATCH endpoints, call \`mcp__agentcash__check_endpoint_schema\` to confirm request schema before first fetch.
 3. Execute with \`mcp__agentcash__fetch(url, method="GET")\`.
 
@@ -2453,51 +2352,51 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 
 **Named endpoints:** CPI, PCE, unemployment-rate, nonfarm-payrolls, fed-funds-rate, housing-starts, m2-money-stock, consumer-confidence, retail-sales, trade-balance, vix, and 41 more. See /v1/fred/{series_id} in API discovery.
 
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/fred/UNRATE", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/fred/UNRATE", method="GET")\`
 **Response:** JSON with series data, observations, and cryptographic signature
 
 ### GET /v1/treasury/auction-results/recent
 **Price:** $0.05
 **Description:** Recent U.S. Treasury auction results
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/auction-results/recent", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/auction-results/recent", method="GET")\`
 
 ### GET /v1/treasury/tips-rates/current
 **Price:** $0.05
 **Description:** Current TIPS rates (5, 7, 10, 20, 30-year)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/tips-rates/current", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/tips-rates/current", method="GET")\`
 
 ### GET /v1/treasury/yield-curve/daily-snapshot
 **Price:** $0.05
 **Description:** U.S. Treasury yield curve snapshot (11 maturities, FRED-sourced)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
 **Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
 
 ### POST /v1/treasury/yield-curve/historical
 **Price:** $0.05
 **Description:** Historical yield curve data (max 90-day range)
 **JSON body:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
 
 ### GET /v1/macro/snapshot/all
 **Price:** $0.05
 **Description:** Complete macro snapshot (GDP, CPI, UNRATE, yields, VIX)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/macro/snapshot/all", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/macro/snapshot/all", method="GET")\`
 **Response:** Multi-series bundle with provenance
 
 ### GET /v1/composite/inflation-tracker
 **Price:** $0.40
 **Description:** Inflation metrics bundle (CPI, PCE, Core CPI)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/inflation-tracker", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/inflation-tracker", method="GET")\`
 
 ### GET /v1/composite/labor-market
 **Price:** $0.40
 **Description:** Labor market health (Unemployment, Jobless Claims, Nonfarm Payrolls)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/labor-market", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/labor-market", method="GET")\`
 
 ### GET /v1/composite/economic-dashboard
 **Price:** $0.50
 **Description:** Economic overview (GDP, CPI, Unemployment in one call)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/economic-dashboard", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/economic-dashboard", method="GET")\`
 
 ## Data Provenance
 
@@ -2565,7 +2464,7 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
 
 ## Documentation
 
-- Swagger UI: https://api.mercury402.com/docs
+- Swagger UI: https://mercury402.uk/docs
 - GitHub: https://github.com/dudman1/mercury402
 - x402scan: https://x402scan.com/server/mercury402
 `
@@ -2854,9 +2753,9 @@ const JSON_MANIFEST = {
     }
   },
   docs: {
-    quickstart: 'https://api.mercury402.com/docs',
-    apiReference: 'https://api.mercury402.com/docs/api',
-    openapi: 'https://api.mercury402.com/openapi.json'
+    quickstart: 'https://mercury402.uk/docs',
+    apiReference: 'https://mercury402.uk/docs/api',
+    openapi: 'https://mercury402.uk/openapi.json'
   }
 };
 
@@ -2870,12 +2769,12 @@ const LANDING_HTML = `<!DOCTYPE html>
 <meta name="keywords" content="AI agents, micropayments, HTTP 402, USDC, Base, financial API, payment-native data, x402">
 <meta property="og:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta property="og:description" content="Payment-native financial data with HTTP 402 enforcement and on-chain USDC settlement. View demo of payment flow.">
-<meta property="og:image" content="https://api.mercury402.com/payment-flow-preview.png">
-<meta property="og:url" content="https://api.mercury402.com/">
+<meta property="og:image" content="https://mercury402.uk/payment-flow-preview.png">
+<meta property="og:url" content="https://mercury402.uk/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta name="twitter:description" content="Payment-native financial data via HTTP 402 micropayments with on-chain USDC settlement.">
-<meta name="twitter:image" content="https://api.mercury402.com/payment-flow-preview.png">
+<meta name="twitter:image" content="https://mercury402.uk/payment-flow-preview.png">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;background:radial-gradient(circle at 20% 0%,rgba(31,111,235,0.15),transparent 40%),radial-gradient(circle at 80% 100%,rgba(56,139,253,0.12),transparent 40%),#0d1117;color:#e6edf3;min-height:100vh;padding:3rem 1rem}
@@ -3029,7 +2928,7 @@ const DOCS_HTML = `<!DOCTYPE html>
   <p>Mercury exposes financial time-series data (FRED, U.S. Treasury) via HTTP endpoints protected by the x402 micropayment standard. Each call costs a small amount of USDC on Base (chain 8453). No API keys. No subscriptions. Every response carries a cryptographic provenance signature.</p>
 
   <h2>Step 1 — Make an unpaid request (see the 402)</h2>
-  <pre><code>curl -i https://api.mercury402.com/v1/fred/UNRATE</code></pre>
+  <pre><code>curl -i https://mercury402.uk/v1/fred/UNRATE</code></pre>
   <p>You will get back <code>HTTP 402 Payment Required</code> with a <code>Payment-Required</code> header containing a base64url-encoded payment descriptor:</p>
   <pre><code>HTTP/2 402
 Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
@@ -3051,9 +2950,9 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
   <p>Use the descriptor from <code>Payment-Required</code> to create a signed x402 payment payload. Mercury production now expects that payload in the <code>payment-signature</code> header. Legacy manually generated bearer tokens are deprecated.</p>
 
   <h2>Step 3 — Retry with <code>payment-signature</code></h2>
-  <pre><code>curl https://api.mercury402.com/v1/fred/UNRATE \\
+  <pre><code>curl https://mercury402.uk/v1/fred/UNRATE \\
   -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
-  <pre><code>curl https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot \\
+  <pre><code>curl https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot \\
   -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
 
   <h2>Payment details</h2>
@@ -3071,7 +2970,7 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
   Composite dashboards (economic, inflation, labor) — <strong>$0.40–$0.50</strong></p>
 
   <h2>Discovery</h2>
-  <pre><code>curl https://api.mercury402.com/.well-known/x402 | jq .</code></pre>
+  <pre><code>curl https://mercury402.uk/.well-known/x402 | jq .</code></pre>
 
   <h2>SDK Examples</h2>
   <p>Full copy-paste examples for Node.js and Python: <a href="/sdk-examples">SDK Examples</a></p>

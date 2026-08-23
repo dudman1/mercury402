@@ -1,3 +1,5 @@
+> Historical note (2026-04-20): This file contains archived launch/research/test material from before the payment hardening pass. Current production Mercury uses the `payment-signature` flow. Unsigned `Authorization: Bearer x402_...` and `x402_test` examples here are historical unless explicitly marked otherwise.
+
 # x402 Token Format Research
 
 ## Current State
@@ -257,3 +259,5 @@ return {
 ---
 
 **END OF RESEARCH**
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*
