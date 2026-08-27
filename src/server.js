@@ -1238,8 +1238,12 @@ async function isValidFredSeries(seriesId) {
       seriesValidationCache.set(seriesId, { valid: false, expires: now + SERIES_CACHE_TTL.invalid });
       return false;
     }
-    // FRED outage/rate-limit: fail OPEN so paying buyers are never blocked by our guard
-    return true;
+    // FRED outage/rate-limit: fail CLOSED so we never charge a buyer for a
+    // request we can't validate. Guard translates this into a 503 with
+    // Retry-After so no payment attempt is made.
+    const e = new Error('FRED unreachable at guard time');
+    e.code = 'FRED_UNREACHABLE';
+    throw e;
   }
 }
 
@@ -1262,6 +1266,17 @@ async function fredSeriesGuard(req, res, next) {
     }
     next();
   } catch (e) {
+    if (e && e.code === 'FRED_UNREACHABLE') {
+      res.set('Retry-After', '30');
+      return res.status(503).json({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Unable to validate series against FRED right now. Retry shortly.',
+          series_id: req.params.series_id,
+          charged: false
+        }
+      });
+    }
     next(); // guard must never take down the revenue path
   }
 }
@@ -1434,23 +1449,55 @@ app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{ser
 
   } catch (error) {
     console.error('FRED endpoint error:', error.message);
-    
-    if (error.response?.status === 404) {
+
+    const upstreamStatus = error.response?.status;
+    const series_id = req.params.series_id;
+    const charged = res.locals.paymentMeta?.verified === true;
+
+    // FRED returns 400 for unknown series ids (e.g. "CPI" instead of "CPIAUCSL").
+    // If we reach here it means the pre-payment guard let it through (FRED was
+    // unreachable at guard time and it failed open). Surface as 404 to the client.
+    if (upstreamStatus === 404 || upstreamStatus === 400) {
       return res.status(404).json({
         error: {
           code: 'SERIES_NOT_FOUND',
-          message: `Series '${req.params.series_id}' not found in FRED database`,
-          series_id: req.params.series_id
+          message: `Series '${series_id}' not found in FRED database`,
+          series_id,
+          charged
         }
       });
     }
 
-    if (error.response?.status === 429) {
+    if (upstreamStatus === 429) {
       return res.status(429).json({
         error: {
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'FRED API rate limit exceeded, try again in 60 seconds',
-          retry_after: 60
+          retry_after: 60,
+          charged
+        }
+      });
+    }
+
+    // Upstream FRED failure (5xx, timeout, network error) after payment was
+    // verified. Return 502 so the client knows this was a gateway issue and
+    // the paid resource is temporarily unavailable — not a bug in their request.
+    // Constrained to axios-originating errors so bugs inside the handler still
+    // surface as 500 INTERNAL_ERROR instead of being masked as gateway failures.
+    const isUpstreamFailure =
+      (upstreamStatus && upstreamStatus >= 500) ||
+      (error.isAxiosError && !error.response) ||
+      ['ECONNABORTED', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(error.code);
+
+    if (isUpstreamFailure) {
+      return res.status(502).json({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: `FRED upstream is currently unavailable. Please retry.`,
+          series_id,
+          upstream_status: upstreamStatus || null,
+          upstream_error_code: error.code || null,
+          charged
         }
       });
     }
@@ -1458,7 +1505,9 @@ app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{ser
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: error.message
+        message: error.message,
+        series_id,
+        charged
       }
     });
   }
@@ -2577,6 +2626,33 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
   });
 });
 
+// ---- Facilitator wallet ETH balance monitoring -----------------------------
+// Cached because /metrics is polled frequently; refreshed on a 5-minute timer
+// so a scrape never hits the RPC. On startup we log once + WARN if below the
+// 0.0005 ETH threshold. On RPC failure we return null (no throw).
+let facilitatorEthCache = { balance: null, low: null, ts: 0 };
+const FACILITATOR_ETH_LOW_THRESHOLD = 0.0005;
+
+async function refreshFacilitatorEthBalance() {
+  if (!signingWallet) return;
+  try {
+    const provider = new ethers.JsonRpcProvider(
+      process.env.BASE_RPC_URL,
+      { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
+    );
+    const balanceWei = await provider.getBalance(signingWallet.address);
+    const balanceEth = parseFloat(ethers.formatEther(balanceWei));
+    facilitatorEthCache = {
+      balance: balanceEth.toFixed(6),
+      low: balanceEth < FACILITATOR_ETH_LOW_THRESHOLD,
+      ts: Date.now()
+    };
+  } catch (e) {
+    console.error('Facilitator ETH balance check failed:', e.message);
+    facilitatorEthCache = { balance: null, low: null, ts: Date.now() };
+  }
+}
+
 // Aggregate metrics from access log
 function getMetricsFromLog() {
   try {
@@ -2618,20 +2694,39 @@ function getMetricsFromLog() {
     const now = Date.now();
     const last24h = now - (24 * 60 * 60 * 1000);
 
-    // Totals
+    // Totals (raw — includes unauthenticated 402 probes)
     const total_revenue_usd = entries.reduce((sum, e) => sum + (e.price_usd || 0), 0);
     const total_calls = entries.length;
-    
+
+    // Breakdown: separate real paid traffic from bot probes so revenue-vs-noise
+    // is visible at a glance. A "paid" call is one where the payment middleware
+    // set verified: true — meaning USDC transfer to the merchant was confirmed
+    // on-chain. Everything else with status 402 is an unauthenticated probe.
+    const paid_calls = entries.filter(e => e.verified === true).length;
+    const paid_success_200 = entries.filter(e => e.verified === true && e.status === 200).length;
+    const paid_error_4xx = entries.filter(e => e.verified === true && e.status >= 400 && e.status < 500).length;
+    const paid_error_5xx = entries.filter(e => e.verified === true && e.status >= 500 && e.status < 600).length;
+    const unauthenticated_402 = entries.filter(e => e.status === 402).length;
+
+    // Revenue is only counted on verified paid calls. price_usd is 0 for 402s
+    // already, but be explicit so the number isn't sensitive to future logging
+    // changes.
+    const revenue_usd = entries
+      .filter(e => e.verified === true)
+      .reduce((sum, e) => sum + (e.price_usd || 0), 0);
+
     // Unique buyers (non-null wallet addresses)
     const uniqueWallets = new Set(
       entries.filter(e => e.wallet_address).map(e => e.wallet_address)
     );
     const unique_buyers = uniqueWallets.size;
 
-    // Last 24h
+    // Last 24h (raw + paid breakdown)
     const recent = entries.filter(e => e.timestamp >= last24h);
     const calls_last_24h = recent.length;
     const revenue_last_24h_usd = recent.reduce((sum, e) => sum + (e.price_usd || 0), 0);
+    const paid_calls_last_24h = recent.filter(e => e.verified === true).length;
+    const unauthenticated_402_last_24h = recent.filter(e => e.status === 402).length;
 
     // Top endpoints
     const endpointStats = {};
@@ -2679,15 +2774,26 @@ function getMetricsFromLog() {
 
     return {
       total_revenue_usd: parseFloat(total_revenue_usd.toFixed(2)),
-      total_calls,
+      total_calls, // includes 402 rejections; kept for backward compat
+      // Breakdown of total_calls into real paid traffic vs. unauthenticated probes.
+      paid_calls,
+      paid_success_200,
+      paid_error_4xx,
+      paid_error_5xx,
+      unauthenticated_402,
+      revenue_usd: parseFloat(revenue_usd.toFixed(2)),
       unique_buyers, // Legacy field (IP-based from old implementation)
       unique_wallets, // New field (wallet_address-based)
       calls_last_24h,
+      paid_calls_last_24h,
+      unauthenticated_402_last_24h,
       revenue_last_24h_usd: parseFloat(revenue_last_24h_usd.toFixed(2)),
       top_endpoints,
       verified_payment_rate_pct,
       bridge_verified_pct,
-      wallet_source_breakdown: walletSourceCounts
+      wallet_source_breakdown: walletSourceCounts,
+      facilitator_eth_balance: facilitatorEthCache.balance,
+      facilitator_eth_low: facilitatorEthCache.low
     };
   } catch (e) {
     console.error('Failed to read metrics from log:', e.message);
@@ -2699,6 +2805,8 @@ function getMetricsFromLog() {
       revenue_last_24h_usd: 0,
       top_endpoints: [],
       verified_payment_rate_pct: 0,
+      facilitator_eth_balance: facilitatorEthCache.balance,
+      facilitator_eth_low: facilitatorEthCache.low,
       error: e.message
     };
   }
@@ -3260,6 +3368,28 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`   FRED API: ${FRED_API_KEY ? '✅' : '❌'} configured`);
   console.log(`   Signing: ${signingWallet ? '✅ ' + signingWallet.address : '❌ not configured'}`);
   console.log('');
+
+  // Facilitator ETH balance: log once at startup, refresh every 5 minutes,
+  // WARN if below threshold. Same key as signingWallet — it's also the
+  // wallet that pays gas for transferWithAuthorization settlements.
+  if (signingWallet) {
+    refreshFacilitatorEthBalance().then(() => {
+      const { balance, low } = facilitatorEthCache;
+      if (balance !== null) {
+        console.log(`✅ Facilitator ETH balance: ${balance} ETH`);
+        if (low) {
+          console.warn(
+            `⚠️  WARNING: Facilitator ETH balance ${balance} ETH is below ` +
+            `${FACILITATOR_ETH_LOW_THRESHOLD} ETH threshold — refill required ` +
+            `to prevent settlement failures.`
+          );
+        }
+      } else {
+        console.warn('⚠️  Facilitator ETH balance check failed at startup (RPC error)');
+      }
+    });
+    setInterval(refreshFacilitatorEthBalance, 5 * 60 * 1000);
+  }
 });
 
 module.exports = app;
