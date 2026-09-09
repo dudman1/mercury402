@@ -41,9 +41,23 @@ const TOOLS = [
   },
   {
     name: "mercury_economic_dashboard",
-    description: "GDP + CPI + Unemployment snapshot in one call. $0.10",
+    description: "GDP + CPI + Unemployment snapshot in one call. $0.50",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     endpoint: "/v1/composite/economic-dashboard",
+    method: "GET",
+  },
+  {
+    name: "mercury_inflation_tracker",
+    description: "CPI + PCE + Core CPI inflation snapshot in one call. $0.40",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    endpoint: "/v1/composite/inflation-tracker",
+    method: "GET",
+  },
+  {
+    name: "mercury_labor_market",
+    description: "Unemployment + initial claims + nonfarm payrolls in one call. $0.40",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    endpoint: "/v1/composite/labor-market",
     method: "GET",
   },
   {
@@ -95,7 +109,9 @@ async function paidFetch(endpoint, method, bodyObj) {
   const wallet = new ethers.Wallet(PAYER_KEY);
   const now = Math.floor(Date.now() / 1000);
   const cap = parseInt(process.env.MERCURY_MAX_SPEND || "100000000", 10); // $100 safety cap
-  const value = BigInt(Math.min(parseInt(challenge.maxAmountRequired, 10), cap));
+  const asked = parseInt(challenge.maxAmountRequired || challenge.amount, 10);
+  if (!Number.isFinite(asked)) throw new Error("challenge missing amount");
+  const value = BigInt(Math.min(asked, cap));
 
   const auth = {
     from: wallet.address,
@@ -154,7 +170,7 @@ rl.on("line", async (line) => {
       return ok(id, {
         protocolVersion: params && params.protocolVersion || "2024-11-05",
         capabilities: { tools: {} },
-        serverInfo: { name: "mercury402", version: "1.0.0" },
+        serverInfo: { name: "mercury402", version: "1.1.0" },
       });
     }
     if (method === "notifications/initialized") return;
