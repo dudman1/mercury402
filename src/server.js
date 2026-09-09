@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const { ethers } = require('ethers');
 const fs = require('fs');
+const dns = require('dns');
 const path = require('path');
 require('dotenv').config();
 
@@ -468,6 +469,106 @@ if (SERVER_PRIVATE_KEY) {
 }
 
 // ============================================
+// SHARED RPC PROVIDER (staticNetwork: true)
+// ============================================
+// Single persistent provider avoids the per-call chainId detection
+// that ethers runs on every new JsonRpcProvider construction.
+// staticNetwork: true + pre-pinned network skips the eth_chainId probe
+// and makes the provider immune to the immortal _start() bootstrap loop.
+// DNS gate: resolve the RPC hostname before initializing. The 30s
+// deadline limits when the gate stops checking (evaluated at the top
+// of each iteration — a check passing at the deadline may run one more
+// full iteration). Non-blocking: server starts immediately; the
+// provider init runs in the background and retries on failure (60s).
+
+let sharedProvider = null;
+let initRetryTimer = null;
+let initInProgress = false;
+const INIT_RETRY_MS = 60000;
+const DNS_GATE_DEADLINE_MS = 30000;
+
+let RPC_HOSTNAME;
+try {
+  RPC_HOSTNAME = new URL(process.env.BASE_RPC_URL || 'https://mainnet.base.org').hostname;
+} catch {
+  RPC_HOSTNAME = 'mainnet.base.org';
+}
+
+async function initSharedProvider() {
+  if (initInProgress) return;
+  initInProgress = true;
+
+  // DNS gate — verify resolver is alive within a wall-clock deadline
+  const gateStart = Date.now();
+  let resolved = false;
+  for (let attempt = 1; !resolved; attempt++) {
+    if (Date.now() - gateStart >= DNS_GATE_DEADLINE_MS) {
+      console.error(`⚠️  DNS gate: ${RPC_HOSTNAME} still unresolved after ${DNS_GATE_DEADLINE_MS / 1000}s deadline — scheduling retry in ${INIT_RETRY_MS / 1000}s`);
+      scheduleInitRetry();
+      initInProgress = false;
+      return;
+    }
+    try {
+      await new Promise((resolve, reject) => {
+        dns.lookup(RPC_HOSTNAME, (err, addr) => {
+          if (err) return reject(err);
+          resolve(addr);
+        });
+      });
+      resolved = true;
+    } catch (e) {
+      console.error(`DNS gate attempt ${attempt} for ${RPC_HOSTNAME}: ${e.message}`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  try {
+    sharedProvider = new ethers.JsonRpcProvider(
+      process.env.BASE_RPC_URL,
+      { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' },
+      { staticNetwork: true }
+    );
+    // Smoke test with timeout — confirms the provider actually works
+    const RPC_SMOKE_TIMEOUT_MS = 8000;
+    const blockNumber = await Promise.race([
+      sharedProvider.getBlockNumber(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('RPC_SMOKE_TIMEOUT')), RPC_SMOKE_TIMEOUT_MS))
+    ]);
+    console.log(`✅ Shared provider connected (block ${blockNumber})`);
+
+    // Run startup facilitator balance check now that the provider is alive
+    if (signingWallet) {
+      await refreshFacilitatorEthBalance();
+      const { balance, low } = facilitatorEthCache;
+      if (balance !== null) {
+        console.log(`✅ Facilitator ETH balance: ${balance} ETH`);
+        if (low) {
+          console.warn(
+            `⚠️  WARNING: Facilitator ETH balance ${balance} ETH is below ` +
+            `${FACILITATOR_ETH_LOW_THRESHOLD} ETH threshold — refill required ` +
+            `to prevent settlement failures.`
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`⚠️  Shared provider init failed: ${e.message} — scheduling retry in ${INIT_RETRY_MS / 1000}s`);
+    if (sharedProvider) { try { sharedProvider.destroy(); } catch {} }
+    sharedProvider = null;
+    scheduleInitRetry();
+  }
+  initInProgress = false;
+}
+
+function scheduleInitRetry() {
+  if (initRetryTimer) clearTimeout(initRetryTimer);
+  initRetryTimer = setTimeout(initSharedProvider, INIT_RETRY_MS);
+}
+
+// Kick off provider init in background; server starts immediately
+initSharedProvider();
+
+// ============================================
 // PAYMENT REDEMPTION LEDGER (anti-replay)
 // ============================================
 // Added 2026-04-20 — defends against payment-artifact replay.
@@ -633,7 +734,7 @@ function parsePaymentToken(token) {
 
 async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
   try {
-    const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
+    const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
     const USDC_CONTRACT = process.env.USDC_CONTRACT_BASE;
     
     // Fetch transaction receipt (includes logs)
@@ -993,58 +1094,69 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
             throw new Error('No signature found in payment payload');
           }
 
-          // Execute transferWithAuthorization on-chain
-          const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
-          const facilitatorWallet = new ethers.Wallet(
-            process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
-            provider
-          );
-          const USDC = new ethers.Contract(
-            process.env.USDC_CONTRACT_BASE,
-            ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
-            facilitatorWallet
-          );
+          // Execute transferWithAuthorization on-chain.
+          // Tracked in inFlightSettlements so SIGTERM can drain before exit.
+          const settlePromise = (async () => {
+            const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
+            const facilitatorWallet = new ethers.Wallet(
+              process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
+              provider
+            );
+            const USDC = new ethers.Contract(
+              process.env.USDC_CONTRACT_BASE,
+              ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
+              facilitatorWallet
+            );
+            const tx = await USDC.transferWithAuthorization(
+              authorization.from,
+              authorization.to,
+              authorization.value,
+              authorization.validAfter,
+              authorization.validBefore,
+              authorization.nonce,
+              v, r, s
+            );
+            const receipt = await tx.wait();
+            const verification = await verifyPaymentOnChain(receipt.hash, price, MERCHANT_WALLET);
+            if (verification.verified) {
+              // SECURITY (2026-04-20): record both sig-nonce and tx-hash
+              // redemption keys. The sig key blocks replay of the same
+              // authorization; the tx key additionally blocks a bearer-token
+              // that merely references this settled tx from being reused.
+              markRedeemed(redemptionKey, endpointPath);
+              markRedeemed(`tx:${String(receipt.hash).toLowerCase()}`, endpointPath);
 
-          const tx = await USDC.transferWithAuthorization(
-            authorization.from,
-            authorization.to,
-            authorization.value,
-            authorization.validAfter,
-            authorization.validBefore,
-            authorization.nonce,
-            v, r, s
-          );
-          const receipt = await tx.wait();
-          const verification = await verifyPaymentOnChain(receipt.hash, price, MERCHANT_WALLET);
-          if (verification.verified) {
-            // SECURITY (2026-04-20): record both sig-nonce and tx-hash
-            // redemption keys. The sig key blocks replay of the same
-            // authorization; the tx key additionally blocks a bearer-token
-            // that merely references this settled tx from being reused.
-            markRedeemed(redemptionKey, endpointPath);
-            markRedeemed(`tx:${String(receipt.hash).toLowerCase()}`, endpointPath);
+              // Set PAYMENT-RESPONSE header for x402 clients
+              const settleResponse = Buffer.from(JSON.stringify({
+                success: true,
+                transaction: receipt.hash,
+                network: 'eip155:8453',
+                payer: authorization.from
+              })).toString('base64');
+              res.set('PAYMENT-RESPONSE', settleResponse);
 
-            // Set PAYMENT-RESPONSE header for x402 clients
-            const settleResponse = Buffer.from(JSON.stringify({
-              success: true,
-              transaction: receipt.hash,
-              network: 'eip155:8453',
-              payer: authorization.from
-            })).toString('base64');
-            res.set('PAYMENT-RESPONSE', settleResponse);
-
-            res.locals.paymentMeta = {
-              wallet_address: authorization.from,
-              tx_hash: receipt.hash,
-              wallet_source: 'x402_eip3009',
-              verified: true,
-              price_usd: price
-            };
-            logPayment(endpointPath, price, authorization.from, true, receipt.hash);
-            return next();
+              res.locals.paymentMeta = {
+                wallet_address: authorization.from,
+                tx_hash: receipt.hash,
+                wallet_source: 'x402_eip3009',
+                verified: true,
+                price_usd: price
+              };
+              logPayment(endpointPath, price, authorization.from, true, receipt.hash);
+              return true;
+            }
+            // Settlement succeeded but on-chain verification failed
+            console.error('x402 payment settled but on-chain verify failed:', verification.reason);
+            return false;
+          })();
+          inFlightSettlements.add(settlePromise);
+          let settled;
+          try {
+            settled = await settlePromise;
+          } finally {
+            inFlightSettlements.delete(settlePromise);
           }
-          // Settlement succeeded but on-chain verification failed
-          console.error('x402 payment settled but on-chain verify failed:', verification.reason);
+          if (settled) return next();
         } catch (err) {
           console.error('x402 payment-signature error:', err.message);
         }
@@ -2630,13 +2742,18 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
 // Cached because /metrics is polled frequently; refreshed on a 5-minute timer
 // so a scrape never hits the RPC. On startup we log once + WARN if below the
 // 0.0005 ETH threshold. On RPC failure we return null (no throw).
+
+// Track in-flight settlements for graceful SIGTERM drain.
+// Each entry is the settlement promise — the SIGTERM handler awaits them.
+const inFlightSettlements = new Set();
+
 let facilitatorEthCache = { balance: null, low: null, ts: 0 };
 const FACILITATOR_ETH_LOW_THRESHOLD = 0.0005;
 
 async function refreshFacilitatorEthBalance() {
   if (!signingWallet) return;
   try {
-    const provider = new ethers.JsonRpcProvider(
+    const provider = sharedProvider || new ethers.JsonRpcProvider(
       process.env.BASE_RPC_URL,
       { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
     );
@@ -2871,16 +2988,58 @@ app.get('/pay', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/pay.html'));
 });
 
-app.get('/health', (req, res) => {
+// Provider connectivity cache for /health — 30s TTL, in-flight promise dedup.
+// sharedProvider is populated on merge with provider-hardening branch;
+// standalone, it stays null and the fallback path is always taken.
+let providerStatusCache = { status: 'unknown', ts: 0 };
+let inFlightCheck = null;
+
+async function getProviderStatus() {
+  const now = Date.now();
+  if (now - providerStatusCache.ts <= 30000) return providerStatusCache.status;
+  if (inFlightCheck) return await inFlightCheck;  // join the in-flight probe
+
+  inFlightCheck = (async () => {
+    let timer;
+    let throwawayProvider = null;
+    try {
+      const provider = sharedProvider || (throwawayProvider = new ethers.JsonRpcProvider(
+        process.env.BASE_RPC_URL,
+        { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
+      ));
+      await Promise.race([
+        provider.getBlockNumber(),
+        new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('RPC_TIMEOUT')), 5000); })
+      ]);
+      providerStatusCache = {
+        status: sharedProvider ? 'connected' : 'fallback',
+        ts: Date.now()
+      };
+    } catch {
+      providerStatusCache = { status: 'degraded', ts: Date.now() };
+    } finally {
+      inFlightCheck = null;
+      if (timer) clearTimeout(timer);
+      if (throwawayProvider) throwawayProvider.destroy();
+    }
+    return providerStatusCache.status;
+  })();
+
+  return await inFlightCheck;
+}
+
+app.get('/health', async (req, res) => {
   const metrics = getMetricsFromLog();
   const cacheMetrics = getCacheMetrics();
-  
+  const providerStatus = await getProviderStatus();
+
   res.json({
-    status: 'healthy',
+    status: providerStatus === 'connected' ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     signing_address: signingWallet ? signingWallet.address : null,
     fred_configured: !!FRED_API_KEY,
+    provider_status: providerStatus,
     revenue_last_24h_usd: metrics.revenue_last_24h_usd,
     calls_last_24h: metrics.calls_last_24h,
     verified_payment_rate_pct: metrics.verified_payment_rate_pct,
@@ -3360,7 +3519,8 @@ try {
 }
 
 // Start server
-app.listen(PORT, '127.0.0.1', () => {
+// Assigned to a variable so SIGTERM handler can call server.close().
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`\n🚀 Mercury x402 Service`);
   console.log(`   Port: ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
@@ -3369,28 +3529,42 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`   Signing: ${signingWallet ? '✅ ' + signingWallet.address : '❌ not configured'}`);
   console.log('');
 
-  // Facilitator ETH balance: log once at startup, refresh every 5 minutes,
-  // WARN if below threshold. Same key as signingWallet — it's also the
-  // wallet that pays gas for transferWithAuthorization settlements.
+  // 5-minute facilitator ETH balance refresh. Startup check now runs inside
+  // initSharedProvider() after the shared provider connects.
   if (signingWallet) {
-    refreshFacilitatorEthBalance().then(() => {
-      const { balance, low } = facilitatorEthCache;
-      if (balance !== null) {
-        console.log(`✅ Facilitator ETH balance: ${balance} ETH`);
-        if (low) {
-          console.warn(
-            `⚠️  WARNING: Facilitator ETH balance ${balance} ETH is below ` +
-            `${FACILITATOR_ETH_LOW_THRESHOLD} ETH threshold — refill required ` +
-            `to prevent settlement failures.`
-          );
-        }
-      } else {
-        console.warn('⚠️  Facilitator ETH balance check failed at startup (RPC error)');
-      }
-    });
     setInterval(refreshFacilitatorEthBalance, 5 * 60 * 1000);
   }
+
+  // Signal PM2 that startup is complete (wait_ready: true in ecosystem.config.js)
+  if (typeof process.send === 'function') {
+    process.send('ready');
+  }
 });
+
+// ============================================
+// GRACEFUL SHUTDOWN — drain in-flight settlements
+// ============================================
+// Registered for both SIGINT (what PM2 6.x sends) and SIGTERM (direct/systemd).
+let shuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const count = inFlightSettlements.size;
+  console.log(`${signal} — draining ${count} in-flight settlement(s)`);
+  server.close();  // stop accepting new connections
+
+  if (count > 0) {
+    await Promise.race([
+      Promise.allSettled([...inFlightSettlements]),
+      new Promise(r => setTimeout(r, 13000))  // inside kill_timeout (15s)
+    ]);
+  }
+  console.log(`${signal} — drain complete, exiting`);
+  process.exit(0);
+}
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 module.exports = app;
 
