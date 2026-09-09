@@ -48,7 +48,8 @@ const cacheStats = {
 
 const CACHE_TTL = {
   FRED: 6 * 60 * 60 * 1000,      // 6 hours
-  TREASURY: 6 * 60 * 60 * 1000   // 6 hours
+  TREASURY: 6 * 60 * 60 * 1000,  // 6 hours
+  COMPOSITE: 6 * 60 * 60 * 1000  // 6 hours — paid composite dashboards
 };
 
 function getCacheKey(endpoint, params = {}) {
@@ -1820,6 +1821,24 @@ app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
     }
 
+    const cacheKey = getCacheKey('composite:economic-dashboard', {});
+    const cached = getCached(cacheKey);
+    if (cached && !cached.stale) {
+      const endpointPrice = getPrice('/v1/composite/economic-dashboard');
+      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+      logPayment('/v1/composite/economic-dashboard', endpointPrice, customerId);
+      const paymentMeta = res.locals.paymentMeta || {};
+      if (paymentMeta.price_usd > 0) {
+        emitToConvex('/v1/composite/economic-dashboard', endpointPrice, paymentMeta.wallet_address);
+      }
+      res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.setHeader('X-Cache-Status', 'HIT');
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+    cacheStats.misses++;
+
     const series = ['GDP', 'CPIAUCSL', 'UNRATE'];
     const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
 
@@ -1845,8 +1864,11 @@ app.get('/v1/composite/economic-dashboard', require402Payment('/v1/composite/eco
       emitToConvex('/v1/composite/economic-dashboard', endpointPrice, paymentMeta.wallet_address);
     }
     
+    const payload = { data: responseData, provenance };
+    setCache(cacheKey, payload, CACHE_TTL.COMPOSITE);
     res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
-    res.json({ data: responseData, provenance });
+    res.setHeader('X-Cache-Status', 'MISS');
+    res.json(payload);
 
   } catch (error) {
     console.error('Economic dashboard error:', error.message);
@@ -1860,6 +1882,24 @@ app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
     }
+
+    const cacheKey = getCacheKey('composite:inflation-tracker', {});
+    const cached = getCached(cacheKey);
+    if (cached && !cached.stale) {
+      const endpointPrice = getPrice('/v1/composite/inflation-tracker');
+      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+      logPayment('/v1/composite/inflation-tracker', endpointPrice, customerId);
+      const paymentMeta = res.locals.paymentMeta || {};
+      if (paymentMeta.price_usd > 0) {
+        emitToConvex('/v1/composite/inflation-tracker', endpointPrice, paymentMeta.wallet_address);
+      }
+      res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.setHeader('X-Cache-Status', 'HIT');
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+    cacheStats.misses++;
 
     const series = ['CPIAUCSL', 'PCEPI', 'CPILFESL'];
     const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
@@ -1886,8 +1926,11 @@ app.get('/v1/composite/inflation-tracker', require402Payment('/v1/composite/infl
       emitToConvex('/v1/composite/inflation-tracker', endpointPrice, paymentMeta.wallet_address);
     }
     
+    const payload = { data: responseData, provenance };
+    setCache(cacheKey, payload, CACHE_TTL.COMPOSITE);
     res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
-    res.json({ data: responseData, provenance });
+    res.setHeader('X-Cache-Status', 'MISS');
+    res.json(payload);
 
   } catch (error) {
     console.error('Inflation tracker error:', error.message);
@@ -1901,6 +1944,24 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
     if (!FRED_API_KEY) {
       return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'FRED API key not configured' } });
     }
+
+    const cacheKey = getCacheKey('composite:labor-market', {});
+    const cached = getCached(cacheKey);
+    if (cached && !cached.stale) {
+      const endpointPrice = getPrice('/v1/composite/labor-market');
+      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+      logPayment('/v1/composite/labor-market', endpointPrice, customerId);
+      const paymentMeta = res.locals.paymentMeta || {};
+      if (paymentMeta.price_usd > 0) {
+        emitToConvex('/v1/composite/labor-market', endpointPrice, paymentMeta.wallet_address);
+      }
+      res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
+      res.setHeader('X-Data-Age', cached.age.toString());
+      res.setHeader('X-Cache-Status', 'HIT');
+      res.locals.cacheHit = true;
+      return res.json(cached.data);
+    }
+    cacheStats.misses++;
 
     const series = ['UNRATE', 'ICSA', 'PAYEMS'];
     const results = await Promise.all(series.map(id => fetchFredData(id, { sort_order: 'desc', limit: 1 })));
@@ -1927,8 +1988,11 @@ app.get('/v1/composite/labor-market', require402Payment('/v1/composite/labor-mar
       emitToConvex('/v1/composite/labor-market', endpointPrice, paymentMeta.wallet_address);
     }
     
+    const payload = { data: responseData, provenance };
+    setCache(cacheKey, payload, CACHE_TTL.COMPOSITE);
     res.setHeader('X-Mercury-Price', `$${endpointPrice.toFixed(2)}`);
-    res.json({ data: responseData, provenance });
+    res.setHeader('X-Cache-Status', 'MISS');
+    res.json(payload);
 
   } catch (error) {
     console.error('Labor market error:', error.message);
