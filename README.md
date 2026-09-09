@@ -1,6 +1,6 @@
 # Mercury402
 
-![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-76-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
+![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-78-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
 
 ## Deterministic Finance Data for Autonomous Agents
 
@@ -16,22 +16,26 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 |----------|------|--------------|
 | `GET /v1/fred/{series_id}` | Any FRED economic series | $0.05 |
 | `GET /v1/treasury/yield-curve/daily-snapshot` | Current Treasury yield curve (11 maturities) | $0.05 |
-| `POST /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
+| `GET /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
 | `POST /v1/treasury/yield-curve/historical` | Historical yield curves (max 90-day range) | $0.05 |
-| `POST /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.05 |
-| `POST /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.05 |
-| `POST /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
-| `POST /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
-| `POST /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
+| `GET /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.05 |
+| `GET /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.05 |
+| `GET /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
+| `GET /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
+| `GET /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
+| `GET /v1/ai/briefing` | Macro briefing (AI) | $0.10 |
+| `POST /v1/ai/ask` | Macro Q&A (AI) | $0.15 |
 | `GET /.well-known/x402` | x402 discovery document | Free |
 | `GET /health` | Health check | Free |
 | `GET /metrics` | Revenue and usage stats | Free |
 | `GET /openapi.json` | OpenAPI 3.1 spec | Free |
 | `GET /docs/api` | Interactive Swagger UI | Free |
 
-**76 total endpoints** (72 standard data endpoints + 2 premium composite + 2 free discovery/health endpoints)
+**78 priced routes** in `/.well-known/x402` / `src/pricing.js` (FRED aliases, forex, spreads, breakeven, macro, composites, AI) plus free discovery/health/docs.
 
 ---
+
+Full priced catalog: `GET /.well-known/x402` (78 accepts) or `GET /openapi.json`.
 
 ## Quick Start
 
