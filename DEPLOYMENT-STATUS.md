@@ -1,3 +1,5 @@
+> Historical note (2026-04-20): This file contains archived launch/research/test material from before the payment hardening pass. Current production Mercury uses the `payment-signature` flow. Unsigned `Authorization: Bearer x402_...` and `x402_test` examples here are historical unless explicitly marked otherwise.
+
 # Mercury x402 Service - Deployment Status
 **Status:** ✅ LIVE - Production Deployment Complete
 **Timestamp:** 2026-02-18 15:40 EST
@@ -289,4 +291,5 @@ curl https://mercury402.uk/.well-known/x402
 - FRED ($0.15/call): 100 calls/day = $15/day
 - Treasury ($0.10/call): 50 calls/day = $5/day
 - **Potential monthly:** ~$600/month (baseline usage)
-
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

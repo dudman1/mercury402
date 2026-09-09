@@ -18,7 +18,7 @@ jobs:
       - name: Check Mercury402 Health
         id: health_check
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" https://api.mercury402.com/health)
+          RESPONSE=$(curl -s -w "\n%{http_code}" https://mercury402.uk/health)
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
           
@@ -39,7 +39,7 @@ jobs:
       
       - name: Check FRED API Configuration
         run: |
-          RESPONSE=$(curl -s https://api.mercury402.com/health)
+          RESPONSE=$(curl -s https://mercury402.uk/health)
           
           if echo "$RESPONSE" | grep -q '"fred_configured":true'; then
             echo "✅ FRED API configured"
@@ -67,7 +67,7 @@ jobs:
             - Response body contains \`"status":"healthy"\`
             
             ### Actions Required
-            1. Check server status: \`curl https://api.mercury402.com/health\`
+            1. Check server status: \`curl https://mercury402.uk/health\`
             2. Check server logs
             3. Verify FRED API key is valid
             4. Restart service if necessary

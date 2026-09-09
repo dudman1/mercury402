@@ -1,6 +1,6 @@
 # Mercury x402 — SDK Examples
 
-Base URL: `https://api.mercury402.com`
+Base URL: `https://mercury402.uk`
 
 **Payment details**
 - USDC on Base: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
@@ -20,7 +20,7 @@ Unsigned manually constructed `Authorization: Bearer x402_<token>` flows are dep
 ### Unpaid request, inspect the 402
 
 ```js
-const res = await fetch('https://api.mercury402.com/v1/fred/UNRATE');
+const res = await fetch('https://mercury402.uk/v1/fred/UNRATE');
 
 if (res.status === 402) {
   const body = await res.json();
@@ -41,7 +41,7 @@ if (res.status === 402) {
 ```js
 const PAYMENT_SIGNATURE = '<base64_x402_payment_payload>';
 
-const res = await fetch('https://api.mercury402.com/v1/fred/UNRATE', {
+const res = await fetch('https://mercury402.uk/v1/fred/UNRATE', {
   headers: { 'payment-signature': PAYMENT_SIGNATURE }
 });
 
@@ -62,7 +62,7 @@ const PAYMENT_SIGNATURE = '<base64_x402_payment_payload>';
 async function fetchFred(seriesId) {
   try {
     const { data } = await axios.get(
-      `https://api.mercury402.com/v1/fred/${seriesId}`,
+      `https://mercury402.uk/v1/fred/${seriesId}`,
       { headers: { 'payment-signature': PAYMENT_SIGNATURE } }
     );
     return data;
@@ -85,7 +85,7 @@ async function fetchFred(seriesId) {
 ```python
 import base64, json, requests
 
-r = requests.get('https://api.mercury402.com/v1/fred/UNRATE')
+r = requests.get('https://mercury402.uk/v1/fred/UNRATE')
 
 if r.status_code == 402:
     body = r.json()
@@ -106,7 +106,7 @@ PAYMENT_SIGNATURE = '<base64_x402_payment_payload>'
 HEADERS = {'payment-signature': PAYMENT_SIGNATURE}
 
 r = requests.get(
-    'https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot',
+    'https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot',
     headers=HEADERS
 )
 r.raise_for_status()
@@ -137,8 +137,8 @@ Popular FRED series IDs: `UNRATE`, `GDP`, `CPIAUCSL`, `FEDFUNDS`, `DGS10`.
 ## Discovery
 
 ```sh
-curl https://api.mercury402.com/.well-known/x402 | jq .
-curl https://api.mercury402.com/meta.json | jq .
+curl https://mercury402.uk/.well-known/x402 | jq .
+curl https://mercury402.uk/meta.json | jq .
 ```
 
 ---

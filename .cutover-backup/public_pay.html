@@ -120,7 +120,7 @@
                 <div class="meta-row"><strong>Quoted price:</strong> <span id="price-display">$0.00</span> USDC</div>
                 <div class="meta-row"><strong>Network:</strong> Base (<code>eip155:8453</code>)</div>
             </div>
-            <pre><code id="request-preview">curl -i https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot</code></pre>
+            <pre><code id="request-preview">curl -i https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot</code></pre>
             <p>The server returns <code>402 Payment Required</code> plus a <code>Payment-Required</code> header with the x402 descriptor.</p>
         </section>
 
@@ -137,7 +137,7 @@
 
         <section>
             <h2><span class="step-number">3</span> Retry with <code>payment-signature</code></h2>
-            <pre><code id="retry-preview">curl https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot \
+            <pre><code id="retry-preview">curl https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot \
   -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
             <div class="warning">
                 <strong>One payment, one redemption.</strong>
@@ -164,8 +164,8 @@
 
         document.getElementById('endpoint-display').textContent = endpoint;
         document.getElementById('price-display').textContent = `$${price.toFixed(2)}`;
-        document.getElementById('request-preview').textContent = `curl -i https://api.mercury402.com${endpoint}`;
-        document.getElementById('retry-preview').textContent = `curl https://api.mercury402.com${endpoint} \\\n  -H "payment-signature: <base64_x402_payment_payload>"`;
+        document.getElementById('request-preview').textContent = `curl -i https://mercury402.uk${endpoint}`;
+        document.getElementById('retry-preview').textContent = `curl https://mercury402.uk${endpoint} \\\n  -H "payment-signature: <base64_x402_payment_payload>"`;
     </script>
 </body>
 </html>

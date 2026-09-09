@@ -1,3 +1,5 @@
+> Historical note (2026-04-20): This file contains archived launch/research/test material from before the payment hardening pass. Current production Mercury uses the `payment-signature` flow. Unsigned `Authorization: Bearer x402_...` and `x402_test` examples here are historical unless explicitly marked otherwise.
+
 # Mercury402 Acceleration Package
 **Generated:** 2026-03-04  
 **Objective:** Make Mercury402 deterministic, testable, and integration-ready
@@ -1153,3 +1155,5 @@ app.get('/metrics', async (req, res) => {
 2. Prioritize phases (suggest: 1 → 3 → 4 → 2 → 6 → 5)
 3. Execute Phase 1 immediately (determinism fixes are low-risk, high-impact)
 4. Ship golden tests before adding new endpoints
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

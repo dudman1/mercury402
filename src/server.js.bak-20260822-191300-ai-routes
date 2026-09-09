@@ -426,28 +426,6 @@ const BAZAAR_SCHEMAS = {
   }
 };
 
-// Normalize bazaar schema to validator-expected nesting:
-// extensions.bazaar.schema.properties.{input,output}.properties.*
-function bazaarForEndpoint(endpointPath) {
-  const bz = BAZAAR_SCHEMAS[endpointPath];
-  if (!bz) return null;
-  const norm = JSON.parse(JSON.stringify(bz));
-  if (norm.schema && norm.schema.properties) {
-    const p = norm.schema.properties;
-    const hasExample = p.output && p.output.properties && p.output.properties.example;
-    if (!hasExample) {
-      const ex = norm.info && norm.info.output && norm.info.output.example ? norm.info.output.example : {};
-      p.output = { type: 'object', properties: { example: ex } };
-    }
-    if (p.input && !p.input.properties) p.input = { type: 'object', properties: {} };
-    if (p.input && p.input.properties && !p.input.properties.queryParams && !p.input.properties.body) {
-      p.input.properties.queryParams = { type: 'object', properties: {} };
-    }
-  }
-  return norm;
-}
-
-
 if (!FRED_API_KEY) {
   console.warn('⚠️  FRED_API_KEY not set - FRED endpoint will fail');
 }
@@ -853,7 +831,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
       }
     }],
     resource: {
-      url: `https://api.mercury402.com${resolvedPath}`,
+      url: `https://mercury402.uk${resolvedPath}`,
       method: method.toUpperCase(),
       description: 'Deterministic financial data from official sources',
       mimeType: 'application/json'
@@ -861,7 +839,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   };
 
   // Add Bazaar extensions if schema exists for this endpoint
-  const bazaarSchema = bazaarForEndpoint(endpointPath);
+  const bazaarSchema = BAZAAR_SCHEMAS[endpointPath];
   if (bazaarSchema) {
     paymentRequiredV2.extensions = {
       bazaar: bazaarSchema
@@ -887,27 +865,31 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       scheme: 'exact',
       network: 'base',
       maxAmountRequired: amount,
-      resource: `https://api.mercury402.com${resolvedPath}`,
+      resource: `https://mercury402.uk${resolvedPath}`,
       description,
       mimeType: 'application/json',
       payTo: MERCHANT_WALLET,
       maxTimeoutSeconds: 30,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      outputSchema: (() => {
-        const bz = bazaarForEndpoint(endpointPath);
-        const ex = bz && bz.schema && bz.schema.properties && bz.schema.properties.output;
-        const exampleVal = ex && ex.properties && ex.properties.example ? ex.properties.example : {};
-        return {
-          input: bz && bz.info ? bz.info.input : { type: 'http', method: normalizedMethod, discoverable: true },
-          output: { properties: { example: exampleVal } }
-        };
-      })(),
+      outputSchema: {
+        input: {
+          type: 'http',
+          method: normalizedMethod,
+          discoverable: true
+        },
+        output: {
+          input: {
+            type: 'http',
+            method: normalizedMethod,
+            discoverable: true
+          }
+        }
+      },
       extra: {
         name: 'USD Coin',
         version: '2'
       }
-    }],
-    ...(bazaarForEndpoint(endpointPath) ? { extensions: { bazaar: bazaarForEndpoint(endpointPath) } } : {})
+    }]
   };
 }
 
@@ -1212,75 +1194,6 @@ function preValidateTreasuryHistorical(req, res, next) {
 // FRED ENDPOINT
 // ============================================
 
-// ---- Pre-payment FRED series validation ------------------------------------
-// Prevents charging buyers for invalid series ids: the guard runs BEFORE the
-// 402 challenge, so garbage requests get a clean 400 and no money moves.
-const seriesValidationCache = new Map(); // seriesId -> { valid, expires }
-const SERIES_CACHE_TTL = { valid: 24 * 60 * 60 * 1000, invalid: 60 * 60 * 1000 };
-
-async function isValidFredSeries(seriesId) {
-  // FRED ids are uppercase alphanumerics/underscores (e.g. CPIAUCSL, DGS10)
-  if (!seriesId || !/^[A-Z0-9_]{1,20}$/.test(seriesId)) return false;
-  const hit = seriesValidationCache.get(seriesId);
-  const now = Date.now();
-  if (hit && hit.expires > now) return hit.valid;
-  try {
-    const resp = await fredLimit.run(() => axios.get('https://api.stlouisfed.org/fred/series', {
-      params: { api_key: FRED_API_KEY, series_id: seriesId, file_type: 'json' },
-      timeout: 5000
-    }));
-    const valid = resp.status === 200 && Array.isArray(resp.data.seriess) && resp.data.seriess.length > 0;
-    seriesValidationCache.set(seriesId, { valid, expires: now + (valid ? SERIES_CACHE_TTL.valid : SERIES_CACHE_TTL.invalid) });
-    return valid;
-  } catch (err) {
-    if (err.response && err.response.status === 400) {
-      // FRED explicitly rejected the id -> definitively invalid
-      seriesValidationCache.set(seriesId, { valid: false, expires: now + SERIES_CACHE_TTL.invalid });
-      return false;
-    }
-    // FRED outage/rate-limit: fail CLOSED so we never charge a buyer for a
-    // request we can't validate. Guard translates this into a 503 with
-    // Retry-After so no payment attempt is made.
-    const e = new Error('FRED unreachable at guard time');
-    e.code = 'FRED_UNREACHABLE';
-    throw e;
-  }
-}
-
-async function fredSeriesGuard(req, res, next) {
-  try {
-    const raw = req.params.series_id || '';
-    // Template placeholders ({series_id}, %7B...%7D, <id>) are crawler probes,
-    // not buyer typos -> let them through to the 402 paywall untouched.
-    if (/[%{}<>]/.test(raw)) return next();
-    req.params.series_id = raw.toUpperCase(); // FRED ids are case-insensitive upstream
-    if (!(await isValidFredSeries(req.params.series_id))) {
-      return res.status(400).json({
-        error: {
-          code: 'INVALID_SERIES',
-          message: `Unknown FRED series "${req.params.series_id}". No payment was requested. Browse valid series ids at https://fred.stlouisfed.org/`,
-          series_id: req.params.series_id,
-          charged: false
-        }
-      });
-    }
-    next();
-  } catch (e) {
-    if (e && e.code === 'FRED_UNREACHABLE') {
-      res.set('Retry-After', '30');
-      return res.status(503).json({
-        error: {
-          code: 'SERVICE_UNAVAILABLE',
-          message: 'Unable to validate series against FRED right now. Retry shortly.',
-          series_id: req.params.series_id,
-          charged: false
-        }
-      });
-    }
-    next(); // guard must never take down the revenue path
-  }
-}
-
 async function fetchFredData(seriesId, params) {
   // Generate cache key
   const cacheKey = getCacheKey(`fred:${seriesId}`, params);
@@ -1363,7 +1276,7 @@ function generateProvenance(data, seriesId, params) {
 // single-point price. Previously the middleware charged the base price
 // while the handler internally computed 2×, letting callers pay for 1
 // observation and receive an unbounded window.
-app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
+app.get('/v1/fred/:series_id', require402Payment('/v1/fred/{series_id}', (req) => {
   const basePrice = getPrice('/v1/fred/{series_id}');
   const isRange = req.query && req.query.observation_start && req.query.observation_end;
   return isRange ? basePrice * 2 : basePrice;
@@ -1449,55 +1362,23 @@ app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{ser
 
   } catch (error) {
     console.error('FRED endpoint error:', error.message);
-
-    const upstreamStatus = error.response?.status;
-    const series_id = req.params.series_id;
-    const charged = res.locals.paymentMeta?.verified === true;
-
-    // FRED returns 400 for unknown series ids (e.g. "CPI" instead of "CPIAUCSL").
-    // If we reach here it means the pre-payment guard let it through (FRED was
-    // unreachable at guard time and it failed open). Surface as 404 to the client.
-    if (upstreamStatus === 404 || upstreamStatus === 400) {
+    
+    if (error.response?.status === 404) {
       return res.status(404).json({
         error: {
           code: 'SERIES_NOT_FOUND',
-          message: `Series '${series_id}' not found in FRED database`,
-          series_id,
-          charged
+          message: `Series '${req.params.series_id}' not found in FRED database`,
+          series_id: req.params.series_id
         }
       });
     }
 
-    if (upstreamStatus === 429) {
+    if (error.response?.status === 429) {
       return res.status(429).json({
         error: {
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'FRED API rate limit exceeded, try again in 60 seconds',
-          retry_after: 60,
-          charged
-        }
-      });
-    }
-
-    // Upstream FRED failure (5xx, timeout, network error) after payment was
-    // verified. Return 502 so the client knows this was a gateway issue and
-    // the paid resource is temporarily unavailable — not a bug in their request.
-    // Constrained to axios-originating errors so bugs inside the handler still
-    // surface as 500 INTERNAL_ERROR instead of being masked as gateway failures.
-    const isUpstreamFailure =
-      (upstreamStatus && upstreamStatus >= 500) ||
-      (error.isAxiosError && !error.response) ||
-      ['ECONNABORTED', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(error.code);
-
-    if (isUpstreamFailure) {
-      return res.status(502).json({
-        error: {
-          code: 'UPSTREAM_UNAVAILABLE',
-          message: `FRED upstream is currently unavailable. Please retry.`,
-          series_id,
-          upstream_status: upstreamStatus || null,
-          upstream_error_code: error.code || null,
-          charged
+          retry_after: 60
         }
       });
     }
@@ -1505,9 +1386,7 @@ app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{ser
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: error.message,
-        series_id,
-        charged
+        message: error.message
       }
     });
   }
@@ -2264,23 +2143,6 @@ const NEW_ENDPOINT_META = registerNewRoutes(app, {
 });
 
 // ============================================
-// AI ROUTES — ox-alpha powered (2026-08-22)
-// ============================================
-const { registerAiRoutes } = require("./ai-routes");
-const AI_ENDPOINT_META = registerAiRoutes(app, {
-  require402Payment,
-  getPrice,
-  fetchFredData,
-  generateProvenance,
-  getCacheKey,
-  getCached,
-  setCache,
-  CACHE_TTL,
-  FRED_SERIES
-});
-Object.assign(NEW_ENDPOINT_META, AI_ENDPOINT_META);
-
-// ============================================
 // DISCOVERY & HEALTH
 // ============================================
 
@@ -2326,29 +2188,12 @@ app.get('/.well-known/x402', (req, res) => {
           path: endpoint,
           method: method,
           price_usd: price
-        },
-        // Bazaar discovery metadata — required by x402scan/Bazaar validators
-        ...(bazaarForEndpoint(endpoint)
-          ? { extensions: { bazaar: bazaarForEndpoint(endpoint) } }
-          : {
-              extensions: {
-                bazaar: {
-                  info: { input: { type: 'http', method: method } },
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      input: { type: 'object', properties: { queryParams: { type: 'object', properties: {} } } },
-                      output: { type: 'object', properties: { example: { source: 'mercury402', endpoint: endpoint, description: ENDPOINT_DESCRIPTIONS[endpoint] || '' } } }
-                    }
-                  }
-                }
-              }
-            })
+        }
       };
     });
   
   // Build resources array for x402scan v1 compatibility
-  const BASE_URL = 'https://api.mercury402.com';
+  const BASE_URL = 'https://mercury402.uk';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2448,7 +2293,7 @@ app.get('/.well-known/x402-agentcash', (req, res) => {
   const { PRICING } = require('./pricing');
   
   // Build resources array (v1 format) — flat list of full URLs
-  const BASE_URL = 'https://api.mercury402.com';
+  const BASE_URL = 'https://mercury402.uk';
   const resources = Object.keys(PRICING)
     .filter(endpoint => endpoint !== 'default')
     .sort((a, b) => parseFloat(PRICING[a]) - parseFloat(PRICING[b]))
@@ -2480,13 +2325,13 @@ No API keys required. Payment flow:
 
 ## Base URL
 
-https://api.mercury402.com
+https://mercury402.uk
 
 All endpoints are relative to this base URL.
 
 ## Agent Workflow
 
-1. Use \`mcp__agentcash__discover_api_endpoints("https://api.mercury402.com")\` to see available endpoints and pricing.
+1. Use \`mcp__agentcash__discover_api_endpoints("https://mercury402.uk")\` to see available endpoints and pricing.
 2. For POST/PUT/PATCH endpoints, call \`mcp__agentcash__check_endpoint_schema\` to confirm request schema before first fetch.
 3. Execute with \`mcp__agentcash__fetch(url, method="GET")\`.
 
@@ -2507,51 +2352,51 @@ AgentCash handles x402 payment automatically. Payments settle on success only (n
 
 **Named endpoints:** CPI, PCE, unemployment-rate, nonfarm-payrolls, fed-funds-rate, housing-starts, m2-money-stock, consumer-confidence, retail-sales, trade-balance, vix, and 41 more. See /v1/fred/{series_id} in API discovery.
 
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/fred/UNRATE", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/fred/UNRATE", method="GET")\`
 **Response:** JSON with series data, observations, and cryptographic signature
 
 ### GET /v1/treasury/auction-results/recent
 **Price:** $0.05
 **Description:** Recent U.S. Treasury auction results
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/auction-results/recent", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/auction-results/recent", method="GET")\`
 
 ### GET /v1/treasury/tips-rates/current
 **Price:** $0.05
 **Description:** Current TIPS rates (5, 7, 10, 20, 30-year)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/tips-rates/current", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/tips-rates/current", method="GET")\`
 
 ### GET /v1/treasury/yield-curve/daily-snapshot
 **Price:** $0.05
 **Description:** U.S. Treasury yield curve snapshot (11 maturities, FRED-sourced)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot", method="GET")\`
 **Response:** Yields for 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y
 
 ### POST /v1/treasury/yield-curve/historical
 **Price:** $0.05
 **Description:** Historical yield curve data (max 90-day range)
 **JSON body:** \`start_date\` (YYYY-MM-DD), \`end_date\` (YYYY-MM-DD)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/treasury/yield-curve/historical", method="POST", body={"start_date":"2026-01-01","end_date":"2026-03-01"})\`
 
 ### GET /v1/macro/snapshot/all
 **Price:** $0.05
 **Description:** Complete macro snapshot (GDP, CPI, UNRATE, yields, VIX)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/macro/snapshot/all", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/macro/snapshot/all", method="GET")\`
 **Response:** Multi-series bundle with provenance
 
 ### GET /v1/composite/inflation-tracker
 **Price:** $0.40
 **Description:** Inflation metrics bundle (CPI, PCE, Core CPI)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/inflation-tracker", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/inflation-tracker", method="GET")\`
 
 ### GET /v1/composite/labor-market
 **Price:** $0.40
 **Description:** Labor market health (Unemployment, Jobless Claims, Nonfarm Payrolls)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/labor-market", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/labor-market", method="GET")\`
 
 ### GET /v1/composite/economic-dashboard
 **Price:** $0.50
 **Description:** Economic overview (GDP, CPI, Unemployment in one call)
-**Example:** \`mcp__agentcash__fetch("https://api.mercury402.com/v1/composite/economic-dashboard", method="GET")\`
+**Example:** \`mcp__agentcash__fetch("https://mercury402.uk/v1/composite/economic-dashboard", method="GET")\`
 
 ## Data Provenance
 
@@ -2619,39 +2464,12 @@ Payments settle on success (2xx) only. Failed requests don't cost anything.
 
 ## Documentation
 
-- Swagger UI: https://api.mercury402.com/docs
+- Swagger UI: https://mercury402.uk/docs
 - GitHub: https://github.com/dudman1/mercury402
 - x402scan: https://x402scan.com/server/mercury402
 `
   });
 });
-
-// ---- Facilitator wallet ETH balance monitoring -----------------------------
-// Cached because /metrics is polled frequently; refreshed on a 5-minute timer
-// so a scrape never hits the RPC. On startup we log once + WARN if below the
-// 0.0005 ETH threshold. On RPC failure we return null (no throw).
-let facilitatorEthCache = { balance: null, low: null, ts: 0 };
-const FACILITATOR_ETH_LOW_THRESHOLD = 0.0005;
-
-async function refreshFacilitatorEthBalance() {
-  if (!signingWallet) return;
-  try {
-    const provider = new ethers.JsonRpcProvider(
-      process.env.BASE_RPC_URL,
-      { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
-    );
-    const balanceWei = await provider.getBalance(signingWallet.address);
-    const balanceEth = parseFloat(ethers.formatEther(balanceWei));
-    facilitatorEthCache = {
-      balance: balanceEth.toFixed(6),
-      low: balanceEth < FACILITATOR_ETH_LOW_THRESHOLD,
-      ts: Date.now()
-    };
-  } catch (e) {
-    console.error('Facilitator ETH balance check failed:', e.message);
-    facilitatorEthCache = { balance: null, low: null, ts: Date.now() };
-  }
-}
 
 // Aggregate metrics from access log
 function getMetricsFromLog() {
@@ -2694,39 +2512,20 @@ function getMetricsFromLog() {
     const now = Date.now();
     const last24h = now - (24 * 60 * 60 * 1000);
 
-    // Totals (raw — includes unauthenticated 402 probes)
+    // Totals
     const total_revenue_usd = entries.reduce((sum, e) => sum + (e.price_usd || 0), 0);
     const total_calls = entries.length;
-
-    // Breakdown: separate real paid traffic from bot probes so revenue-vs-noise
-    // is visible at a glance. A "paid" call is one where the payment middleware
-    // set verified: true — meaning USDC transfer to the merchant was confirmed
-    // on-chain. Everything else with status 402 is an unauthenticated probe.
-    const paid_calls = entries.filter(e => e.verified === true).length;
-    const paid_success_200 = entries.filter(e => e.verified === true && e.status === 200).length;
-    const paid_error_4xx = entries.filter(e => e.verified === true && e.status >= 400 && e.status < 500).length;
-    const paid_error_5xx = entries.filter(e => e.verified === true && e.status >= 500 && e.status < 600).length;
-    const unauthenticated_402 = entries.filter(e => e.status === 402).length;
-
-    // Revenue is only counted on verified paid calls. price_usd is 0 for 402s
-    // already, but be explicit so the number isn't sensitive to future logging
-    // changes.
-    const revenue_usd = entries
-      .filter(e => e.verified === true)
-      .reduce((sum, e) => sum + (e.price_usd || 0), 0);
-
+    
     // Unique buyers (non-null wallet addresses)
     const uniqueWallets = new Set(
       entries.filter(e => e.wallet_address).map(e => e.wallet_address)
     );
     const unique_buyers = uniqueWallets.size;
 
-    // Last 24h (raw + paid breakdown)
+    // Last 24h
     const recent = entries.filter(e => e.timestamp >= last24h);
     const calls_last_24h = recent.length;
     const revenue_last_24h_usd = recent.reduce((sum, e) => sum + (e.price_usd || 0), 0);
-    const paid_calls_last_24h = recent.filter(e => e.verified === true).length;
-    const unauthenticated_402_last_24h = recent.filter(e => e.status === 402).length;
 
     // Top endpoints
     const endpointStats = {};
@@ -2774,26 +2573,15 @@ function getMetricsFromLog() {
 
     return {
       total_revenue_usd: parseFloat(total_revenue_usd.toFixed(2)),
-      total_calls, // includes 402 rejections; kept for backward compat
-      // Breakdown of total_calls into real paid traffic vs. unauthenticated probes.
-      paid_calls,
-      paid_success_200,
-      paid_error_4xx,
-      paid_error_5xx,
-      unauthenticated_402,
-      revenue_usd: parseFloat(revenue_usd.toFixed(2)),
+      total_calls,
       unique_buyers, // Legacy field (IP-based from old implementation)
       unique_wallets, // New field (wallet_address-based)
       calls_last_24h,
-      paid_calls_last_24h,
-      unauthenticated_402_last_24h,
       revenue_last_24h_usd: parseFloat(revenue_last_24h_usd.toFixed(2)),
       top_endpoints,
       verified_payment_rate_pct,
       bridge_verified_pct,
-      wallet_source_breakdown: walletSourceCounts,
-      facilitator_eth_balance: facilitatorEthCache.balance,
-      facilitator_eth_low: facilitatorEthCache.low
+      wallet_source_breakdown: walletSourceCounts
     };
   } catch (e) {
     console.error('Failed to read metrics from log:', e.message);
@@ -2805,8 +2593,6 @@ function getMetricsFromLog() {
       revenue_last_24h_usd: 0,
       top_endpoints: [],
       verified_payment_rate_pct: 0,
-      facilitator_eth_balance: facilitatorEthCache.balance,
-      facilitator_eth_low: facilitatorEthCache.low,
       error: e.message
     };
   }
@@ -2967,9 +2753,9 @@ const JSON_MANIFEST = {
     }
   },
   docs: {
-    quickstart: 'https://api.mercury402.com/docs',
-    apiReference: 'https://api.mercury402.com/docs/api',
-    openapi: 'https://api.mercury402.com/openapi.json'
+    quickstart: 'https://mercury402.uk/docs',
+    apiReference: 'https://mercury402.uk/docs/api',
+    openapi: 'https://mercury402.uk/openapi.json'
   }
 };
 
@@ -2983,12 +2769,12 @@ const LANDING_HTML = `<!DOCTYPE html>
 <meta name="keywords" content="AI agents, micropayments, HTTP 402, USDC, Base, financial API, payment-native data, x402">
 <meta property="og:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta property="og:description" content="Payment-native financial data with HTTP 402 enforcement and on-chain USDC settlement. View demo of payment flow.">
-<meta property="og:image" content="https://api.mercury402.com/payment-flow-preview.png">
-<meta property="og:url" content="https://api.mercury402.com/">
+<meta property="og:image" content="https://mercury402.uk/payment-flow-preview.png">
+<meta property="og:url" content="https://mercury402.uk/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
 <meta name="twitter:description" content="Payment-native financial data via HTTP 402 micropayments with on-chain USDC settlement.">
-<meta name="twitter:image" content="https://api.mercury402.com/payment-flow-preview.png">
+<meta name="twitter:image" content="https://mercury402.uk/payment-flow-preview.png">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;background:radial-gradient(circle at 20% 0%,rgba(31,111,235,0.15),transparent 40%),radial-gradient(circle at 80% 100%,rgba(56,139,253,0.12),transparent 40%),#0d1117;color:#e6edf3;min-height:100vh;padding:3rem 1rem}
@@ -3142,7 +2928,7 @@ const DOCS_HTML = `<!DOCTYPE html>
   <p>Mercury exposes financial time-series data (FRED, U.S. Treasury) via HTTP endpoints protected by the x402 micropayment standard. Each call costs a small amount of USDC on Base (chain 8453). No API keys. No subscriptions. Every response carries a cryptographic provenance signature.</p>
 
   <h2>Step 1 — Make an unpaid request (see the 402)</h2>
-  <pre><code>curl -i https://api.mercury402.com/v1/fred/UNRATE</code></pre>
+  <pre><code>curl -i https://mercury402.uk/v1/fred/UNRATE</code></pre>
   <p>You will get back <code>HTTP 402 Payment Required</code> with a <code>Payment-Required</code> header containing a base64url-encoded payment descriptor:</p>
   <pre><code>HTTP/2 402
 Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
@@ -3164,9 +2950,9 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
   <p>Use the descriptor from <code>Payment-Required</code> to create a signed x402 payment payload. Mercury production now expects that payload in the <code>payment-signature</code> header. Legacy manually generated bearer tokens are deprecated.</p>
 
   <h2>Step 3 — Retry with <code>payment-signature</code></h2>
-  <pre><code>curl https://api.mercury402.com/v1/fred/UNRATE \\
+  <pre><code>curl https://mercury402.uk/v1/fred/UNRATE \\
   -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
-  <pre><code>curl https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot \\
+  <pre><code>curl https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot \\
   -H "payment-signature: &lt;base64_x402_payment_payload&gt;"</code></pre>
 
   <h2>Payment details</h2>
@@ -3184,7 +2970,7 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
   Composite dashboards (economic, inflation, labor) — <strong>$0.40–$0.50</strong></p>
 
   <h2>Discovery</h2>
-  <pre><code>curl https://api.mercury402.com/.well-known/x402 | jq .</code></pre>
+  <pre><code>curl https://mercury402.uk/.well-known/x402 | jq .</code></pre>
 
   <h2>SDK Examples</h2>
   <p>Full copy-paste examples for Node.js and Python: <a href="/sdk-examples">SDK Examples</a></p>
@@ -3368,28 +3154,6 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`   FRED API: ${FRED_API_KEY ? '✅' : '❌'} configured`);
   console.log(`   Signing: ${signingWallet ? '✅ ' + signingWallet.address : '❌ not configured'}`);
   console.log('');
-
-  // Facilitator ETH balance: log once at startup, refresh every 5 minutes,
-  // WARN if below threshold. Same key as signingWallet — it's also the
-  // wallet that pays gas for transferWithAuthorization settlements.
-  if (signingWallet) {
-    refreshFacilitatorEthBalance().then(() => {
-      const { balance, low } = facilitatorEthCache;
-      if (balance !== null) {
-        console.log(`✅ Facilitator ETH balance: ${balance} ETH`);
-        if (low) {
-          console.warn(
-            `⚠️  WARNING: Facilitator ETH balance ${balance} ETH is below ` +
-            `${FACILITATOR_ETH_LOW_THRESHOLD} ETH threshold — refill required ` +
-            `to prevent settlement failures.`
-          );
-        }
-      } else {
-        console.warn('⚠️  Facilitator ETH balance check failed at startup (RPC error)');
-      }
-    });
-    setInterval(refreshFacilitatorEthBalance, 5 * 60 * 1000);
-  }
 });
 
 module.exports = app;

@@ -1,12 +1,12 @@
 # Mercury402
 
-![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-78-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
+![Live](https://img.shields.io/badge/status-live-brightgreen) ![Endpoints](https://img.shields.io/badge/endpoints-76-blue) ![Base/USDC](https://img.shields.io/badge/chain-Base%20%2F%20USDC-blue) ![x402](https://img.shields.io/badge/protocol-x402-purple)
 
 ## Deterministic Finance Data for Autonomous Agents
 
 Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous systems. No API keys, no accounts, no rate limits—just pay in USDC on Base via the x402 protocol and get instant access to Federal Reserve data, Treasury yields, and macro indicators with cryptographic provenance.
 
-**Live at:** https://api.mercury402.com
+**Live at:** https://mercury402.uk
 
 ---
 
@@ -16,39 +16,35 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 |----------|------|--------------|
 | `GET /v1/fred/{series_id}` | Any FRED economic series | $0.05 |
 | `GET /v1/treasury/yield-curve/daily-snapshot` | Current Treasury yield curve (11 maturities) | $0.05 |
-| `GET /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
+| `POST /v1/macro/snapshot/all` | Complete macro snapshot (GDP, CPI, unemployment, rates, VIX, dollar index, sentiment) | $0.05 |
 | `POST /v1/treasury/yield-curve/historical` | Historical yield curves (max 90-day range) | $0.05 |
-| `GET /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.05 |
-| `GET /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.05 |
-| `GET /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
-| `GET /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
-| `GET /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
-| `GET /v1/ai/briefing` | Macro briefing (AI) | $0.10 |
-| `POST /v1/ai/ask` | Macro Q&A (AI) | $0.15 |
+| `POST /v1/treasury/auction-results/recent` | Recent auction results (HQM proxy) | $0.05 |
+| `POST /v1/treasury/tips-rates/current` | Current TIPS rates (5, 7, 10, 20, 30-year) | $0.05 |
+| `POST /v1/composite/economic-dashboard` | Economic overview (GDP, CPI, unemployment) | $0.50 |
+| `POST /v1/composite/inflation-tracker` | Inflation metrics (CPI, PCE, Core CPI) | $0.40 |
+| `POST /v1/composite/labor-market` | Labor market data (unemployment, claims, payrolls) | $0.40 |
 | `GET /.well-known/x402` | x402 discovery document | Free |
 | `GET /health` | Health check | Free |
 | `GET /metrics` | Revenue and usage stats | Free |
 | `GET /openapi.json` | OpenAPI 3.1 spec | Free |
 | `GET /docs/api` | Interactive Swagger UI | Free |
 
-**78 priced routes** in `/.well-known/x402` / `src/pricing.js` (FRED aliases, forex, spreads, breakeven, macro, composites, AI) plus free discovery/health/docs.
+**76 total endpoints** (72 standard data endpoints + 2 premium composite + 2 free discovery/health endpoints)
 
 ---
-
-Full priced catalog: `GET /.well-known/x402` (78 accepts) or `GET /openapi.json`.
 
 ## Quick Start
 
 ```bash
 # 1. Try a free health check
-curl https://api.mercury402.com/health
+curl https://mercury402.uk/health
 
 # 2. Attempt to access data (returns 402 Payment Required)
-curl https://api.mercury402.com/v1/fred/UNRATE
+curl https://mercury402.uk/v1/fred/UNRATE
 
 # 3. Pay via an x402-compatible client and retry with payment-signature
 curl -H "payment-signature: <base64_x402_payment_payload>" \
-  https://api.mercury402.com/v1/fred/UNRATE
+  https://mercury402.uk/v1/fred/UNRATE
 ```
 
 See [`examples/`](./examples/) for agent integration code.
@@ -68,8 +64,8 @@ See [`examples/`](./examples/) for agent integration code.
 
 ## Documentation
 
-- **Swagger UI:** https://api.mercury402.com/docs/api
-- **OpenAPI Spec:** https://api.mercury402.com/openapi.json
+- **Swagger UI:** https://mercury402.uk/docs/api
+- **OpenAPI Spec:** https://mercury402.uk/openapi.json
 - **x402scan Listing:** https://www.x402scan.com/server/mercury402
 - **Examples:** [`examples/README.md`](./examples/README.md)
 
@@ -119,7 +115,7 @@ See [deployment docs](./docs/DEPLOYMENT.md) for production setup.
 ## Support
 
 **Issues:** [GitHub Issues](https://github.com/dudman1/mercury402/issues)  
-**Funding:** https://api.mercury402.com
+**Funding:** https://mercury402.uk
 
 ---
 

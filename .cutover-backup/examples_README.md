@@ -73,7 +73,7 @@ MERCURY_API=http://localhost:4020 PAYMENT_SIGNATURE='<base64_x402_payment_payloa
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MERCURY_API` | `https://api.mercury402.com` | API base URL |
+| `MERCURY_API` | `https://mercury402.uk` | API base URL |
 | `PAYMENT_SIGNATURE` | (none) | Optional prebuilt x402 payment payload for a demo request |
 | `MERCURY_WALLET_KEY` | (none) | Private key for real x402 payment signing/integration |
 
@@ -111,7 +111,7 @@ MERCURY_API=http://localhost:4020 PAYMENT_SIGNATURE='<base64_x402_payment_payloa
 ╔═══════════════════════════════════════╗
 ║   Mercury x402 Daily Economic Brief  ║
 ╚═══════════════════════════════════════╝
-API: https://api.mercury402.com
+API: https://mercury402.uk
 Mode: payment-signature flow
 
 → Fetching /v1/treasury/yield-curve/daily-snapshot...
@@ -152,10 +152,10 @@ Mode: payment-signature flow
 ## Links
 
 - **x402scan Listing**: https://www.x402scan.com/server/dff9ad75-5d4b-4921-b975-fec7f38a1369
-- **Swagger UI (Interactive Docs)**: https://api.mercury402.com/docs/api
-- **OpenAPI Spec (JSON)**: https://api.mercury402.com/openapi.json
-- **Quickstart Guide**: https://api.mercury402.com/docs
-- **Health Check**: https://api.mercury402.com/health
+- **Swagger UI (Interactive Docs)**: https://mercury402.uk/docs/api
+- **OpenAPI Spec (JSON)**: https://mercury402.uk/openapi.json
+- **Quickstart Guide**: https://mercury402.uk/docs
+- **Health Check**: https://mercury402.uk/health
 - **x402 Protocol Spec**: https://x402.org
 
 ---
@@ -174,7 +174,7 @@ Mode: payment-signature flow
 
 **Solution:** Check server status:
 ```bash
-curl https://api.mercury402.com/health
+curl https://mercury402.uk/health
 ```
 
 ### `No payment-signature provided`

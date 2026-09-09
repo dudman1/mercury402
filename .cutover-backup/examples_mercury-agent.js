@@ -10,7 +10,7 @@
 const https = require('https');
 const http = require('http');
 
-const MERCURY_API = process.env.MERCURY_API || 'https://api.mercury402.com';
+const MERCURY_API = process.env.MERCURY_API || 'https://mercury402.uk';
 const PAYMENT_SIGNATURE = process.env.PAYMENT_SIGNATURE || null;
 
 // Track spending
@@ -229,8 +229,8 @@ async function main() {
     console.error('\n❌ Error:', error.message);
     console.log('\n💡 Tips:');
     console.log('  - Export PAYMENT_SIGNATURE with a real x402 payment payload');
-    console.log('  - Check server is running: curl https://api.mercury402.com/health');
-    console.log('  - View docs: https://api.mercury402.com/docs/api\n');
+    console.log('  - Check server is running: curl https://mercury402.uk/health');
+    console.log('  - View docs: https://mercury402.uk/docs/api\n');
     process.exit(1);
   }
 }

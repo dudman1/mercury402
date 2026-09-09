@@ -1,120 +1,2240 @@
 openapi: 3.0.3
 info:
   title: Mercury x402 API
-  version: 1.2.0
-  description: |
-    Deterministic financial data with cryptographic provenance.
-    
+  version: 1.3.0
+  description: 'Deterministic financial data with cryptographic provenance.
+
+
     Payment required via x402 protocol (HTTP 402 + USDC on Base).
-    All paid endpoints require `Authorization: Bearer x402_<token>` header.
-    
+
+    All paid endpoints require the `payment-signature` header in production.
+
+
     **Payment Flow:**
+
     1. Call endpoint without auth → receive 402 with Payment-Required header
+
     2. Pay via x402 protocol (USDC on Base mainnet)
-    3. Retry with Bearer token → receive 200 + data
-    
+
+    3. Retry with `payment-signature` → receive 200 + data
+
+
     **Data Sources:**
+
     - FRED (Federal Reserve Economic Data): 800k+ economic series
+
     - U.S. Treasury rates: 11 maturities via FRED DGS series
-    
+
+
+    **Catalog:** 78 priced routes advertised via `/.well-known/x402` (aliases + composites + AI).
+
+    '
   contact:
     name: Mercury x402 Support
-    url: https://mercury402.uk
+    url: https://api.mercury402.com
+    email: support@mercury402.com
   license:
     name: Proprietary
-  guidance: "Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators) via x402 micropayments on Base. Call any endpoint, receive 402, pay USDC, retry with Bearer token."
-    
+  guidance: Mercury402 provides deterministic financial data (FRED, Treasury rates, macro indicators)
+    via x402 micropayments on Base. Call any endpoint, receive 402, pay via an x402-compatible client,
+    then retry with the payment-signature header.
 x-discovery:
   ownershipProofs: []
-
 servers:
-  - url: https://mercury402.uk
-    description: Production
-  - url: http://localhost:4020
-    description: Local development
-
+- url: https://api.mercury402.com
+  description: Production
+- url: http://localhost:4020
+  description: Local development
 security:
-  - x402Bearer: []
-
+- x402PaymentSignature: []
 tags:
-  - name: FRED
-    description: Federal Reserve Economic Data series
-  - name: Treasury
-    description: U.S. Treasury yield curve data
-  - name: Composite
-    description: Multi-series composite dashboards
-  - name: Discovery
-    description: Service discovery and health
-  - name: Documentation
-    description: Documentation and examples
-
+- name: FRED
+  description: Federal Reserve Economic Data series
+- name: Treasury
+  description: U.S. Treasury yield curve data
+- name: Composite
+  description: Multi-series composite dashboards
+- name: Discovery
+  description: Service discovery and health
+- name: Documentation
+  description: Documentation and examples
+- name: Macro
+  description: Macro snapshots and bundles
+- name: Forex
+  description: FX cross-rates via FRED DEX series
+- name: Yield Spreads
+  description: Computed Treasury yield curve spreads
+- name: Breakeven
+  description: TIPS breakeven inflation
+- name: AI
+  description: AI briefing and Q&A over macro context
 paths:
+  /v1/ai/ask:
+    post:
+      summary: 'Ask the Data: natural-language question answered ONLY from chosen Mercury402 FRED series
+        (grounded, cited)'
+      description: 'Ask the Data: natural-language question answered ONLY from chosen Mercury402 FRED
+        series (grounded, cited).
+
+
+        **Pricing:** $0.15 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_ai_ask
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.15'
+        protocols:
+        - x402: {}
+      tags:
+      - AI
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/ai/briefing:
+    get:
+      summary: 'AI Macro Briefing: analyst narrative written strictly from live FRED data (growth, prices,
+        labor, Fed funds)'
+      description: 'AI Macro Briefing: analyst narrative written strictly from live FRED data (growth,
+        prices, labor, Fed funds).
+
+
+        **Pricing:** $0.10 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_ai_briefing
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.10'
+        protocols:
+        - x402: {}
+      tags:
+      - AI
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/breakeven/10y:
+    get:
+      summary: 10-year breakeven inflation rate (TIPS)
+      description: '10-year breakeven inflation rate (TIPS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_breakeven_10y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Breakeven
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/breakeven/2y:
+    get:
+      summary: 2-year breakeven inflation rate (TIPS)
+      description: '2-year breakeven inflation rate (TIPS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_breakeven_2y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Breakeven
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/breakeven/5y:
+    get:
+      summary: 5-year breakeven inflation rate (TIPS)
+      description: '5-year breakeven inflation rate (TIPS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_breakeven_5y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Breakeven
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/breakeven/5y5y:
+    get:
+      summary: 5-year, 5-year forward inflation expectation rate
+      description: '5-year, 5-year forward inflation expectation rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_breakeven_5y5y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Breakeven
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/composite/economic-dashboard:
+    get:
+      summary: Economic overview dashboard
+      description: 'Composite endpoint returning GDP, CPI, and Unemployment in one call.
+
+
+        **Price:** $0.50
+
+
+        **Includes:**
+
+        - GDP (Gross Domestic Product)
+
+        - CPIAUCSL (Consumer Price Index)
+
+        - UNRATE (Unemployment Rate)
+
+
+        Returns latest observation for each series.
+
+        '
+      operationId: getEconomicDashboard
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.500000'
+        protocols:
+        - x402: {}
+      tags:
+      - Composite
+      security:
+      - x402PaymentSignature: []
+      responses:
+        '200':
+          description: Economic indicators dashboard
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.50
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: economic-overview
+                  timestamp: '2026-03-04T18:20:00.000Z'
+                  indicators:
+                  - series_id: GDP
+                    title: Gross Domestic Product
+                    value: '28230.532'
+                    date: '2025-10-01'
+                    units: Billions of Dollars
+                  - series_id: CPIAUCSL
+                    title: Consumer Price Index
+                    value: '315.249'
+                    date: '2026-01-01'
+                    units: Index 1982-1984=100
+                  - series_id: UNRATE
+                    title: Unemployment Rate
+                    value: '4.0'
+                    date: '2026-01-01'
+                    units: Percent
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  source_url: https://fred.stlouisfed.org/series/composite/economic-dashboard
+                  fetched_at: '2026-03-04T18:20:00.000Z'
+                  mercury_version: v1.0
+                  deterministic: true
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/composite/inflation-tracker:
+    get:
+      summary: Inflation metrics dashboard
+      description: 'Composite endpoint returning CPI, PCE, and Core CPI in one call.
+
+
+        **Price:** $0.40
+
+
+        **Includes:**
+
+        - CPIAUCSL (Consumer Price Index - All Items)
+
+        - PCEPI (Personal Consumption Expenditures Price Index)
+
+        - CPILFESL (Core CPI - Less Food & Energy)
+
+        '
+      operationId: getInflationTracker
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.400000'
+        protocols:
+        - x402: {}
+      tags:
+      - Composite
+      security:
+      - x402PaymentSignature: []
+      responses:
+        '200':
+          description: Inflation indicators
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.40
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: inflation-tracker
+                  timestamp: '2026-03-04T18:20:00.000Z'
+                  indicators:
+                  - series_id: CPIAUCSL
+                    title: Consumer Price Index (All Items)
+                    value: '315.249'
+                    date: '2026-01-01'
+                    units: Index 1982-1984=100
+                  - series_id: PCEPI
+                    title: Personal Consumption Expenditures Price Index
+                    value: '123.456'
+                    date: '2026-01-01'
+                    units: Index 2017=100
+                  - series_id: CPILFESL
+                    title: Core CPI (Less Food & Energy)
+                    value: '320.789'
+                    date: '2026-01-01'
+                    units: Index 1982-1984=100
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  fetched_at: '2026-03-04T18:20:00.000Z'
+                  mercury_version: v1.0
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/composite/labor-market:
+    get:
+      summary: Labor market health dashboard
+      description: 'Composite endpoint returning unemployment, jobless claims, and payrolls in one call.
+
+
+        **Price:** $0.40
+
+
+        **Includes:**
+
+        - UNRATE (Unemployment Rate)
+
+        - ICSA (Initial Jobless Claims)
+
+        - PAYEMS (Total Nonfarm Payrolls)
+
+        '
+      operationId: getLaborMarket
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.400000'
+        protocols:
+        - x402: {}
+      tags:
+      - Composite
+      security:
+      - x402PaymentSignature: []
+      responses:
+        '200':
+          description: Labor market indicators
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.40
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompositeResponse'
+              example:
+                data:
+                  dashboard: labor-market
+                  timestamp: '2026-03-04T18:20:00.000Z'
+                  indicators:
+                  - series_id: UNRATE
+                    title: Unemployment Rate
+                    value: '4.0'
+                    date: '2026-01-01'
+                    units: Percent
+                  - series_id: ICSA
+                    title: Initial Jobless Claims
+                    value: '210000'
+                    date: '2026-03-01'
+                    units: Number
+                  - series_id: PAYEMS
+                    title: Total Nonfarm Payrolls
+                    value: '158500'
+                    date: '2026-01-01'
+                    units: Thousands of Persons
+                provenance:
+                  source: Federal Reserve Economic Data (FRED)
+                  fetched_at: '2026-03-04T18:20:00.000Z'
+                  mercury_version: v1.0
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/forex/eur-usd:
+    get:
+      summary: Euro area / US dollar exchange rate (DEXUSEU)
+      description: 'Euro area / US dollar exchange rate (DEXUSEU).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_forex_eur_usd
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Forex
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/forex/gbp-usd:
+    get:
+      summary: US / UK pound exchange rate (DEXUSUK)
+      description: 'US / UK pound exchange rate (DEXUSUK).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_forex_gbp_usd
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Forex
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/forex/usd-cny:
+    get:
+      summary: China / US dollar exchange rate (DEXCHUS)
+      description: 'China / US dollar exchange rate (DEXCHUS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_forex_usd_cny
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Forex
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/forex/usd-jpy:
+    get:
+      summary: Japan / US dollar exchange rate (DEXJPUS)
+      description: 'Japan / US dollar exchange rate (DEXJPUS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_forex_usd_jpy
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Forex
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/a-rated-spread:
+    get:
+      summary: ICE BofA Single-A US Corporate Index OAS
+      description: 'ICE BofA Single-A US Corporate Index OAS.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_a_rated_spread
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/average-hourly-earnings:
+    get:
+      summary: Average hourly earnings of all employees, total private
+      description: 'Average hourly earnings of all employees, total private.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_average_hourly_earnings
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/bbb-corporate-yield:
+    get:
+      summary: ICE BofA BBB US Corporate Index Option-Adjusted Yield
+      description: 'ICE BofA BBB US Corporate Index Option-Adjusted Yield.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_bbb_corporate_yield
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/building-permits:
+    get:
+      summary: New privately-owned housing units authorized (thousands)
+      description: 'New privately-owned housing units authorized (thousands).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_building_permits
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/case-shiller:
+    get:
+      summary: S&P/Case-Shiller US National Home Price Index
+      description: 'S&P/Case-Shiller US National Home Price Index.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_case_shiller
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/conference-board-ci:
+    get:
+      summary: Conference Board consumer confidence index (OECD)
+      description: 'Conference Board consumer confidence index (OECD).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_conference_board_ci
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/consumer-confidence:
+    get:
+      summary: University of Michigan consumer sentiment index
+      description: 'University of Michigan consumer sentiment index.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_consumer_confidence
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/continuing-claims:
+    get:
+      summary: Continued claims, weekly
+      description: 'Continued claims, weekly.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_continuing_claims
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/corporate-profits:
+    get:
+      summary: Corporate profits after tax
+      description: 'Corporate profits after tax.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_corporate_profits
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/cpi:
+    get:
+      summary: Consumer Price Index for All Urban Consumers (CPIAUCSL)
+      description: 'Consumer Price Index for All Urban Consumers (CPIAUCSL).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_cpi
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/cpi-core:
+    get:
+      summary: Core CPI (excl. food & energy, CPILFESL)
+      description: 'Core CPI (excl. food & energy, CPILFESL).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_cpi_core
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/current-account:
+    get:
+      summary: Current account balance, billions of USD
+      description: 'Current account balance, billions of USD.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_current_account
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/existing-home-sales:
+    get:
+      summary: Existing home sales, millions (SAAR)
+      description: 'Existing home sales, millions (SAAR).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_existing_home_sales
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/fed-funds-rate:
+    get:
+      summary: Effective federal funds rate
+      description: 'Effective federal funds rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_fed_funds_rate
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/fed-funds-target-upper:
+    get:
+      summary: Federal funds target rate, upper bound
+      description: 'Federal funds target rate, upper bound.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_fed_funds_target_upper
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/federal-debt:
+    get:
+      summary: Federal debt as percent of GDP
+      description: 'Federal debt as percent of GDP.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_federal_debt
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/federal-deficit:
+    get:
+      summary: Federal surplus or deficit, billions
+      description: 'Federal surplus or deficit, billions.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_federal_deficit
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/gdi:
+    get:
+      summary: Real GDI
+      description: 'Real GDI.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_gdi
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/gdp:
+    get:
+      summary: Real GDP, billions of chained 2017 dollars
+      description: 'Real GDP, billions of chained 2017 dollars.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_gdp
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/gdp-deflator:
+    get:
+      summary: 'Gross domestic product: implicit price deflator'
+      description: 'Gross domestic product: implicit price deflator.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_gdp_deflator
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/gdp-growth:
+    get:
+      summary: Real GDP percent change, annualized
+      description: 'Real GDP percent change, annualized.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_gdp_growth
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/high-yield-spread:
+    get:
+      summary: ICE BofA US High Yield Index Option-Adjusted Spread
+      description: 'ICE BofA US High Yield Index Option-Adjusted Spread.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_high_yield_spread
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/homeownership-rate:
+    get:
+      summary: Homeownership rate for the US
+      description: 'Homeownership rate for the US.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_homeownership_rate
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/housing-starts:
+    get:
+      summary: New privately-owned housing units started (thousands)
+      description: 'New privately-owned housing units started (thousands).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_housing_starts
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/industrial-production:
+    get:
+      summary: 'Industrial production: total index'
+      description: 'Industrial production: total index.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_industrial_production
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/inflation-expectations:
+    get:
+      summary: University of Michigan 1-year inflation expectations
+      description: 'University of Michigan 1-year inflation expectations.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_inflation_expectations
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/initial-claims:
+    get:
+      summary: Initial jobless claims, weekly
+      description: 'Initial jobless claims, weekly.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_initial_claims
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/jolts-openings:
+    get:
+      summary: Job Openings and Labor Turnover Survey
+      description: 'Job Openings and Labor Turnover Survey.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_jolts_openings
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/labor-force-participation:
+    get:
+      summary: Labor force participation rate
+      description: 'Labor force participation rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_labor_force_participation
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/leading-indicators:
+    get:
+      summary: Conference Board Leading Economic Index for the US
+      description: 'Conference Board Leading Economic Index for the US.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_leading_indicators
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/m1-money-stock:
+    get:
+      summary: M1 money stock, seasonally adjusted
+      description: 'M1 money stock, seasonally adjusted.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_m1_money_stock
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/m2-money-stock:
+    get:
+      summary: M2 money stock, seasonally adjusted
+      description: 'M2 money stock, seasonally adjusted.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_m2_money_stock
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/mortgage-30y:
+    get:
+      summary: 30-year fixed-rate mortgage average
+      description: '30-year fixed-rate mortgage average.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_mortgage_30y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/nonfarm-payrolls:
+    get:
+      summary: Total nonfarm payrolls (thousands)
+      description: 'Total nonfarm payrolls (thousands).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_nonfarm_payrolls
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/pce:
+    get:
+      summary: Personal Consumption Expenditures (PCE)
+      description: 'Personal Consumption Expenditures (PCE).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_pce
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/pce-core:
+    get:
+      summary: Core PCE Price Index (excl. food & energy)
+      description: 'Core PCE Price Index (excl. food & energy).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_pce_core
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/pce-deflator:
+    get:
+      summary: PCE deflator, percent change from year ago
+      description: 'PCE deflator, percent change from year ago.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_pce_deflator
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/personal-income:
+    get:
+      summary: Personal income, billions of USD
+      description: 'Personal income, billions of USD.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_personal_income
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/personal-saving-rate:
+    get:
+      summary: Personal saving rate (percent)
+      description: 'Personal saving rate (percent).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_personal_saving_rate
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/ppi:
+    get:
+      summary: Producer Price Index for All Commodities
+      description: 'Producer Price Index for All Commodities.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_ppi
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/quits-rate:
+    get:
+      summary: Quits rate (JOLTS)
+      description: 'Quits rate (JOLTS).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_quits_rate
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/retail-sales:
+    get:
+      summary: 'Advance retail sales: retail and food services (millions)'
+      description: 'Advance retail sales: retail and food services (millions).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_retail_sales
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/total-vehicle-sales:
+    get:
+      summary: Total vehicle sales, millions (SAAR)
+      description: 'Total vehicle sales, millions (SAAR).
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_total_vehicle_sales
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/trade-balance:
+    get:
+      summary: 'Trade balance: goods and services, millions of USD'
+      description: 'Trade balance: goods and services, millions of USD.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_trade_balance
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/treasury-10y:
+    get:
+      summary: 10-year Treasury constant maturity rate
+      description: '10-year Treasury constant maturity rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_treasury_10y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/treasury-2y:
+    get:
+      summary: 2-year Treasury constant maturity rate
+      description: '2-year Treasury constant maturity rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_treasury_2y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/treasury-30y:
+    get:
+      summary: 30-year Treasury constant maturity rate
+      description: '30-year Treasury constant maturity rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_treasury_30y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/treasury-3m:
+    get:
+      summary: 3-month Treasury constant maturity rate
+      description: '3-month Treasury constant maturity rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_treasury_3m
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/treasury-5y:
+    get:
+      summary: 5-year Treasury constant maturity rate
+      description: '5-year Treasury constant maturity rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_treasury_5y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/u6-unemployment:
+    get:
+      summary: Total unemployed + marginally attached + part-time for economic reasons
+      description: 'Total unemployed + marginally attached + part-time for economic reasons.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_u6_unemployment
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/unemployment-rate:
+    get:
+      summary: Civilian unemployment rate
+      description: 'Civilian unemployment rate.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_unemployment_rate
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/fred/vix:
+    get:
+      summary: 'CBOE Volatility Index: VIX'
+      description: 'CBOE Volatility Index: VIX.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_fred_vix
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - FRED
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
   /v1/fred/{series_id}:
     get:
       summary: Fetch FRED economic series data
-      description: |
-        Returns observations for any FRED series ID (GDP, UNRATE, DGS10, etc.).
-        
+      description: 'Returns observations for any FRED series ID (GDP, UNRATE, DGS10, etc.).
+
+
         **Pricing:**
-        - Single date or latest: $0.01
-        - Date range (observation_start + observation_end): $0.02
-        
+
+        - Single date or latest: $0.05
+
+        - Date range (observation_start + observation_end): $0.10
+
+
         **Common Series:**
+
         - UNRATE: Unemployment Rate
+
         - GDP: Gross Domestic Product
+
         - CPIAUCSL: Consumer Price Index
+
         - DGS10: 10-Year Treasury Rate
+
         - FEDFUNDS: Federal Funds Rate
-        
+
+
         Browse all series: https://fred.stlouisfed.org/
+
+        '
       operationId: getFredSeries
       x-payment-info:
-        pricingMode: fixed
-        price: "0.010000"
+        price:
+          currency: USD
+          mode: dynamic
+          min: '0.05'
+          max: '0.10'
         protocols:
-          - x402
-          - mpp
-      tags: [FRED]
+        - x402: {}
+      tags:
+      - FRED
       security:
-        - x402Bearer: []
+      - x402PaymentSignature: []
       parameters:
-        - name: series_id
-          in: path
-          required: true
-          schema:
-            type: string
-            example: UNRATE
-          description: FRED series ID (case-sensitive)
-        - name: date
-          in: query
-          schema:
-            type: string
-            format: date
-            example: "2026-01-01"
-          description: Single date observation (YYYY-MM-DD)
-        - name: observation_start
-          in: query
-          schema:
-            type: string
-            format: date
-            example: "2020-01-01"
-          description: Start date for range query (requires observation_end)
-        - name: observation_end
-          in: query
-          schema:
-            type: string
-            format: date
-            example: "2023-12-31"
-          description: End date for range query (requires observation_start)
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 1000
-            default: 1
-            example: 5
-          description: Max observations to return (ignored if date/range specified)
+      - name: series_id
+        in: path
+        required: true
+        example: UNRATE
+        schema:
+          type: string
+          example: UNRATE
+        description: FRED series ID (case-sensitive)
+      - name: date
+        in: query
+        schema:
+          type: string
+          format: date
+          example: '2026-01-01'
+        description: Single date observation (YYYY-MM-DD)
+      - name: observation_start
+        in: query
+        schema:
+          type: string
+          format: date
+          example: '2020-01-01'
+        description: Start date for range query (requires observation_end)
+      - name: observation_end
+        in: query
+        schema:
+          type: string
+          format: date
+          example: '2023-12-31'
+        description: End date for range query (requires observation_start)
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          example: 5
+        description: Max observations to return (ignored if date/range specified)
       responses:
         '200':
           description: Successful response with data and provenance
@@ -122,7 +2242,7 @@ paths:
             X-Mercury-Price:
               schema:
                 type: string
-                example: "$0.01"
+                example: $0.01
               description: Price charged for this call
           content:
             application/json:
@@ -135,18 +2255,18 @@ paths:
                   units: Percent
                   frequency: Monthly
                   seasonal_adjustment: Seasonally Adjusted
-                  last_updated: "2026-02-07T13:03:22.000Z"
+                  last_updated: '2026-02-07T13:03:22.000Z'
                   observation_count: 1
                   observations:
-                    - date: "2026-01-01"
-                      value: "4.0"
+                  - date: '2026-01-01'
+                    value: '4.0'
                 provenance:
                   source: Federal Reserve Economic Data (FRED)
                   source_url: https://fred.stlouisfed.org/series/UNRATE
-                  fetched_at: "2026-03-04T18:20:00.000Z"
+                  fetched_at: '2026-03-04T18:20:00.000Z'
                   mercury_version: v1.0
                   deterministic: true
-                  signature: "0x42d8f3f315633eaab09da600a89463314a1344da..."
+                  signature: 0x42d8f3f315633eaab09da600a89463314a1344da...
         '402':
           $ref: '#/components/responses/PaymentRequired'
         '404':
@@ -161,7 +2281,9 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: [SERIES_NOT_FOUND, NO_DATA_FOUND]
+                        enum:
+                        - SERIES_NOT_FOUND
+                        - NO_DATA_FOUND
                       message:
                         type: string
                       series_id:
@@ -169,7 +2291,7 @@ paths:
               example:
                 error:
                   code: SERIES_NOT_FOUND
-                  message: "Series 'INVALID' not found in FRED database"
+                  message: Series 'INVALID' not found in FRED database
                   series_id: INVALID
         '429':
           description: FRED API rate limit exceeded
@@ -193,361 +2315,114 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/treasury/yield-curve/daily-snapshot:
+  /v1/macro/bundle:
     get:
-      summary: U.S. Treasury yield curve daily snapshot
-      description: |
-        Returns daily U.S. Treasury par yield curve rates across 11 maturities.
-        Data sourced from FRED series (DGS1MO through DGS30).
-        
-        **Price:** $0.10
-        
-        **Maturities covered:**
-        - 1 Month, 3 Month, 6 Month
-        - 1 Year, 2 Year, 3 Year, 5 Year, 7 Year
-        - 10 Year, 20 Year, 30 Year
-        
-        **Data quality:** Returns 404 if fewer than 5 maturities available.
-      operationId: getTreasuryYieldCurve
+      summary: 'Macro Bundle: Treasury + CPI + GDP + Employment + Fed Funds + M2 + VIX + Trade (single
+        call)'
+      description: 'Macro Bundle: Treasury + CPI + GDP + Employment + Fed Funds + M2 + VIX + Trade (single
+        call).
+
+
+        **Pricing:** $0.10 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_macro_bundle
       x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
+        price:
+          currency: USD
+          amount: '0.10'
         protocols:
-          - x402
-          - mpp
-      tags: [Treasury]
-      security:
-        - x402Bearer: []
-      parameters:
-        - name: date
-          in: query
-          schema:
-            type: string
-            format: date
-            example: "2026-03-01"
-          description: Specific date (defaults to latest available)
-        - name: v
-          in: query
-          schema:
-            type: string
-            enum: ["0.9", "1.0"]
-            default: "1.0"
-          description: |
-            Response format version:
-            - 0.9: Legacy format (rates only)
-            - 1.0: New format with provenance (default)
+        - x402: {}
+      tags:
+      - Macro
       responses:
         '200':
-          description: Treasury yield curve data with provenance
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.10"
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/TreasuryResponseV1'
-                  - $ref: '#/components/schemas/TreasuryResponseV0_9'
-              examples:
-                v1:
-                  summary: Version 1.0 (with provenance)
-                  value:
-                    data:
-                      record_date: "2026-03-02"
-                      rates:
-                        1_MONTH: 3.74
-                        3_MONTH: 3.72
-                        6_MONTH: 3.68
-                        1_YEAR: 3.54
-                        2_YEAR: 3.47
-                        3_YEAR: 3.49
-                        5_YEAR: 3.62
-                        7_YEAR: 3.82
-                        10_YEAR: 4.05
-                        20_YEAR: 4.64
-                        30_YEAR: 4.70
-                    provenance:
-                      source: Federal Reserve Economic Data (FRED) - U.S. Treasury rates
-                      source_url: https://fred.stlouisfed.org
-                      fetched_at: "2026-03-04T18:07:49.590Z"
-                      mercury_version: v1.0
-                      deterministic: true
-                      cache_until: "2026-03-05T18:07:49.590Z"
-                      series_coverage: "11/11 maturities"
-                      record_date: "2026-03-02"
-                      signature: "0x42d8f3f315633eaab09da600a89463314a1344da..."
-                v0_9:
-                  summary: Version 0.9 (legacy)
-                  value:
-                    record_date: "2026-03-02"
-                    rates:
-                      1_MONTH: 3.74
-                      3_MONTH: 3.72
-                      10_YEAR: 4.05
-                      30_YEAR: 4.70
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '404':
-          description: No valid Treasury rate data available
+          description: Paid success — JSON payload with data and provenance
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        example: NO_DATA_AVAILABLE
-                      message:
-                        type: string
-                      alternatives:
-                        type: array
-                        items:
-                          type: string
-              example:
-                error:
-                  code: NO_DATA_AVAILABLE
-                  message: No valid Treasury rate data available for requested date
-                  alternatives: ["/v1/fred/DGS10", "/v1/fred/DGS2", "/v1/fred/DGS30"]
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/composite/economic-dashboard:
-    get:
-      summary: Economic overview dashboard
-      description: |
-        Composite endpoint returning GDP, CPI, and Unemployment in one call.
-        
-        **Price:** $0.50
-        
-        **Includes:**
-        - GDP (Gross Domestic Product)
-        - CPIAUCSL (Consumer Price Index)
-        - UNRATE (Unemployment Rate)
-        
-        Returns latest observation for each series.
-      operationId: getEconomicDashboard
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.500000"
-        protocols:
-          - x402
-          - mpp
-      tags: [Composite]
+        '402':
+          description: Payment Required — x402 challenge
       security:
-        - x402Bearer: []
+      - x402PaymentSignature: []
+  /v1/macro/recession-probability:
+    get:
+      summary: 'Recession Probability Index: yield curve spread + unemployment + leading indicators'
+      description: 'Recession Probability Index: yield curve spread + unemployment + leading indicators.
+
+
+        **Pricing:** $0.10 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_macro_recession_probability
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.10'
+        protocols:
+        - x402: {}
+      tags:
+      - Macro
       responses:
         '200':
-          description: Economic indicators dashboard
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.50"
+          description: Paid success — JSON payload with data and provenance
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompositeResponse'
-              example:
-                data:
-                  dashboard: economic-overview
-                  timestamp: "2026-03-04T18:20:00.000Z"
-                  indicators:
-                    - series_id: GDP
-                      title: Gross Domestic Product
-                      value: "28230.532"
-                      date: "2025-10-01"
-                      units: Billions of Dollars
-                    - series_id: CPIAUCSL
-                      title: Consumer Price Index
-                      value: "315.249"
-                      date: "2026-01-01"
-                      units: Index 1982-1984=100
-                    - series_id: UNRATE
-                      title: Unemployment Rate
-                      value: "4.0"
-                      date: "2026-01-01"
-                      units: Percent
-                provenance:
-                  source: Federal Reserve Economic Data (FRED)
-                  source_url: https://fred.stlouisfed.org/series/composite/economic-dashboard
-                  fetched_at: "2026-03-04T18:20:00.000Z"
-                  mercury_version: v1.0
-                  deterministic: true
+                type: object
         '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/composite/inflation-tracker:
-    get:
-      summary: Inflation metrics dashboard
-      description: |
-        Composite endpoint returning CPI, PCE, and Core CPI in one call.
-        
-        **Price:** $0.40
-        
-        **Includes:**
-        - CPIAUCSL (Consumer Price Index - All Items)
-        - PCEPI (Personal Consumption Expenditures Price Index)
-        - CPILFESL (Core CPI - Less Food & Energy)
-      operationId: getInflationTracker
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.400000"
-        protocols:
-          - x402
-          - mpp
-      tags: [Composite]
+          description: Payment Required — x402 challenge
       security:
-        - x402Bearer: []
-      responses:
-        '200':
-          description: Inflation indicators
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.40"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CompositeResponse'
-              example:
-                data:
-                  dashboard: inflation-tracker
-                  timestamp: "2026-03-04T18:20:00.000Z"
-                  indicators:
-                    - series_id: CPIAUCSL
-                      title: Consumer Price Index (All Items)
-                      value: "315.249"
-                      date: "2026-01-01"
-                      units: Index 1982-1984=100
-                    - series_id: PCEPI
-                      title: Personal Consumption Expenditures Price Index
-                      value: "123.456"
-                      date: "2026-01-01"
-                      units: Index 2017=100
-                    - series_id: CPILFESL
-                      title: Core CPI (Less Food & Energy)
-                      value: "320.789"
-                      date: "2026-01-01"
-                      units: Index 1982-1984=100
-                provenance:
-                  source: Federal Reserve Economic Data (FRED)
-                  fetched_at: "2026-03-04T18:20:00.000Z"
-                  mercury_version: v1.0
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/composite/labor-market:
-    get:
-      summary: Labor market health dashboard
-      description: |
-        Composite endpoint returning unemployment, jobless claims, and payrolls in one call.
-        
-        **Price:** $0.40
-        
-        **Includes:**
-        - UNRATE (Unemployment Rate)
-        - ICSA (Initial Jobless Claims)
-        - PAYEMS (Total Nonfarm Payrolls)
-      operationId: getLaborMarket
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.400000"
-        protocols:
-          - x402
-          - mpp
-      tags: [Composite]
-      security:
-        - x402Bearer: []
-      responses:
-        '200':
-          description: Labor market indicators
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.40"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CompositeResponse'
-              example:
-                data:
-                  dashboard: labor-market
-                  timestamp: "2026-03-04T18:20:00.000Z"
-                  indicators:
-                    - series_id: UNRATE
-                      title: Unemployment Rate
-                      value: "4.0"
-                      date: "2026-01-01"
-                      units: Percent
-                    - series_id: ICSA
-                      title: Initial Jobless Claims
-                      value: "210000"
-                      date: "2026-03-01"
-                      units: Number
-                    - series_id: PAYEMS
-                      title: Total Nonfarm Payrolls
-                      value: "158500"
-                      date: "2026-01-01"
-                      units: Thousands of Persons
-                provenance:
-                  source: Federal Reserve Economic Data (FRED)
-                  fetched_at: "2026-03-04T18:20:00.000Z"
-                  mercury_version: v1.0
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
+      - x402PaymentSignature: []
   /v1/macro/snapshot/all:
     get:
       summary: Complete macroeconomic snapshot
-      description: |
-        Fetches all major economic indicators in a single call:
+      description: 'Fetches all major economic indicators in a single call:
+
         GDP, UNRATE, CPI, FEDFUNDS, DGS10, DGS2, T10Y2Y, VIX, Dollar Index, Consumer Sentiment.
-        
+
+
         **Price:** $0.05
-        
+
+
         **Indicators (10 total):**
+
         - GDP: Gross Domestic Product
+
         - UNRATE: Unemployment Rate
+
         - CPIAUCSL: Consumer Price Index
+
         - FEDFUNDS: Federal Funds Rate
+
         - DGS10: 10-Year Treasury Yield
+
         - DGS2: 2-Year Treasury Yield
+
         - T10Y2Y: 10Y-2Y Yield Spread
+
         - VIXCLS: VIX Volatility Index
+
         - DTWEXBGS: Trade Weighted U.S. Dollar Index
+
         - UMCSENT: Consumer Sentiment Index
+
+        '
       operationId: getMacroSnapshot
       x-payment-info:
-        pricingMode: fixed
-        price: "0.050000"
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.050000'
         protocols:
-          - x402
-          - mpp
-      tags: [Composite]
+        - x402: {}
+      tags:
+      - Composite
       security:
-        - x402Bearer: []
+      - x402PaymentSignature: []
       responses:
         '200':
           description: Macro snapshot with all indicators
@@ -555,7 +2430,7 @@ paths:
             X-Mercury-Price:
               schema:
                 type: string
-                example: "$0.05"
+                example: $0.05
             X-Data-Age:
               schema:
                 type: integer
@@ -609,46 +2484,371 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /v1/treasury/auction-results/recent:
+    get:
+      summary: Recent Treasury auction results
+      description: 'Returns recent auction results using HQM (High Quality Market Corporate Bond) yields
+        as proxy.
 
+        Includes last 10 observations for 1Y, 5Y, 10Y, 20Y, 30Y maturities.
+
+
+        **Price:** $0.02
+
+
+        **Note:** Uses FRED HQM series as proxy for actual auction data.
+
+        '
+      operationId: getTreasuryAuctions
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.020000'
+        protocols:
+        - x402: {}
+      tags:
+      - Treasury
+      security:
+      - x402PaymentSignature: []
+      responses:
+        '200':
+          description: Recent auction results
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.02
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        example: FRED/HQM
+                      note:
+                        type: string
+                        example: Corporate bond yield proxy (High Quality Market rates)
+                      auctions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            maturity:
+                              type: string
+                              example: 10Y
+                            label:
+                              type: string
+                              example: 10-Year
+                            recent_yields:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  date:
+                                    type: string
+                                    format: date
+                                  yield:
+                                    type: number
+                                  maturity:
+                                    type: string
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No auction data available
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/treasury/tips-rates/current:
+    get:
+      summary: Current TIPS rates
+      description: 'Returns current Treasury Inflation-Protected Securities (TIPS) yields for all available
+        maturities.
+
+
+        **Price:** $0.02
+
+
+        **Maturities:**
+
+        - 5-Year (DFII5)
+
+        - 7-Year (DFII7)
+
+        - 10-Year (DFII10)
+
+        - 20-Year (DFII20)
+
+        - 30-Year (DFII30)
+
+        '
+      operationId: getTreasuryTIPS
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.020000'
+        protocols:
+        - x402: {}
+      tags:
+      - Treasury
+      security:
+      - x402PaymentSignature: []
+      responses:
+        '200':
+          description: Current TIPS rates
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.02
+            X-Data-Age:
+              schema:
+                type: integer
+                description: Seconds since data was cached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      record_date:
+                        type: string
+                        format: date
+                      rates:
+                        type: object
+                        properties:
+                          5_YEAR:
+                            type: number
+                          7_YEAR:
+                            type: number
+                          10_YEAR:
+                            type: number
+                          20_YEAR:
+                            type: number
+                          30_YEAR:
+                            type: number
+                      source:
+                        type: string
+                        example: FRED (Federal Reserve Economic Data)
+                      note:
+                        type: string
+                        example: Treasury Inflation-Protected Securities (TIPS) yields
+                  provenance:
+                    $ref: '#/components/schemas/Provenance'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No TIPS rates available
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/treasury/yield-curve/daily-snapshot:
+    get:
+      summary: U.S. Treasury yield curve daily snapshot
+      description: 'Returns daily U.S. Treasury par yield curve rates across 11 maturities.
+
+        Data sourced from FRED series (DGS1MO through DGS30).
+
+
+        **Price:** $0.10
+
+
+        **Maturities covered:**
+
+        - 1 Month, 3 Month, 6 Month
+
+        - 1 Year, 2 Year, 3 Year, 5 Year, 7 Year
+
+        - 10 Year, 20 Year, 30 Year
+
+
+        **Data quality:** Returns 404 if fewer than 5 maturities available.
+
+        '
+      operationId: getTreasuryYieldCurve
+      x-payment-info:
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.020000'
+        protocols:
+        - x402: {}
+      tags:
+      - Treasury
+      security:
+      - x402PaymentSignature: []
+      parameters:
+      - name: date
+        in: query
+        schema:
+          type: string
+          format: date
+          example: '2026-03-01'
+        description: Specific date (defaults to latest available)
+      - name: v
+        in: query
+        schema:
+          type: string
+          enum:
+          - '0.9'
+          - '1.0'
+          default: '1.0'
+        description: 'Response format version:
+
+          - 0.9: Legacy format (rates only)
+
+          - 1.0: New format with provenance (default)
+
+          '
+      responses:
+        '200':
+          description: Treasury yield curve data with provenance
+          headers:
+            X-Mercury-Price:
+              schema:
+                type: string
+                example: $0.10
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/TreasuryResponseV1'
+                - $ref: '#/components/schemas/TreasuryResponseV0_9'
+              examples:
+                v1:
+                  summary: Version 1.0 (with provenance)
+                  value:
+                    data:
+                      record_date: '2026-03-02'
+                      rates:
+                        1_MONTH: 3.74
+                        3_MONTH: 3.72
+                        6_MONTH: 3.68
+                        1_YEAR: 3.54
+                        2_YEAR: 3.47
+                        3_YEAR: 3.49
+                        5_YEAR: 3.62
+                        7_YEAR: 3.82
+                        10_YEAR: 4.05
+                        20_YEAR: 4.64
+                        30_YEAR: 4.7
+                    provenance:
+                      source: Federal Reserve Economic Data (FRED) - U.S. Treasury rates
+                      source_url: https://fred.stlouisfed.org
+                      fetched_at: '2026-03-04T18:07:49.590Z'
+                      mercury_version: v1.0
+                      deterministic: true
+                      cache_until: '2026-03-05T18:07:49.590Z'
+                      series_coverage: 11/11 maturities
+                      record_date: '2026-03-02'
+                      signature: 0x42d8f3f315633eaab09da600a89463314a1344da...
+                v0_9:
+                  summary: Version 0.9 (legacy)
+                  value:
+                    record_date: '2026-03-02'
+                    rates:
+                      1_MONTH: 3.74
+                      3_MONTH: 3.72
+                      10_YEAR: 4.05
+                      30_YEAR: 4.7
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          description: No valid Treasury rate data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: NO_DATA_AVAILABLE
+                      message:
+                        type: string
+                      alternatives:
+                        type: array
+                        items:
+                          type: string
+              example:
+                error:
+                  code: NO_DATA_AVAILABLE
+                  message: No valid Treasury rate data available for requested date
+                  alternatives:
+                  - /v1/fred/DGS10
+                  - /v1/fred/DGS2
+                  - /v1/fred/DGS30
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /v1/treasury/yield-curve/historical:
     post:
       summary: Historical Treasury yield curve data
-      description: |
-        Returns daily yield curve snapshots for a specified date range.
+      description: 'Returns daily yield curve snapshots for a specified date range.
+
         Fetches all 11 maturities (1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y).
-        
+
+
         **Price:** $0.05
-        
+
+
         **Constraints:**
+
         - Maximum date range: 90 days
+
         - Dates must be in YYYY-MM-DD format
+
         - start_date must be before end_date
+
+        '
       operationId: getTreasuryHistorical
       x-payment-info:
-        pricingMode: fixed
-        price: "0.050000"
+        price:
+          currency: USD
+          mode: fixed
+          amount: '0.050000'
         protocols:
-          - x402
-          - mpp
-      tags: [Treasury]
+        - x402: {}
+      tags:
+      - Treasury
       security:
-        - x402Bearer: []
+      - x402PaymentSignature: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [start_date, end_date]
+              required:
+              - start_date
+              - end_date
               properties:
                 start_date:
                   type: string
                   format: date
-                  example: "2024-01-01"
+                  example: '2024-01-01'
                 end_date:
                   type: string
                   format: date
-                  example: "2024-01-31"
+                  example: '2024-01-31'
       responses:
         '200':
           description: Historical yield curve snapshots
@@ -656,7 +2856,7 @@ paths:
             X-Mercury-Price:
               schema:
                 type: string
-                example: "$0.05"
+                example: $0.05
             X-Data-Age:
               schema:
                 type: integer
@@ -725,7 +2925,10 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: [MISSING_PARAMS, RANGE_TOO_LARGE, INVALID_RANGE]
+                        enum:
+                        - MISSING_PARAMS
+                        - RANGE_TOO_LARGE
+                        - INVALID_RANGE
                       message:
                         type: string
         '402':
@@ -736,178 +2939,178 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/treasury/auction-results/recent:
+  /v1/yield-spread/10y-2y:
     get:
-      summary: Recent Treasury auction results
-      description: |
-        Returns recent auction results using HQM (High Quality Market Corporate Bond) yields as proxy.
-        Includes last 10 observations for 1Y, 5Y, 10Y, 20Y, 30Y maturities.
-        
-        **Price:** $0.02
-        
-        **Note:** Uses FRED HQM series as proxy for actual auction data.
-      operationId: getTreasuryAuctions
+      summary: 10-year minus 2-year Treasury yield spread
+      description: '10-year minus 2-year Treasury yield spread.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_yield_spread_10y_2y
       x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
+        price:
+          currency: USD
+          amount: '0.05'
         protocols:
-          - x402
-          - mpp
-      tags: [Treasury]
-      security:
-        - x402Bearer: []
+        - x402: {}
+      tags:
+      - Yield Spreads
       responses:
         '200':
-          description: Recent auction results
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.02"
-            X-Data-Age:
-              schema:
-                type: integer
-                description: Seconds since data was cached
+          description: Paid success — JSON payload with data and provenance
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      source:
-                        type: string
-                        example: FRED/HQM
-                      note:
-                        type: string
-                        example: Corporate bond yield proxy (High Quality Market rates)
-                      auctions:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            maturity:
-                              type: string
-                              example: "10Y"
-                            label:
-                              type: string
-                              example: "10-Year"
-                            recent_yields:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  date:
-                                    type: string
-                                    format: date
-                                  yield:
-                                    type: number
-                                  maturity:
-                                    type: string
-                  provenance:
-                    $ref: '#/components/schemas/Provenance'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '404':
-          description: No auction data available
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
-  /v1/treasury/tips-rates/current:
-    get:
-      summary: Current TIPS rates
-      description: |
-        Returns current Treasury Inflation-Protected Securities (TIPS) yields for all available maturities.
-        
-        **Price:** $0.02
-        
-        **Maturities:**
-        - 5-Year (DFII5)
-        - 7-Year (DFII7)
-        - 10-Year (DFII10)
-        - 20-Year (DFII20)
-        - 30-Year (DFII30)
-      operationId: getTreasuryTIPS
-      x-payment-info:
-        pricingMode: fixed
-        price: "0.020000"
-        protocols:
-          - x402
-          - mpp
-      tags: [Treasury]
+          description: Payment Required — x402 challenge
       security:
-        - x402Bearer: []
+      - x402PaymentSignature: []
+  /v1/yield-spread/10y-3m:
+    get:
+      summary: 10-year minus 3-month Treasury yield spread
+      description: '10-year minus 3-month Treasury yield spread.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_yield_spread_10y_3m
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Yield Spreads
       responses:
         '200':
-          description: Current TIPS rates
-          headers:
-            X-Mercury-Price:
-              schema:
-                type: string
-                example: "$0.02"
-            X-Data-Age:
-              schema:
-                type: integer
-                description: Seconds since data was cached
+          description: Paid success — JSON payload with data and provenance
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      record_date:
-                        type: string
-                        format: date
-                      rates:
-                        type: object
-                        properties:
-                          5_YEAR:
-                            type: number
-                          7_YEAR:
-                            type: number
-                          10_YEAR:
-                            type: number
-                          20_YEAR:
-                            type: number
-                          30_YEAR:
-                            type: number
-                      source:
-                        type: string
-                        example: FRED (Federal Reserve Economic Data)
-                      note:
-                        type: string
-                        example: Treasury Inflation-Protected Securities (TIPS) yields
-                  provenance:
-                    $ref: '#/components/schemas/Provenance'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '404':
-          description: No TIPS rates available
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/yield-spread/10y-5y:
+    get:
+      summary: 10-year minus 5-year Treasury yield spread
+      description: '10-year minus 5-year Treasury yield spread.
 
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_yield_spread_10y_5y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Yield Spreads
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/yield-spread/30y-5y:
+    get:
+      summary: 30-year minus 5-year Treasury yield spread
+      description: '30-year minus 5-year Treasury yield spread.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_yield_spread_30y_5y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Yield Spreads
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
+  /v1/yield-spread/5y-2y:
+    get:
+      summary: 5-year minus 2-year Treasury yield spread
+      description: '5-year minus 2-year Treasury yield spread.
+
+
+        **Pricing:** $0.05 USDC per call (x402 on Base).
+
+
+        Call without payment to receive HTTP 402 + Payment-Required, then retry with `payment-signature`.'
+      operationId: v1_yield_spread_5y_2y
+      x-payment-info:
+        price:
+          currency: USD
+          amount: '0.05'
+        protocols:
+        - x402: {}
+      tags:
+      - Yield Spreads
+      responses:
+        '200':
+          description: Paid success — JSON payload with data and provenance
+          content:
+            application/json:
+              schema:
+                type: object
+        '402':
+          description: Payment Required — x402 challenge
+      security:
+      - x402PaymentSignature: []
   /.well-known/x402:
     get:
       summary: x402 protocol discovery document
-      description: |
-        Returns x402 protocol configuration including:
+      description: 'Returns x402 protocol configuration including:
+
         - Supported payment schemes (exact)
+
         - Network (Base mainnet - eip155:8453)
+
         - Asset (USDC - 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
+
         - Merchant wallet (payTo address)
+
         - Endpoint pricing and descriptions
-        
+
+
         Used by x402-compatible clients for automatic payment setup.
+
+        '
       operationId: getX402Discovery
-      tags: [Discovery]
+      tags:
+      - Discovery
       security: []
       responses:
         '200':
@@ -916,21 +3119,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/X402Discovery'
-
   /health:
     get:
       summary: Service health check
-      description: |
-        Returns service health status and configuration.
-        
+      description: 'Returns service health status and configuration.
+
+
         **Fields:**
+
         - status: "healthy" or "degraded"
+
         - timestamp: current server time
+
         - version: service version
+
         - signing_address: ECDSA wallet for provenance signatures
+
         - fred_configured: whether FRED API key is set
+
+        '
       operationId: getHealth
-      tags: [Discovery]
+      tags:
+      - Discovery
       security: []
       responses:
         '200':
@@ -939,33 +3149,40 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, timestamp, version]
+                required:
+                - status
+                - timestamp
+                - version
                 properties:
                   status:
                     type: string
-                    enum: [healthy, degraded]
+                    enum:
+                    - healthy
+                    - degraded
                     example: healthy
                   timestamp:
                     type: string
                     format: date-time
                   version:
                     type: string
-                    example: "1.0.0"
+                    example: 1.0.0
                   signing_address:
                     type: string
                     nullable: true
-                    example: "0xe76795db4100E10374d19E91742A392C658f3a43"
+                    example: '0xe76795db4100E10374d19E91742A392C658f3a43'
                   fred_configured:
                     type: boolean
-
   /:
     get:
       summary: Landing page or JSON manifest
-      description: |
-        Returns landing page HTML (if browser) or JSON manifest (if API client).
+      description: 'Returns landing page HTML (if browser) or JSON manifest (if API client).
+
         Content-Type negotiation via Accept header.
+
+        '
       operationId: getRoot
-      tags: [Documentation]
+      tags:
+      - Documentation
       security: []
       responses:
         '200':
@@ -987,12 +3204,12 @@ paths:
                     type: string
                   endpoints:
                     type: object
-
   /docs:
     get:
       summary: Quickstart documentation
       operationId: getDocs
-      tags: [Documentation]
+      tags:
+      - Documentation
       security: []
       responses:
         '200':
@@ -1001,36 +3218,46 @@ paths:
             text/html:
               schema:
                 type: string
-
 components:
   securitySchemes:
-    x402Bearer:
-      type: http
-      scheme: bearer
-      bearerFormat: x402_<token>
-      description: |
-        x402 payment token obtained after USDC payment on Base.
-        
-        **Format:** `Authorization: Bearer x402_<token>`
-        
-        **How to get a token:**
-        1. Call any paid endpoint without auth → receive 402
-        2. Extract `Payment-Required` header (base64url-encoded payment info)
-        3. Pay via x402 protocol (USDC on Base)
-        4. Receive token from payment gateway
-        5. Retry request with `Authorization: Bearer x402_<token>`
-        
-        **Test tokens (dev only):**
-        Set `ALLOW_TEST_TOKEN=true` to accept `x402_test` token.
+    x402PaymentSignature:
+      type: apiKey
+      in: header
+      name: payment-signature
+      description: 'Production Mercury expects an x402 payment payload in the `payment-signature` header.
 
+
+        **Format:** `payment-signature: <base64_x402_payment_payload>`
+
+
+        **How to pay:**
+
+        1. Call any paid endpoint without payment headers
+
+        2. Read the `Payment-Required` header (base64url x402 descriptor)
+
+        3. Use an x402-compatible client or payment processor to create a signed payment payload
+
+        4. Retry the request with `payment-signature`
+
+
+        **Legacy bearer compatibility:**
+
+        Unsigned `Authorization: Bearer x402_<token>` flow is disabled in production unless `ALLOW_LEGACY_BEARER=true`.
+
+        '
   schemas:
     FREDResponse:
       type: object
-      required: [data, provenance]
+      required:
+      - data
+      - provenance
       properties:
         data:
           type: object
-          required: [series_id, observations]
+          required:
+          - series_id
+          - observations
           properties:
             series_id:
               type: string
@@ -1057,23 +3284,27 @@ components:
               type: array
               items:
                 type: object
-                required: [date, value]
+                required:
+                - date
+                - value
                 properties:
                   date:
                     type: string
                     format: date
                   value:
                     oneOf:
-                      - type: string
-                      - type: "null"
+                    - type: string
+                    - type: 'null'
                     description: FRED returns "." for missing values (converted to null)
-                    example: "4.0"
+                    example: '4.0'
         provenance:
           $ref: '#/components/schemas/Provenance'
-
     Indicator:
       type: object
-      required: [value, date, unit]
+      required:
+      - value
+      - date
+      - unit
       properties:
         value:
           type: number
@@ -1081,18 +3312,21 @@ components:
         date:
           type: string
           format: date
-          example: "2026-01-01"
+          example: '2026-01-01'
         unit:
           type: string
-          example: "Percent"
-
+          example: Percent
     TreasuryResponseV1:
       type: object
-      required: [data, provenance]
+      required:
+      - data
+      - provenance
       properties:
         data:
           type: object
-          required: [record_date, rates]
+          required:
+          - record_date
+          - rates
           properties:
             record_date:
               type: string
@@ -1126,19 +3360,20 @@ components:
               additionalProperties: false
         provenance:
           allOf:
-            - $ref: '#/components/schemas/Provenance'
-            - type: object
-              properties:
-                series_coverage:
-                  type: string
-                  example: "11/11 maturities"
-                cache_until:
-                  type: string
-                  format: date-time
-
+          - $ref: '#/components/schemas/Provenance'
+          - type: object
+            properties:
+              series_coverage:
+                type: string
+                example: 11/11 maturities
+              cache_until:
+                type: string
+                format: date-time
     TreasuryResponseV0_9:
       type: object
-      required: [record_date, rates]
+      required:
+      - record_date
+      - rates
       properties:
         record_date:
           type: string
@@ -1147,18 +3382,25 @@ components:
           type: object
           additionalProperties:
             type: number
-
     CompositeResponse:
       type: object
-      required: [data, provenance]
+      required:
+      - data
+      - provenance
       properties:
         data:
           type: object
-          required: [dashboard, timestamp, indicators]
+          required:
+          - dashboard
+          - timestamp
+          - indicators
           properties:
             dashboard:
               type: string
-              enum: [economic-overview, inflation-tracker, labor-market]
+              enum:
+              - economic-overview
+              - inflation-tracker
+              - labor-market
             timestamp:
               type: string
               format: date-time
@@ -1166,7 +3408,10 @@ components:
               type: array
               items:
                 type: object
-                required: [series_id, value, date]
+                required:
+                - series_id
+                - value
+                - date
                 properties:
                   series_id:
                     type: string
@@ -1174,8 +3419,8 @@ components:
                     type: string
                   value:
                     oneOf:
-                      - type: string
-                      - type: "null"
+                    - type: string
+                    - type: 'null'
                   date:
                     type: string
                     format: date
@@ -1183,10 +3428,14 @@ components:
                     type: string
         provenance:
           $ref: '#/components/schemas/Provenance'
-
     Provenance:
       type: object
-      required: [source, source_url, fetched_at, mercury_version, deterministic]
+      required:
+      - source
+      - source_url
+      - fetched_at
+      - mercury_version
+      - deterministic
       properties:
         source:
           type: string
@@ -1206,8 +3455,9 @@ components:
         signature:
           type: string
           nullable: true
-          description: ECDSA signature of canonical data (hex, with 0x prefix). Optional - only present if signing wallet is configured.
-          pattern: "^0x[a-fA-F0-9]+$"
+          description: ECDSA signature of canonical data (hex, with 0x prefix). Optional - only present
+            if signing wallet is configured.
+          pattern: ^0x[a-fA-F0-9]+$
         requested_date:
           type: string
           format: date
@@ -1220,10 +3470,11 @@ components:
           type: string
           format: date
           description: Present if observation_end query param was used
-
     X402Discovery:
       type: object
-      required: [x402Version, accepts]
+      required:
+      - x402Version
+      - accepts
       properties:
         x402Version:
           type: integer
@@ -1232,29 +3483,36 @@ components:
           type: array
           items:
             type: object
-            required: [scheme, network, amount, payTo, maxTimeoutSeconds, asset]
+            required:
+            - scheme
+            - network
+            - amount
+            - payTo
+            - maxTimeoutSeconds
+            - asset
             properties:
               scheme:
                 type: string
-                enum: [exact]
+                enum:
+                - exact
               network:
                 type: string
-                example: "eip155:8453"
+                example: eip155:8453
                 description: Base mainnet
               amount:
                 type: string
-                example: "150000"
+                example: '150000'
                 description: Amount in wei (USDC has 6 decimals)
               payTo:
                 type: string
-                example: "0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
+                example: '0xF8d59270cBC746a7593D25b6569812eF1681C6D2'
                 description: Merchant wallet address
               maxTimeoutSeconds:
                 type: integer
                 example: 30
               asset:
                 type: string
-                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                example: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
                 description: USDC contract address on Base
               extra:
                 type: object
@@ -1273,31 +3531,46 @@ components:
         extensions:
           type: object
           description: Optional x402 protocol extensions
-
     PaymentRequired:
       type: object
-      required: [error, price]
+      required:
+      - x402Version
+      - error
+      - accepts
       properties:
+        x402Version:
+          type: integer
+          example: 1
         error:
           type: string
-          enum: [PAYMENT_REQUIRED, INVALID_PAYMENT_TOKEN, PAYMENT_VERIFICATION_UNAVAILABLE]
-        message:
-          type: string
-        price:
-          type: string
-          example: "$0.01 USDC (Base)"
-        paymentUri:
-          type: string
-          format: uri
-          example: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59..."
-        instructions:
+          enum:
+          - payment required
+        accepts:
           type: array
           items:
-            type: string
+            type: object
+            properties:
+              scheme:
+                type: string
+                example: exact
+              network:
+                type: string
+                example: base
+              maxAmountRequired:
+                type: string
+                example: '50000'
+              payTo:
+                type: string
+                example: '0xF8d59270cBC746a7593D25b6569812eF1681C6D2'
+              asset:
+                type: string
+                example: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+              maxTimeoutSeconds:
+                type: integer
+                example: 30
         status:
           type: string
           description: Additional status info (present for PAYMENT_VERIFICATION_UNAVAILABLE)
-
   responses:
     PaymentRequired:
       description: Payment required via x402
@@ -1311,16 +3584,15 @@ components:
           schema:
             $ref: '#/components/schemas/PaymentRequired'
           example:
-            error: PAYMENT_REQUIRED
-            message: Payment required to access this endpoint
-            price: "$0.01 USDC (Base)"
-            paymentUri: "https://x402.io/pay?endpoint=/v1/fred/UNRATE&amount=0.01&token=USDC&chain=base&recipient=0xF8d59270cBC746a7593D25b6569812eF1681C6D2"
-            instructions:
-              - "1. Click the paymentUri link above or visit https://x402.io"
-              - "2. Select this endpoint and enter your Authorization header value"
-              - "3. Make payment (USDC on Base blockchain)"
-              - "4. Retry request with Authorization header: Bearer x402_<token>"
-
+            x402Version: 1
+            error: payment required
+            accepts:
+            - scheme: exact
+              network: base
+              maxAmountRequired: '50000'
+              payTo: '0xF8d59270cBC746a7593D25b6569812eF1681C6D2'
+              asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+              maxTimeoutSeconds: 30
     InternalError:
       description: Internal server error
       content:
@@ -1336,7 +3608,6 @@ components:
                     example: INTERNAL_ERROR
                   message:
                     type: string
-
     ServiceUnavailable:
       description: Service configuration issue (e.g., missing API key)
       content:

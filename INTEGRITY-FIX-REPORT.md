@@ -1,3 +1,5 @@
+> Historical note (2026-04-20): This file contains archived launch/research/test material from before the payment hardening pass. Current production Mercury uses the `payment-signature` flow. Unsigned `Authorization: Bearer x402_...` and `x402_test` examples here are historical unless explicitly marked otherwise.
+
 # Mercury402 Production Data Integrity Fix
 **Date:** 2026-03-04  
 **Status:** ✅ COMPLETE  
@@ -197,3 +199,5 @@ Real Treasury scraper deployed successfully with no blockers.
 ---
 
 **END OF REPORT**
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*

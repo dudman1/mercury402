@@ -29,13 +29,13 @@ Show HN: Mercury402 – Pay-per-call finance data API for AI agents (x402/USDC)
 
 **Body:**
 ```
-I built Mercury402 (https://api.mercury402.com) – a pay-per-call API for economic data designed specifically for autonomous agents. No API keys, no accounts, no rate limits. Just pay $0.01-0.50 per call in USDC on Base and get Federal Reserve data, Treasury yields, and macro indicators with cryptographic signatures.
+I built Mercury402 (https://mercury402.uk) – a pay-per-call API for economic data designed specifically for autonomous agents. No API keys, no accounts, no rate limits. Just pay $0.01-0.50 per call in USDC on Base and get Federal Reserve data, Treasury yields, and macro indicators with cryptographic signatures.
 
 Traditional finance APIs require developers to manage API keys, subscriptions, and monthly minimums. For autonomous agents, this creates friction: agents can't sign up for accounts, can't store credentials securely, and can't easily pay for what they use. Mercury402 uses the x402 protocol (https://x402.org) – think HTTP 402 "Payment Required" but actually implemented. An agent requests data, gets back payment instructions, transfers USDC on Base, receives a bearer token, and retries. Total flow: ~3 seconds.
 
-Current endpoints: 14 live, including any FRED economic series ($0.01), Treasury yield curves ($0.02), complete macro snapshots with 10 indicators ($0.05), and historical yield curve data ($0.03). Full pricing at https://api.mercury402.com/docs/api. Data includes ECDSA signatures for provenance verification. OpenAPI 3.1 spec available at /openapi.json.
+Current endpoints: 14 live, including any FRED economic series ($0.01), Treasury yield curves ($0.02), complete macro snapshots with 10 indicators ($0.05), and historical yield curve data ($0.03). Full pricing at https://mercury402.uk/docs/api. Data includes ECDSA signatures for provenance verification. OpenAPI 3.1 spec available at /openapi.json.
 
-Listed on x402scan marketplace with organic agent discovery. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://api.mercury402.com/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
+Listed on x402scan marketplace with organic agent discovery. Still iterating on pricing and expanding endpoint coverage. Built this because I wanted AI agents to access real financial data without the traditional API gatekeeping. Open to feedback on what endpoints would be most valuable. Try it at https://mercury402.uk/docs/api (interactive Swagger UI) or check the marketplace listing: https://www.x402scan.com/server/mercury402
 ```
 
 ---
@@ -82,21 +82,21 @@ All with cryptographic provenance signatures.
 ```
 Try it in 3 commands:
 
-curl https://api.mercury402.com/health
+curl https://mercury402.uk/health
 
-curl https://api.mercury402.com/v1/fred/UNRATE
+curl https://mercury402.uk/v1/fred/UNRATE
 # Returns 402 + payment instructions
 
 # Pay via x402-compatible client → retry with payment-signature
 curl -H "payment-signature: <base64_x402_payment_payload>" \
-  https://api.mercury402.com/v1/fred/UNRATE
+  https://mercury402.uk/v1/fred/UNRATE
 ```
 
 **Post 5 (CTA):**
 ```
 Built for autonomous agents + AI systems.
 
-🔗 Interactive docs: https://api.mercury402.com/docs/api
+🔗 Interactive docs: https://mercury402.uk/docs/api
 🔗 x402 marketplace: https://x402scan.com/server/mercury402
 🔗 GitHub: [TBD after repo public]
 
@@ -116,7 +116,7 @@ Mercury402 — 14-endpoint finance data server, USDC on Base
 ```
 Hey x402 community! 👋
 
-Just launched Mercury402 (https://api.mercury402.com) – a pay-per-call finance data API for autonomous agents. Built it as a real-world x402 implementation and would love feedback from this community.
+Just launched Mercury402 (https://mercury402.uk) – a pay-per-call finance data API for autonomous agents. Built it as a real-world x402 implementation and would love feedback from this community.
 
 **What it is:**
 Pay-per-call access to Federal Reserve Economic Data (FRED), Treasury yields, and macro indicators. No API keys, no accounts, just x402 payments in USDC on Base.
@@ -180,9 +180,9 @@ Listed on x402scan marketplace with organic agent discovery working pre-announce
 5. **Provenance:** Currently signing all responses with ECDSA. Is this overkill or do agents actually verify signatures?
 
 **Try it:**
-- Swagger UI: https://api.mercury402.com/docs/api
+- Swagger UI: https://mercury402.uk/docs/api
 - x402scan listing: https://www.x402scan.com/server/mercury402
-- Health check: `curl https://api.mercury402.com/health`
+- Health check: `curl https://mercury402.uk/health`
 
 **Code:**
 Planning to open-source once I clean up the repo. Built with Express, ethers.js, axios, js-yaml for OpenAPI. Pretty standard Node stack.
@@ -265,13 +265,13 @@ No API key required. No account signup. Pay per call.
 
 **Base URL:**
 ```
-https://api.mercury402.com
+https://mercury402.uk
 ```
 
 **Documentation:**
 ```
-https://api.mercury402.com/docs/api (Interactive Swagger UI)
-https://api.mercury402.com/openapi.json (OpenAPI 3.1 spec)
+https://mercury402.uk/docs/api (Interactive Swagger UI)
+https://mercury402.uk/openapi.json (OpenAPI 3.1 spec)
 ```
 
 ---
@@ -336,7 +336,7 @@ https://github.com/dudman1/mercury402/issues
 
 **Homepage:**
 ```
-https://api.mercury402.com
+https://mercury402.uk
 ```
 
 ---

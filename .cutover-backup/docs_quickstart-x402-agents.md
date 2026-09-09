@@ -9,14 +9,14 @@ Mercury402 provides deterministic financial data via x402 micropayments. No API 
 Your agent can auto-discover Mercury402 via the x402 marketplace:
 
 ```bash
-curl https://api.mercury402.com/.well-known/x402
+curl https://mercury402.uk/.well-known/x402
 ```
 
 ### Available Endpoints
 
 #### 1. US Treasury Yield Curve ($0.10)
 ```
-GET https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot
+GET https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot
 ```
 
 Returns complete Treasury par yield curve with cryptographic provenance.
@@ -51,7 +51,7 @@ Returns complete Treasury par yield curve with cryptographic provenance.
 
 #### 2. FRED Economic Data ($0.15 single, $0.30 range)
 ```
-GET https://api.mercury402.com/v1/fred/{series_id}
+GET https://mercury402.uk/v1/fred/{series_id}
 ```
 
 Access any of 800,000+ Federal Reserve economic series.
@@ -77,7 +77,7 @@ GET /v1/fred/GDP?observation_start=2025-01-01&observation_end=2026-01-01
 
 #### 3. Economic Dashboard ($0.50)
 ```
-GET https://api.mercury402.com/v1/composite/economic-dashboard
+GET https://mercury402.uk/v1/composite/economic-dashboard
 ```
 
 Get GDP, CPI, and Unemployment in one composite call.
@@ -118,14 +118,14 @@ Get GDP, CPI, and Unemployment in one composite call.
 
 #### 4. Inflation Tracker ($0.40)
 ```
-GET https://api.mercury402.com/v1/composite/inflation-tracker
+GET https://mercury402.uk/v1/composite/inflation-tracker
 ```
 
 Get CPI, PCE, and Core CPI inflation metrics.
 
 #### 5. Labor Market ($0.40)
 ```
-GET https://api.mercury402.com/v1/composite/labor-market
+GET https://mercury402.uk/v1/composite/labor-market
 ```
 
 Get Unemployment, Jobless Claims, and Nonfarm Payrolls.
@@ -135,7 +135,7 @@ Get Unemployment, Jobless Claims, and Nonfarm Payrolls.
 ### 1. Initial Request (402 Payment Required)
 
 ```bash
-curl -i https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot
+curl -i https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot
 ```
 
 **Response:**
@@ -194,7 +194,7 @@ Base64-encode that payload and send it as the `payment-signature` header.
 ### 5. Access Endpoint with `payment-signature`
 
 ```bash
-curl https://api.mercury402.com/v1/treasury/yield-curve/daily-snapshot \
+curl https://mercury402.uk/v1/treasury/yield-curve/daily-snapshot \
   -H "payment-signature: <base64_x402_payment_payload>"
 ```
 
@@ -218,7 +218,7 @@ import json
 import base64
 
 def fetch_mercury_data(endpoint):
-    url = f"https://api.mercury402.com{endpoint}"
+    url = f"https://mercury402.uk{endpoint}"
     
     # Initial request
     response = requests.get(url)
@@ -248,7 +248,7 @@ print(data)
 ### TypeScript
 ```typescript
 async function fetchMercuryData(endpoint: string) {
-  const url = `https://api.mercury402.com${endpoint}`;
+  const url = `https://mercury402.uk${endpoint}`;
   
   let response = await fetch(url);
   
@@ -296,8 +296,8 @@ Settlement on Base (chain ID 8453) for minimal gas fees.
 
 ## Support
 
-- **Website:** https://api.mercury402.com
-- **Discovery:** https://api.mercury402.com/.well-known/x402
+- **Website:** https://mercury402.uk
+- **Discovery:** https://mercury402.uk/.well-known/x402
 - **Marketplace:** https://www.x402scan.com/server/mercury402
 - **X/Twitter:** @Mercuryclaw1
 

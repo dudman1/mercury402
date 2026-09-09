@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-MERCURY_BASE_URL = "https://api.mercury402.com"
+MERCURY_BASE_URL = "https://mercury402.uk"
 DEFAULT_ENDPOINT = "/v1/fred/CPIAUCSL"
 DEFAULT_HEADERS = {
     "User-Agent": "curl/8.4.0",

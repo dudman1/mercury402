@@ -1,3 +1,5 @@
+> Historical note (2026-04-20): This file contains archived launch/research/test material from before the payment hardening pass. Current production Mercury uses the `payment-signature` flow. Unsigned `Authorization: Bearer x402_...` and `x402_test` examples here are historical unless explicitly marked otherwise.
+
 # Mercury402 Launch Assets — Claim Verification Report
 **Date:** 2026-03-04  
 **Status:** ⚠️ VERIFICATION REQUIRED BEFORE POSTING
@@ -300,3 +302,5 @@ These claims are accurate and can be used as-is:
 **Status:** ⚠️ CLAIMS NEED REVISION BEFORE POSTING  
 **Priority:** Remove inaccurate metrics (agent count, revenue baseline)  
 **Timeline:** Can post within hours after revisions applied
+---
+*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*
