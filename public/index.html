@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mercury402 — Financial Intelligence for Autonomous Agents</title>
-<meta name="description" content="76 live pay-per-call financial data APIs for AI agents. Treasury, FRED, forex, spreads, breakeven inflation, macro bundles, and composite dashboards. USDC on Base.">
+<meta name="description" content="78 live pay-per-call financial data APIs for AI agents. Treasury, FRED, forex, spreads, breakeven inflation, macro bundles, and composite dashboards. USDC on Base.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -181,7 +181,7 @@
 <div class="hero">
   <div class="container">
     <div class="live-badge"><span class="live-dot"></span>Live on Base Mainnet</div>
-    <h1>76 live endpoints<br>for <em>autonomous agents</em></h1>
+    <h1>78 live endpoints<br>for <em>autonomous agents</em></h1>
     <p class="hero-sub">Treasury curves, 53 FRED series endpoints, forex, yield spreads, breakeven inflation, macro bundles, recession probability, and composite dashboards. Pay per call with USDC on Base. No API keys. No subscriptions. No accounts.</p>
     <div class="hero-actions">
       <a href="https://api.mercury402.com" class="btn-primary">API Discovery →</a>
@@ -200,22 +200,22 @@
 <div class="stats-bar" id="stats">
   <div class="container">
     <div class="stats-grid">
-      <div class="stat"><div class="stat-value"><em>76</em></div><div class="stat-label">Live Endpoints</div></div>
-      <div class="stat"><div class="stat-value" id="stat-revenue"><em>$0.60</em></div><div class="stat-label">Revenue</div></div>
-      <div class="stat"><div class="stat-value" id="stat-calls">6</div><div class="stat-label">API Calls</div></div>
-      <div class="stat"><div class="stat-value" id="stat-customers">3</div><div class="stat-label">Customers</div></div>
-      <div class="stat"><div class="stat-value" id="stat-milestone"><em>$1.00</em></div><div class="stat-label">Next Milestone</div></div>
+      <div class="stat"><div class="stat-value"><em>78</em></div><div class="stat-label">Live Endpoints</div></div>
+      <div class="stat"><div class="stat-value" id="stat-revenue"><em>—</em></div><div class="stat-label">Revenue</div></div>
+      <div class="stat"><div class="stat-value" id="stat-calls">—</div><div class="stat-label">API Calls</div></div>
+      <div class="stat"><div class="stat-value" id="stat-customers">—</div><div class="stat-label">Customers</div></div>
+      <div class="stat"><div class="stat-value" id="stat-milestone"><em>—</em></div><div class="stat-label">Next Milestone</div></div>
     </div>
   </div>
 </div>
 <section id="how-it-works">
   <div class="container">
     <div class="section-eyebrow">How it works</div>
-    <h2 class="section-title">One call. One payment.<br><em>76 routes live.</em></h2>
+    <h2 class="section-title">One call. One payment.<br><em>78 routes live.</em></h2>
     <p class="section-desc">Mercury402 implements the x402 payment protocol for deterministic financial data: one endpoint, one price, one USDC payment on Base, one signed JSON response.</p>
     <div class="how-grid">
       <div class="steps-list">
-        <div class="step-item"><span class="step-num">01</span><div class="step-content"><h4>Discover 76 endpoints</h4><p>Treasury, FRED, forex, spreads, breakeven inflation, macro intelligence, and composite dashboards are exposed as direct HTTP routes.</p></div></div>
+        <div class="step-item"><span class="step-num">01</span><div class="step-content"><h4>Discover 78 endpoints</h4><p>Treasury, FRED, forex, spreads, breakeven inflation, macro intelligence, and composite dashboards are exposed as direct HTTP routes.</p></div></div>
         <div class="step-item"><span class="step-num">02</span><div class="step-content"><h4>Receive 402 Payment Required</h4><p>Your client gets a precise payment descriptor for the requested route, including the exact price and Base USDC settlement details.</p></div></div>
         <div class="step-item"><span class="step-num">03</span><div class="step-content"><h4>Pay with USDC on Base</h4><p>Your agent submits the x402 payment and Mercury verifies settlement before serving data. No API keys or account provisioning.</p></div></div>
         <div class="step-item"><span class="step-num">04</span><div class="step-content"><h4>Consume deterministic JSON</h4><p>The response includes structured data and provenance so automated strategies, dashboards, and agent workflows stay reproducible.</p></div></div>
@@ -234,7 +234,7 @@
   <div class="container">
     <div class="endpoints-header">
       <div class="section-eyebrow">Endpoints</div>
-      <h2 class="section-title">76 live endpoints.<br><em>Real financial data.</em></h2>
+      <h2 class="section-title">78 live endpoints.<br><em>Real financial data.</em></h2>
       <p class="section-desc">Complete coverage across 7 core categories: Treasury (4), FRED Series (53), Forex (4), Yield Spreads (5), Breakeven Inflation (4), Macro Intelligence (3), and Composite (3). Pricing is $0.05 base, $0.10 for macro premium endpoints, $0.40 for inflation and labor composites, and $0.50 for the economic dashboard.</p>
     </div>
     <div class="endpoint-groups">
@@ -1005,15 +1005,20 @@
     return '$1,000+';
   }
   fetch('https://api.mercury402.com/metrics', { cache: 'no-store' })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.ok) throw new Error('metrics ' + r.status);
+      return r.json();
+    })
     .then(function(d) {
-      var rev = d.total_revenue_usd || 0;
+      var rev = Number(d.total_revenue_usd) || 0;
       document.getElementById('stat-revenue').innerHTML = '<em>$' + rev.toFixed(2) + '</em>';
-      document.getElementById('stat-calls').textContent = d.total_calls || 0;
-      document.getElementById('stat-customers').textContent = d.unique_wallets || 0;
+      document.getElementById('stat-calls').textContent = String(d.total_calls != null ? d.total_calls : '—');
+      document.getElementById('stat-customers').textContent = String(d.unique_wallets != null ? d.unique_wallets : '—');
       document.getElementById('stat-milestone').innerHTML = '<em>' + nextMilestone(rev) + '</em>';
     })
-    .catch(function() {});
+    .catch(function() {
+      // Leave em dash placeholders — never show stale hardcoded revenue/calls.
+    });
 })();
 </script>
 </body>
