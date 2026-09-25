@@ -8,6 +8,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { getPrice } = require('./pricing');
+const { preValidateTreasuryHistorical } = require('./treasury-historical-validate');
 
 const app = express();
 const PORT = process.env.PORT || 4020;
@@ -1291,34 +1292,6 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
 
     return next();
   };
-}
-
-function preValidateTreasuryHistorical(req, res, next) {
-  const { start_date, end_date } = req.body || {};
-
-  if (!start_date || !end_date) {
-    return res.status(400).json({
-      error: { code: 'MISSING_PARAMS', message: 'start_date and end_date required (ISO format YYYY-MM-DD)' }
-    });
-  }
-
-  const start = new Date(start_date);
-  const end = new Date(end_date);
-  const daysDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-
-  if (daysDiff > 90) {
-    return res.status(400).json({
-      error: { code: 'RANGE_TOO_LARGE', message: 'Date range cannot exceed 90 days' }
-    });
-  }
-
-  if (daysDiff < 0) {
-    return res.status(400).json({
-      error: { code: 'INVALID_RANGE', message: 'start_date must be before end_date' }
-    });
-  }
-
-  next();
 }
 
 // ============================================

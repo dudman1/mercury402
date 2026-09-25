@@ -2927,6 +2927,7 @@ paths:
                         type: string
                         enum:
                         - MISSING_PARAMS
+                        - INVALID_DATE
                         - RANGE_TOO_LARGE
                         - INVALID_RANGE
                       message:
