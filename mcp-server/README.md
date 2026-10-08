@@ -31,7 +31,73 @@ Only paths in the catalog can be called; anything else is rejected before a requ
 
 ## Install
 
-Requires Node.js 20.10+.
+Requires Node.js 20.10+. The package is `mercury402-mcp` on npm; MCP clients can launch it with `npx`,
+so there is nothing to install by hand.
+
+```bash
+npx -y mercury402-mcp        # starts the server on stdio (what MCP clients do for you)
+```
+
+### Claude Code
+
+```bash
+claude mcp add mercury402 -- npx -y mercury402-mcp
+```
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
+`%APPDATA%\Claude\claude_desktop_config.json` (Windows), then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "mercury402-mcp"]
+    }
+  }
+}
+```
+
+### Paid mode (optional)
+
+By default the server never spends money: it lists endpoints and returns price quotes. To have it pay
+per call, give it a payer wallet:
+
+> **Warning: the private key is stored in plaintext** in your MCP client config
+> (`claude_desktop_config.json`, or `~/.claude.json` for Claude Code). Use a **dedicated wallet holding only
+> a small USDC balance on Base**, never your main wallet, and keep `MERCURY402_MAX_PRICE_USD` low. With
+> Claude Code, don't add the key with `--scope project`: that writes it to `.mcp.json`, which is usually
+> committed to git.
+
+Claude Code:
+
+```bash
+claude mcp add mercury402 \
+  -e MERCURY402_PAYER_PRIVATE_KEY=<dedicated-wallet-private-key> \
+  -e MERCURY402_MAX_PRICE_USD=0.50 \
+  -- npx -y mercury402-mcp
+```
+
+Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "mercury402-mcp"],
+      "env": {
+        "MERCURY402_PAYER_PRIVATE_KEY": "<dedicated-wallet-private-key>",
+        "MERCURY402_MAX_PRICE_USD": "0.50"
+      }
+    }
+  }
+}
+```
+
+### Alternative: run from a local checkout
 
 ```bash
 git clone https://github.com/dudman1/mercury402.git
@@ -40,18 +106,11 @@ npm install
 npm run build
 ```
 
-## Configure your client
-
-### Claude Code
+Then point your client at the built file instead of `npx`:
 
 ```bash
 claude mcp add mercury402 -- node /absolute/path/to/mercury402/mcp-server/dist/index.js
 ```
-
-### Claude Desktop
-
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -64,27 +123,10 @@ claude mcp add mercury402 -- node /absolute/path/to/mercury402/mcp-server/dist/i
 }
 ```
 
-Paid mode — add an `env` block (use a dedicated hot wallet holding only a small USDC balance on Base):
-
-```json
-{
-  "mcpServers": {
-    "mercury402": {
-      "command": "node",
-      "args": ["/absolute/path/to/mercury402/mcp-server/dist/index.js"],
-      "env": {
-        "MERCURY402_PAYER_PRIVATE_KEY": "<your hot-wallet private key>",
-        "MERCURY402_MAX_PRICE_USD": "0.50"
-      }
-    }
-  }
-}
-```
-
 ### Streamable HTTP (optional)
 
 ```bash
-npm run start:http          # http://127.0.0.1:3402/mcp (stateless, JSON responses)
+npx -y mercury402-mcp --http   # http://127.0.0.1:3402/mcp (stateless, JSON responses)
 ```
 
 The HTTP endpoint has no authentication. It binds to `127.0.0.1` by default, and the server refuses to start
@@ -94,9 +136,9 @@ in paid mode on a non-loopback `MCP_HTTP_HOST`.
 
 | Variable | Default | Description |
 |---|---|---|
+| `MERCURY402_PAYER_PRIVATE_KEY` | unset (paid mode off) | EVM private key (hex, `0x` optional) of the wallet that pays, in USDC on Base. Setting it turns on paid mode. It ends up in plaintext in your client config, so use a dedicated low-balance wallet. The server only uses it in-process to sign payments; it is never logged or returned by any tool or error |
+| `MERCURY402_MAX_PRICE_USD` | `0.50` | Per-call spending cap in USD. A 402 quote above this is returned to the agent instead of being paid. Current prices are $0.05–$0.50 per call; range FRED queries cost 2× |
 | `MERCURY402_API_URL` | `https://api.mercury402.com` | API base URL (`https://mercury402.uk` also works) |
-| `MERCURY402_PAYER_PRIVATE_KEY` | unset (paid mode off) | EVM private key of the payer wallet (USDC on Base). Enables paid mode. Never logged or returned by any tool |
-| `MERCURY402_MAX_PRICE_USD` | `0.50` | Per-call spending cap. 402 quotes above this are returned, not paid |
 | `MERCURY402_TIMEOUT_MS` | `60000` | Per-request timeout (paid calls wait for on-chain settlement) |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | `127.0.0.1` / `3402` | HTTP transport bind address (only with `--http`) |
 
@@ -117,10 +159,10 @@ Get a FRED series (free mode returns a quote):
 ```
 
 ```text
-PAYMENT REQUIRED (HTTP 402) for https://api.mercury402.com/v1/fred/UNRATE?limit=12: $0.05 (50000 USDC atomic units on eip155:8453, pay to 0x…). Payment required. Paid mode is disabled (MERCURY402_PAYER_PRIVATE_KEY not set).
+PAYMENT REQUIRED (HTTP 402) for https://api.mercury402.com/v1/fred/UNRATE?limit=12: $0.05 (50000 USDC atomic units on base, pay to 0x…). Payment required. Paid mode is disabled (MERCURY402_PAYER_PRIVATE_KEY not set).
 {
   "status": "payment_required",
-  "quote": { "price_usd": 0.05, "amount_usdc_atomic": "50000", "network": "eip155:8453", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "pay_to": "0x…", "scheme": "exact", "x402_version": 2 },
+  "quote": { "price_usd": 0.05, "amount_usdc_atomic": "50000", "network": "base", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "pay_to": "0x…", "scheme": "exact", "x402_version": 1 },
   "how_to_pay": ["…"],
   ...
 }
@@ -165,12 +207,14 @@ the price, payer address and decoded `PAYMENT-RESPONSE` settlement (transaction 
 3. It signs an EIP-3009 `transferWithAuthorization` for exactly the quoted amount (locally, with a fresh random
    nonce) and resends the request with a `PAYMENT-SIGNATURE` header containing base64 JSON
    `{ x402Version: 2, accepted: <the 402 body's accepts[0]>, payload: { authorization, signature } }`, the same
-   shape as `src/mcp-mercury.js` and the shape `require402Payment()` in `src/server.js` verifies. Mercury402 settles
+   shape that Mercury402's server verifies
+   ([`require402Payment()`](https://github.com/dudman1/mercury402/blob/master/src/server.js)). Mercury402 settles
    on-chain and returns the data.
 4. Paid requests are never retried automatically, so one tool call can't be charged twice.
 
-Security notes: use a dedicated hot wallet with a small balance; the key is only read from the environment, used
-in-process for signing, and never logged, echoed, or included in tool output or errors.
+Security notes: use a dedicated hot wallet with a small balance, because the key sits in plaintext in your
+client config. The server only reads it from the environment, uses it in-process for signing, and never logs,
+echoes, or includes it in tool output or errors.
 
 ## Pricing notes
 
@@ -181,14 +225,18 @@ in-process for signing, and never logged, echoed, or included in tool output or 
 
 ## Development
 
+From a checkout of [dudman1/mercury402](https://github.com/dudman1/mercury402):
+
 ```bash
 npm test                    # vitest; HTTP and payments are mocked, no network, no real transactions
                             # test/server-contract.test.ts also boots ../src/server.js (needs `npm ci` at the
                             # repo root; skipped otherwise) with on-chain settlement stubbed
 npm run typecheck
 npm run generate:catalog    # regenerate src/catalog.json after changing ../src/pricing.js or routes
+npm pack --dry-run          # inspect the publish tarball
 ```
 
 The endpoint catalog (`src/catalog.json`) is generated from the API source in this repo (`src/pricing.js`,
 `src/new-routes.js`, `src/ai-routes.js`, plus descriptions mirrored from `src/server.js`). A test fails if it
-drifts from `src/pricing.js`.
+drifts from `src/pricing.js`. `tsc` bakes the catalog into `dist/catalog.json`, so the published package never
+reads the repo at runtime; `prepublishOnly` regenerates the catalog, rebuilds, and runs the tests.
