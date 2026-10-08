@@ -1,0 +1,64 @@
+name: Publish mercury402-mcp
+
+# Push a tag vX.Y.Z matching mcp-server/package.json "version" to publish.
+# Auth is npm trusted publishing (OIDC): no NPM_TOKEN secret. The package's
+# Trusted Publisher on npmjs.com must name this repo and this workflow file.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: publish-mcp
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # No registry-url: it writes an .npmrc expecting NODE_AUTH_TOKEN, which
+          # trusted publishing doesn't use. npm defaults to registry.npmjs.org.
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - name: Upgrade npm
+        run: npm install -g npm@11 && npm --version
+
+      - name: Tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          echo "tag=${GITHUB_REF_NAME} package.json=${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match mcp-server/package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+
+      # Root deps let mcp-server's server-contract test run against src/server.js.
+      - name: Install API dependencies
+        working-directory: .
+        run: npm ci
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Catalog is in sync with src/pricing.js and routes
+        run: npm run generate:catalog && git diff --exit-code src/catalog.json
+
+      # prepublishOnly regenerates the catalog, rebuilds dist/ and reruns the tests.
+      - name: Publish
+        run: npm publish --provenance --access public
