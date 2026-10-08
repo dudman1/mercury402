@@ -1,0 +1,31 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Root first: mcp-server's server-contract test boots ../src/server.js
+      # and is skipped unless the root dependencies are installed.
+      - name: API tests
+        run: npm ci && npm test
+
+      - name: MCP server tests
+        working-directory: mcp-server
+        run: npm ci && npm test
+
+      - name: MCP catalog is in sync with src/pricing.js and routes
+        working-directory: mcp-server
+        run: npm run generate:catalog && git diff --exit-code src/catalog.json
