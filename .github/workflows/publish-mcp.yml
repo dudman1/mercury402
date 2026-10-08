@@ -23,9 +23,9 @@ jobs:
       run:
         working-directory: mcp-server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           # No registry-url: it writes an .npmrc expecting NODE_AUTH_TOKEN, which
