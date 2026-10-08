@@ -103,6 +103,20 @@ function getCacheMetrics() {
 app.use(cors());
 app.use(express.json());
 
+// GET / content negotiation. Must run before express.static, which would
+// otherwise answer every GET / with public/index.html. Agents (Accept without
+// text/html, or preferring application/json) get the JSON manifest; browsers
+// fall through to static and keep getting public/index.html.
+// JSON_MANIFEST is defined further down; it is only read at request time.
+app.get('/', (req, res, next) => {
+  res.vary('Accept');
+  const accept = req.headers.accept || '';
+  const wantsJson = !accept.includes('text/html') ||
+    req.accepts(['text/html', 'application/json']) === 'application/json';
+  if (wantsJson) return res.json(JSON_MANIFEST);
+  next();
+});
+
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
 
