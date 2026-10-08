@@ -1,0 +1,855 @@
+{
+  "generated_from": [
+    "src/pricing.js",
+    "src/new-routes.js",
+    "src/ai-routes.js",
+    "src/server.js"
+  ],
+  "payment": {
+    "protocol": "x402",
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "asset": "USDC",
+    "asset_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  },
+  "count": 78,
+  "endpoints": [
+    {
+      "path": "/v1/ai/ask",
+      "method": "POST",
+      "category": "ai",
+      "description": "Ask the Data: natural-language question answered ONLY from chosen Mercury402 FRED series (grounded, cited)",
+      "price_usd": 0.15,
+      "price_usdc_atomic": "150000",
+      "params": [
+        {
+          "name": "question",
+          "in": "body",
+          "required": true,
+          "type": "string",
+          "description": "Natural-language question (8-500 chars)"
+        },
+        {
+          "name": "series",
+          "in": "body",
+          "required": false,
+          "type": "string[]",
+          "description": "Optional Mercury402 FRED paths, e.g. [\"/v1/fred/cpi\"] (max 6)"
+        }
+      ]
+    },
+    {
+      "path": "/v1/ai/briefing",
+      "method": "GET",
+      "category": "ai",
+      "description": "AI Macro Briefing: analyst narrative written strictly from live FRED data (growth, prices, labor, Fed funds)",
+      "price_usd": 0.1,
+      "price_usdc_atomic": "100000",
+      "params": []
+    },
+    {
+      "path": "/v1/breakeven/10y",
+      "method": "GET",
+      "category": "breakeven-inflation",
+      "description": "10-year breakeven inflation rate (TIPS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "T10YIE"
+    },
+    {
+      "path": "/v1/breakeven/2y",
+      "method": "GET",
+      "category": "breakeven-inflation",
+      "description": "2-year breakeven inflation rate (TIPS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "T2YIE"
+    },
+    {
+      "path": "/v1/breakeven/5y",
+      "method": "GET",
+      "category": "breakeven-inflation",
+      "description": "5-year breakeven inflation rate (TIPS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "T5YIE"
+    },
+    {
+      "path": "/v1/breakeven/5y5y",
+      "method": "GET",
+      "category": "breakeven-inflation",
+      "description": "5-year, 5-year forward inflation expectation rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "T5YIFR"
+    },
+    {
+      "path": "/v1/composite/economic-dashboard",
+      "method": "GET",
+      "category": "composite",
+      "description": "Economic overview: GDP, CPI, and Unemployment in one call",
+      "price_usd": 0.5,
+      "price_usdc_atomic": "500000",
+      "params": []
+    },
+    {
+      "path": "/v1/composite/inflation-tracker",
+      "method": "GET",
+      "category": "composite",
+      "description": "Inflation metrics: CPI, PCE, and Core CPI",
+      "price_usd": 0.4,
+      "price_usdc_atomic": "400000",
+      "params": []
+    },
+    {
+      "path": "/v1/composite/labor-market",
+      "method": "GET",
+      "category": "composite",
+      "description": "Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls",
+      "price_usd": 0.4,
+      "price_usdc_atomic": "400000",
+      "params": []
+    },
+    {
+      "path": "/v1/forex/eur-usd",
+      "method": "GET",
+      "category": "forex",
+      "description": "Euro area / US dollar exchange rate (DEXUSEU)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DEXUSEU"
+    },
+    {
+      "path": "/v1/forex/gbp-usd",
+      "method": "GET",
+      "category": "forex",
+      "description": "US / UK pound exchange rate (DEXUSUK)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DEXUSUK"
+    },
+    {
+      "path": "/v1/forex/usd-cny",
+      "method": "GET",
+      "category": "forex",
+      "description": "China / US dollar exchange rate (DEXCHUS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DEXCHUS"
+    },
+    {
+      "path": "/v1/forex/usd-jpy",
+      "method": "GET",
+      "category": "forex",
+      "description": "Japan / US dollar exchange rate (DEXJPUS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DEXJPUS"
+    },
+    {
+      "path": "/v1/fred/{series_id}",
+      "method": "GET",
+      "category": "fred",
+      "description": "Federal Reserve Economic Data (FRED) series",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [
+        {
+          "name": "series_id",
+          "in": "path",
+          "required": true,
+          "type": "string",
+          "description": "FRED series id, e.g. UNRATE, CPIAUCSL, DGS10"
+        },
+        {
+          "name": "date",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Single observation date YYYY-MM-DD"
+        },
+        {
+          "name": "observation_start",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Range start YYYY-MM-DD (range queries cost 2x)"
+        },
+        {
+          "name": "observation_end",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Range end YYYY-MM-DD (range queries cost 2x)"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "integer",
+          "description": "Max observations to return"
+        }
+      ],
+      "price_note": "Price doubles (2x) when both observation_start and observation_end are supplied."
+    },
+    {
+      "path": "/v1/fred/a-rated-spread",
+      "method": "GET",
+      "category": "fred",
+      "description": "ICE BofA Single-A US Corporate Index OAS",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "BAMLC0A3CA"
+    },
+    {
+      "path": "/v1/fred/average-hourly-earnings",
+      "method": "GET",
+      "category": "fred",
+      "description": "Average hourly earnings of all employees, total private",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CES0500000003"
+    },
+    {
+      "path": "/v1/fred/bbb-corporate-yield",
+      "method": "GET",
+      "category": "fred",
+      "description": "ICE BofA BBB US Corporate Index Option-Adjusted Yield",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "BAMLC0A4CBBB"
+    },
+    {
+      "path": "/v1/fred/building-permits",
+      "method": "GET",
+      "category": "fred",
+      "description": "New privately-owned housing units authorized (thousands)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PERMIT"
+    },
+    {
+      "path": "/v1/fred/case-shiller",
+      "method": "GET",
+      "category": "fred",
+      "description": "S&P/Case-Shiller US National Home Price Index",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CSUSHPINSA"
+    },
+    {
+      "path": "/v1/fred/conference-board-ci",
+      "method": "GET",
+      "category": "fred",
+      "description": "Conference Board consumer confidence index (OECD)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CSCICP03USM665S"
+    },
+    {
+      "path": "/v1/fred/consumer-confidence",
+      "method": "GET",
+      "category": "fred",
+      "description": "University of Michigan consumer sentiment index",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "UMCSENT"
+    },
+    {
+      "path": "/v1/fred/continuing-claims",
+      "method": "GET",
+      "category": "fred",
+      "description": "Continued claims, weekly",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CCSA"
+    },
+    {
+      "path": "/v1/fred/corporate-profits",
+      "method": "GET",
+      "category": "fred",
+      "description": "Corporate profits after tax",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CP"
+    },
+    {
+      "path": "/v1/fred/cpi",
+      "method": "GET",
+      "category": "fred",
+      "description": "Consumer Price Index for All Urban Consumers (CPIAUCSL)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CPIAUCSL"
+    },
+    {
+      "path": "/v1/fred/cpi-core",
+      "method": "GET",
+      "category": "fred",
+      "description": "Core CPI (excl. food & energy, CPILFESL)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CPILFESL"
+    },
+    {
+      "path": "/v1/fred/current-account",
+      "method": "GET",
+      "category": "fred",
+      "description": "Current account balance, billions of USD",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "BOPBCA"
+    },
+    {
+      "path": "/v1/fred/existing-home-sales",
+      "method": "GET",
+      "category": "fred",
+      "description": "Existing home sales, millions (SAAR)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "EXHOSLUSM495S"
+    },
+    {
+      "path": "/v1/fred/fed-funds-rate",
+      "method": "GET",
+      "category": "fred",
+      "description": "Effective federal funds rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "FEDFUNDS"
+    },
+    {
+      "path": "/v1/fred/fed-funds-target-upper",
+      "method": "GET",
+      "category": "fred",
+      "description": "Federal funds target rate, upper bound",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DFEDTARU"
+    },
+    {
+      "path": "/v1/fred/federal-debt",
+      "method": "GET",
+      "category": "fred",
+      "description": "Federal debt as percent of GDP",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "GFDEGDQ188S"
+    },
+    {
+      "path": "/v1/fred/federal-deficit",
+      "method": "GET",
+      "category": "fred",
+      "description": "Federal surplus or deficit, billions",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "MTSDS133FMS"
+    },
+    {
+      "path": "/v1/fred/gdi",
+      "method": "GET",
+      "category": "fred",
+      "description": "Real GDI",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "GDIC1"
+    },
+    {
+      "path": "/v1/fred/gdp",
+      "method": "GET",
+      "category": "fred",
+      "description": "Real GDP, billions of chained 2017 dollars",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "GDP"
+    },
+    {
+      "path": "/v1/fred/gdp-deflator",
+      "method": "GET",
+      "category": "fred",
+      "description": "Gross domestic product: implicit price deflator",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "GDPDEF"
+    },
+    {
+      "path": "/v1/fred/gdp-growth",
+      "method": "GET",
+      "category": "fred",
+      "description": "Real GDP percent change, annualized",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "A191RL1Q225SBEA"
+    },
+    {
+      "path": "/v1/fred/high-yield-spread",
+      "method": "GET",
+      "category": "fred",
+      "description": "ICE BofA US High Yield Index Option-Adjusted Spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "BAMLH0A0HYM2"
+    },
+    {
+      "path": "/v1/fred/homeownership-rate",
+      "method": "GET",
+      "category": "fred",
+      "description": "Homeownership rate for the US",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "RHORUSQ156N"
+    },
+    {
+      "path": "/v1/fred/housing-starts",
+      "method": "GET",
+      "category": "fred",
+      "description": "New privately-owned housing units started (thousands)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "HOUST"
+    },
+    {
+      "path": "/v1/fred/industrial-production",
+      "method": "GET",
+      "category": "fred",
+      "description": "Industrial production: total index",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "INDPRO"
+    },
+    {
+      "path": "/v1/fred/inflation-expectations",
+      "method": "GET",
+      "category": "fred",
+      "description": "University of Michigan 1-year inflation expectations",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "MICH"
+    },
+    {
+      "path": "/v1/fred/initial-claims",
+      "method": "GET",
+      "category": "fred",
+      "description": "Initial jobless claims, weekly",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "ICSA"
+    },
+    {
+      "path": "/v1/fred/jolts-openings",
+      "method": "GET",
+      "category": "fred",
+      "description": "Job Openings and Labor Turnover Survey",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "JTSJOL"
+    },
+    {
+      "path": "/v1/fred/labor-force-participation",
+      "method": "GET",
+      "category": "fred",
+      "description": "Labor force participation rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "CIVPART"
+    },
+    {
+      "path": "/v1/fred/leading-indicators",
+      "method": "GET",
+      "category": "fred",
+      "description": "Conference Board Leading Economic Index for the US",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "USSLIND"
+    },
+    {
+      "path": "/v1/fred/m1-money-stock",
+      "method": "GET",
+      "category": "fred",
+      "description": "M1 money stock, seasonally adjusted",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "M1SL"
+    },
+    {
+      "path": "/v1/fred/m2-money-stock",
+      "method": "GET",
+      "category": "fred",
+      "description": "M2 money stock, seasonally adjusted",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "M2SL"
+    },
+    {
+      "path": "/v1/fred/mortgage-30y",
+      "method": "GET",
+      "category": "fred",
+      "description": "30-year fixed-rate mortgage average",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "MORTGAGE30US"
+    },
+    {
+      "path": "/v1/fred/nonfarm-payrolls",
+      "method": "GET",
+      "category": "fred",
+      "description": "Total nonfarm payrolls (thousands)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PAYEMS"
+    },
+    {
+      "path": "/v1/fred/pce",
+      "method": "GET",
+      "category": "fred",
+      "description": "Personal Consumption Expenditures (PCE)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PCE"
+    },
+    {
+      "path": "/v1/fred/pce-core",
+      "method": "GET",
+      "category": "fred",
+      "description": "Core PCE Price Index (excl. food & energy)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PCEPILFE"
+    },
+    {
+      "path": "/v1/fred/pce-deflator",
+      "method": "GET",
+      "category": "fred",
+      "description": "PCE deflator, percent change from year ago",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DPCERG3Q086SBEA"
+    },
+    {
+      "path": "/v1/fred/personal-income",
+      "method": "GET",
+      "category": "fred",
+      "description": "Personal income, billions of USD",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PI"
+    },
+    {
+      "path": "/v1/fred/personal-saving-rate",
+      "method": "GET",
+      "category": "fred",
+      "description": "Personal saving rate (percent)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PSAVERT"
+    },
+    {
+      "path": "/v1/fred/ppi",
+      "method": "GET",
+      "category": "fred",
+      "description": "Producer Price Index for All Commodities",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "PPIACO"
+    },
+    {
+      "path": "/v1/fred/quits-rate",
+      "method": "GET",
+      "category": "fred",
+      "description": "Quits rate (JOLTS)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "JTSQUR"
+    },
+    {
+      "path": "/v1/fred/retail-sales",
+      "method": "GET",
+      "category": "fred",
+      "description": "Advance retail sales: retail and food services (millions)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "RSAFS"
+    },
+    {
+      "path": "/v1/fred/total-vehicle-sales",
+      "method": "GET",
+      "category": "fred",
+      "description": "Total vehicle sales, millions (SAAR)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "TOTALSA"
+    },
+    {
+      "path": "/v1/fred/trade-balance",
+      "method": "GET",
+      "category": "fred",
+      "description": "Trade balance: goods and services, millions of USD",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "BOPGSTB"
+    },
+    {
+      "path": "/v1/fred/treasury-10y",
+      "method": "GET",
+      "category": "fred",
+      "description": "10-year Treasury constant maturity rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DGS10"
+    },
+    {
+      "path": "/v1/fred/treasury-2y",
+      "method": "GET",
+      "category": "fred",
+      "description": "2-year Treasury constant maturity rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DGS2"
+    },
+    {
+      "path": "/v1/fred/treasury-30y",
+      "method": "GET",
+      "category": "fred",
+      "description": "30-year Treasury constant maturity rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DGS30"
+    },
+    {
+      "path": "/v1/fred/treasury-3m",
+      "method": "GET",
+      "category": "fred",
+      "description": "3-month Treasury constant maturity rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DGS3MO"
+    },
+    {
+      "path": "/v1/fred/treasury-5y",
+      "method": "GET",
+      "category": "fred",
+      "description": "5-year Treasury constant maturity rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "DGS5"
+    },
+    {
+      "path": "/v1/fred/u6-unemployment",
+      "method": "GET",
+      "category": "fred",
+      "description": "Total unemployed + marginally attached + part-time for economic reasons",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "U6RATE"
+    },
+    {
+      "path": "/v1/fred/unemployment-rate",
+      "method": "GET",
+      "category": "fred",
+      "description": "Civilian unemployment rate",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "UNRATE"
+    },
+    {
+      "path": "/v1/fred/vix",
+      "method": "GET",
+      "category": "fred",
+      "description": "CBOE Volatility Index: VIX",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [],
+      "fred_series_id": "VIXCLS"
+    },
+    {
+      "path": "/v1/macro/bundle",
+      "method": "GET",
+      "category": "macro",
+      "description": "Macro Bundle: Treasury + CPI + GDP + Employment + Fed Funds + M2 + VIX + Trade (single call)",
+      "price_usd": 0.1,
+      "price_usdc_atomic": "100000",
+      "params": []
+    },
+    {
+      "path": "/v1/macro/recession-probability",
+      "method": "GET",
+      "category": "macro",
+      "description": "Recession Probability Index: yield curve spread + unemployment + leading indicators",
+      "price_usd": 0.1,
+      "price_usdc_atomic": "100000",
+      "params": []
+    },
+    {
+      "path": "/v1/macro/snapshot/all",
+      "method": "GET",
+      "category": "macro",
+      "description": "Complete macro snapshot: GDP, CPI, UNRATE, yields, VIX",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/treasury/auction-results/recent",
+      "method": "GET",
+      "category": "treasury",
+      "description": "Recent Treasury auction results",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/treasury/tips-rates/current",
+      "method": "GET",
+      "category": "treasury",
+      "description": "Current TIPS rates (5, 7, 10, 20, 30-year)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/treasury/yield-curve/daily-snapshot",
+      "method": "GET",
+      "category": "treasury",
+      "description": "U.S. Treasury yield curve (FRED-sourced, 11 maturities)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [
+        {
+          "name": "date",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Snapshot date YYYY-MM-DD (default: latest)"
+        }
+      ]
+    },
+    {
+      "path": "/v1/treasury/yield-curve/historical",
+      "method": "POST",
+      "category": "treasury",
+      "description": "Historical yield curve data (max 90-day range)",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": [
+        {
+          "name": "start_date",
+          "in": "body",
+          "required": true,
+          "type": "string",
+          "description": "Start date YYYY-MM-DD"
+        },
+        {
+          "name": "end_date",
+          "in": "body",
+          "required": true,
+          "type": "string",
+          "description": "End date YYYY-MM-DD (max 90 days after start)"
+        }
+      ]
+    },
+    {
+      "path": "/v1/yield-spread/10y-2y",
+      "method": "GET",
+      "category": "yield-spread",
+      "description": "10-year minus 2-year Treasury yield spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/yield-spread/10y-3m",
+      "method": "GET",
+      "category": "yield-spread",
+      "description": "10-year minus 3-month Treasury yield spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/yield-spread/10y-5y",
+      "method": "GET",
+      "category": "yield-spread",
+      "description": "10-year minus 5-year Treasury yield spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/yield-spread/30y-5y",
+      "method": "GET",
+      "category": "yield-spread",
+      "description": "30-year minus 5-year Treasury yield spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    },
+    {
+      "path": "/v1/yield-spread/5y-2y",
+      "method": "GET",
+      "category": "yield-spread",
+      "description": "5-year minus 2-year Treasury yield spread",
+      "price_usd": 0.05,
+      "price_usdc_atomic": "50000",
+      "params": []
+    }
+  ]
+}
