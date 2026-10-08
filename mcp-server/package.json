@@ -1,6 +1,6 @@
 {
   "name": "mercury402-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Mercury402: discover and call 78 pay-per-call (x402, USDC on Base) financial data endpoints — Treasury, FRED, forex, yield spreads, breakeven inflation, macro composites",
   "license": "MIT",
   "author": "Mercury402",
