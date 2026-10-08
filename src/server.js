@@ -10,6 +10,9 @@ require('dotenv').config();
 const { getPrice } = require('./pricing');
 const { getCatalog } = require('./catalog');
 const { preValidateTreasuryHistorical } = require('./treasury-historical-validate');
+const { errorHandler, installProcessGuards } = require('./error-guards');
+
+installProcessGuards();
 
 const app = express();
 const PORT = process.env.PORT || 4020;
@@ -3623,6 +3626,9 @@ app.get('/docs/api', (req, res) => {
 </html>`;
   res.set('Content-Type', 'text/html').send(swaggerHTML);
 });
+
+// Error handler: must stay after every route registration.
+app.use(errorHandler);
 
 // Startup: ensure log directory exists
 const logDir = path.dirname(ACCESS_LOG);
