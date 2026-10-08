@@ -236,7 +236,8 @@ npm run generate:catalog    # regenerate src/catalog.json after changing ../src/
 npm pack --dry-run          # inspect the publish tarball
 ```
 
-The endpoint catalog (`src/catalog.json`) is generated from the API source in this repo (`src/pricing.js`,
-`src/new-routes.js`, `src/ai-routes.js`, plus descriptions mirrored from `src/server.js`). A test fails if it
-drifts from `src/pricing.js`. `tsc` bakes the catalog into `dist/catalog.json`, so the published package never
-reads the repo at runtime; `prepublishOnly` regenerates the catalog, rebuilds, and runs the tests.
+The endpoint catalog (`src/catalog.json`) is generated from `../src/catalog.js`, the same module that builds the
+API's JSON manifest and `/llms.txt` (it reads `src/pricing.js`, `src/new-routes.js` and `src/ai-routes.js`). Tests
+in both packages fail if it drifts from `src/pricing.js`. `tsc` bakes the catalog into `dist/catalog.json`, so the
+published package never reads the repo at runtime; `prepublishOnly` regenerates the catalog, rebuilds, and runs the
+tests.
