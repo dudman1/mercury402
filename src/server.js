@@ -8,6 +8,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { getPrice } = require('./pricing');
+const { getCatalog } = require('./catalog');
 const { preValidateTreasuryHistorical } = require('./treasury-historical-validate');
 
 const app = express();
@@ -2464,18 +2465,10 @@ app.get('/.well-known/x402', (req, res) => {
   const { PRICING } = require('./pricing');
   
   // Build accepts array — one entry per endpoint for correct per-resource price display
-  // Static descriptions for original endpoints, dynamic from NEW_ENDPOINT_META for expansion
-  const BASE_DESCRIPTIONS = {
-    '/v1/fred/{series_id}': 'Federal Reserve Economic Data (FRED) series',
-    '/v1/treasury/yield-curve/daily-snapshot': 'U.S. Treasury yield curve (FRED-sourced, 11 maturities)',
-    '/v1/treasury/yield-curve/historical': 'Historical yield curve data (max 90-day range)',
-    '/v1/treasury/auction-results/recent': 'Recent Treasury auction results',
-    '/v1/treasury/tips-rates/current': 'Current TIPS rates (5, 7, 10, 20, 30-year)',
-    '/v1/macro/snapshot/all': 'Complete macro snapshot: GDP, CPI, UNRATE, yields, VIX',
-    '/v1/composite/economic-dashboard': 'Economic overview: GDP, CPI, and Unemployment in one call',
-    '/v1/composite/inflation-tracker': 'Inflation metrics: CPI, PCE, and Core CPI',
-    '/v1/composite/labor-market': 'Labor market health: Unemployment, Jobless Claims, Nonfarm Payrolls',
-  };
+  // Static descriptions for original endpoints (shared with src/catalog.js so the
+  // manifest and the descriptors cannot disagree), dynamic from NEW_ENDPOINT_META
+  // for the expansion routes.
+  const { BASE_DESCRIPTIONS } = require('./catalog');
   // Merge with expansion endpoints
   const ENDPOINT_DESCRIPTIONS = { ...BASE_DESCRIPTIONS };
   for (const [path, meta] of Object.entries(NEW_ENDPOINT_META)) {
@@ -3113,11 +3106,19 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// Agent-facing JSON manifest. The endpoint list is generated from
+// src/catalog.js (which reads src/pricing.js plus the route modules), so this
+// document cannot fall behind the API surface. `featured` keeps the short,
+// stable keys that earlier consumers of this manifest read.
+const CATALOG = getCatalog();
 const JSON_MANIFEST = {
   name: 'Mercury x402',
   tagline: 'Deterministic financial data with cryptographic provenance',
-  version: '1.2.0',
-  endpoints: {
+  version: '1.3.0',
+  count: CATALOG.count,
+  payment: CATALOG.payment,
+  endpoints: CATALOG.endpoints,
+  featured: {
     fred: {
       path: '/v1/fred/{series_id}',
       price: getPrice('/v1/fred/{series_id}'),
@@ -3175,19 +3176,15 @@ const JSON_MANIFEST = {
       price: getPrice('/v1/composite/labor-market'),
       description: 'Labor market: Unemployment, Claims, Payrolls',
       available: true
-    },
-    discovery: {
-      path: '/.well-known/x402',
-      price: 0,
-      description: 'x402 discovery document',
-      available: true
-    },
-    health: {
-      path: '/health',
-      price: 0,
-      description: 'Service health check',
-      available: true
     }
+  },
+  discovery: {
+    manifest: '/',
+    meta: '/meta.json',
+    x402: '/.well-known/x402',
+    openapi: '/openapi.json',
+    llms: '/llms.txt',
+    docs: '/docs'
   },
   docs: {
     quickstart: 'https://api.mercury402.com/docs',
@@ -3435,6 +3432,56 @@ app.get('/', (req, res) => {
 
 app.get('/meta.json', (req, res) => {
   res.json(JSON_MANIFEST);
+});
+
+// llms.txt — plain-text index for LLM crawlers and agent frameworks that read
+// the llms.txt convention. Built from the same catalog as the JSON manifest, so
+// the two documents always list the same endpoints.
+let llmsTxtCache = null;
+function buildLlmsTxt() {
+  if (llmsTxtCache) return llmsTxtCache;
+  const byCategory = new Map();
+  for (const e of CATALOG.endpoints) {
+    if (!byCategory.has(e.category)) byCategory.set(e.category, []);
+    byCategory.get(e.category).push(e);
+  }
+  const lines = [
+    '# Mercury402',
+    '',
+    '> Deterministic financial data for AI agents: FRED macro series, US Treasury yields,',
+    '> forex cross-rates, yield-curve spreads, breakeven inflation and macro composites.',
+    '> Pay per call in USDC on Base via x402 (HTTP 402) — no API keys, no subscription.',
+    '',
+    'Base URL: https://api.mercury402.com',
+    `Paid endpoints: ${CATALOG.count} (prices in USD, settled in USDC on Base)`,
+    '',
+    '## Discovery',
+    '- x402 payment descriptors: https://api.mercury402.com/.well-known/x402',
+    '- OpenAPI 3.1 spec: https://api.mercury402.com/openapi.json',
+    '- JSON manifest: https://api.mercury402.com/meta.json',
+    '- Quickstart: https://api.mercury402.com/docs/quickstart',
+    '- MCP server (stdio): npx -y mercury402-mcp',
+    '',
+    '## How to call a paid endpoint',
+    '1. Call the endpoint without payment: HTTP 402 with a Payment-Required header carrying the price and payTo address.',
+    '2. Sign an EIP-3009 transferWithAuthorization for the quoted amount and retry the same request with a PAYMENT-SIGNATURE header.',
+    '3. Success returns the data plus signed provenance. Requests that fail upstream are not charged.',
+    '',
+    '## Endpoints',
+  ];
+  for (const [category, list] of byCategory) {
+    lines.push('', `### ${category}`, '');
+    for (const e of list) {
+      lines.push(`- ${e.method} ${e.path} — $${e.price_usd.toFixed(2)} — ${e.description}`);
+    }
+  }
+  lines.push('');
+  llmsTxtCache = lines.join('\n');
+  return llmsTxtCache;
+}
+
+app.get('/llms.txt', (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8').send(buildLlmsTxt());
 });
 
 app.get('/docs', (req, res) => {

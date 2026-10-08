@@ -35,7 +35,22 @@ Mercury402 provides pay-per-call economic data APIs for AI agents and autonomous
 
 ---
 
-Full priced catalog: `GET /.well-known/x402` (78 accepts) or `GET /openapi.json`.
+## Discovery
+
+Every document below is generated from `src/pricing.js` (what is charged) and the route modules, so they list the same 78 paid endpoints at the same prices.
+
+| URL | Format | For |
+|-----|--------|-----|
+| [`/.well-known/x402`](https://api.mercury402.com/.well-known/x402) | x402 v2 JSON | Payment descriptors (payTo, asset, amount) per endpoint: the payment source of truth |
+| [`/openapi.json`](https://api.mercury402.com/openapi.json) | OpenAPI 3.1 | Code generators, API gateways, ChatGPT/agent tool importers |
+| [`/llms.txt`](https://api.mercury402.com/llms.txt) | Plain text | LLM crawlers and agent frameworks that read the llms.txt convention |
+| [`/meta.json`](https://api.mercury402.com/meta.json) (or `GET /` with a non-HTML `Accept`) | JSON | Full endpoint catalog with methods, params and prices |
+| `npx -y mercury402-mcp` | MCP (stdio) | Claude Desktop, Claude Code, Cursor and other MCP clients ([`mcp-server/`](./mcp-server/)) |
+
+```bash
+curl -s https://api.mercury402.com/llms.txt
+curl -s https://api.mercury402.com/meta.json | jq '.count, .endpoints[0]'
+```
 
 ## Quick Start
 
@@ -128,4 +143,4 @@ See [deployment docs](./docs/DEPLOYMENT.md) for production setup.
 MIT
 
 ---
-*Last updated: 2026-04-20 23:09 ET | Updated by: Forge*
+*Last updated: 2026-10-08 ET | Updated by: Hermes*
