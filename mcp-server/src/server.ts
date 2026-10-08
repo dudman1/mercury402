@@ -7,7 +7,7 @@ import type { Config } from './config.js';
 import { createEvmPayer, type Payer } from './payment.js';
 
 export const SERVER_NAME = 'mercury402';
-export const SERVER_VERSION = '0.1.1';
+export const SERVER_VERSION = '0.1.2';
 
 export interface ServerDeps {
   fetch?: FetchFn;
