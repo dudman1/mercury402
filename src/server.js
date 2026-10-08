@@ -600,7 +600,10 @@ initSharedProvider();
 // survives process restarts. TTL is long enough that expired entries
 // can never come back within any realistic reorg window.
 
-const REDEMPTION_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-redemptions.jsonl';
+// Base dir for ledgers (LEDGER/) and logs (LOGS/). Override with MERCURY402_LOG_DIR.
+const LOG_BASE_DIR = process.env.MERCURY402_LOG_DIR || '/Users/openclaw/.openclaw';
+
+const REDEMPTION_LEDGER = path.join(LOG_BASE_DIR, 'LEDGER', 'mercury402-redemptions.jsonl');
 const REDEMPTION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const redemptions = new Map(); // key -> { ts, endpoint }
 
@@ -656,8 +659,8 @@ loadRedemptions();
 // REVENUE LOGGING
 // ============================================
 
-const REVENUE_LEDGER = '/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl';
-const ACCESS_LOG = '/Users/openclaw/.openclaw/LOGS/mercury402-access.jsonl';
+const REVENUE_LEDGER = path.join(LOG_BASE_DIR, 'LEDGER', 'mercury402-revenue.jsonl');
+const ACCESS_LOG = path.join(LOG_BASE_DIR, 'LOGS', 'mercury402-access.jsonl');
 const MAX_LOG_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_ROTATED_FILES = 7;
 
