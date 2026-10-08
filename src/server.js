@@ -980,7 +980,8 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
 
 function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
   const amount = String(Math.floor(price * 1000000));
-  const description = ENDPOINT_DESCRIPTIONS[endpointPath] || 'Deterministic financial data from official sources';
+  const namedFred = require('./new-routes').FRED_SERIES[endpointPath];
+  const description = ENDPOINT_DESCRIPTIONS[endpointPath] || (namedFred && namedFred.desc) || 'Deterministic financial data from official sources';
   const normalizedMethod = method.toUpperCase();
 
   return {
@@ -1444,12 +1445,24 @@ function generateProvenance(data, seriesId, params) {
   return provenance;
 }
 
+// Named FRED endpoints (/v1/fred/cpi-core, /v1/fred/gdp, ...) are registered
+// later by registerNewRoutes(). This generic route is registered first, so it
+// must hand those slugs on with next('route') instead of shadowing them.
+// Exact (lowercase) match only: /v1/fred/GDP stays a raw FRED id request.
+const NAMED_FRED_SLUGS = new Set(
+  Object.keys(require('./new-routes').FRED_SERIES).map((p) => p.slice('/v1/fred/'.length))
+);
+function skipNamedFredSeries(req, res, next) {
+  if (NAMED_FRED_SLUGS.has(req.params.series_id)) return next('route');
+  next();
+}
+
 // SECURITY (2026-04-20): pass a dynamic price resolver so range queries
 // (observation_start + observation_end) are actually charged at 2× the
 // single-point price. Previously the middleware charged the base price
 // while the handler internally computed 2×, letting callers pay for 1
 // observation and receive an unbounded window.
-app.get('/v1/fred/:series_id', fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
+app.get('/v1/fred/:series_id', skipNamedFredSeries, fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
   const basePrice = getPrice('/v1/fred/{series_id}');
   const isRange = req.query && req.query.observation_start && req.query.observation_end;
   return isRange ? basePrice * 2 : basePrice;
