@@ -751,7 +751,7 @@ function parsePaymentToken(token) {
 
 async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
   try {
-    const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
+    const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }, { staticNetwork: true });
     const USDC_CONTRACT = process.env.USDC_CONTRACT_BASE;
     
     // Fetch transaction receipt (includes logs)
@@ -1115,7 +1115,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
           // Execute transferWithAuthorization on-chain.
           // Tracked in inFlightSettlements so SIGTERM can drain before exit.
           const settlePromise = (async () => {
-            const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' });
+            const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }, { staticNetwork: true });
             const facilitatorWallet = new ethers.Wallet(
               process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
               provider
@@ -2812,7 +2812,8 @@ async function refreshFacilitatorEthBalance() {
   try {
     const provider = sharedProvider || new ethers.JsonRpcProvider(
       process.env.BASE_RPC_URL,
-      { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
+      { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' },
+      { staticNetwork: true }
     );
     const balanceWei = await provider.getBalance(signingWallet.address);
     const balanceEth = parseFloat(ethers.formatEther(balanceWei));
@@ -3062,7 +3063,8 @@ async function getProviderStatus() {
     try {
       const provider = sharedProvider || (throwawayProvider = new ethers.JsonRpcProvider(
         process.env.BASE_RPC_URL,
-        { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }
+        { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' },
+        { staticNetwork: true }
       ));
       await Promise.race([
         provider.getBlockNumber(),
