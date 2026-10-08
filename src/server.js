@@ -1061,8 +1061,10 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
     };
     
     if (!token) {
-      // Check for x402 v2 payment-signature header (standard x402 protocol)
-      const paymentSig = req.headers['payment-signature'];
+      // x402 payment header: v2 clients send PAYMENT-SIGNATURE, v1 clients (which
+      // follow the v1 402 body) send X-PAYMENT. Same base64 JSON envelope; the
+      // v2 header wins if both are present.
+      const paymentSig = req.headers['payment-signature'] || req.headers['x-payment'];
       if (paymentSig) {
         try {
           // Decode x402 v2 PaymentPayload: base64 → JSON
