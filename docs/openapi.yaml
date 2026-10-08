@@ -3193,17 +3193,39 @@ paths:
                 type: string
             application/json:
               schema:
-                type: object
-                properties:
-                  name:
-                    type: string
-                    example: Mercury x402
-                  tagline:
-                    type: string
-                  version:
-                    type: string
-                  endpoints:
-                    type: object
+                $ref: '#/components/schemas/Manifest'
+  /meta.json:
+    get:
+      summary: JSON manifest
+      description: 'The same JSON manifest as `GET /` with a non-HTML Accept header: every paid endpoint with
+        method, params and price, generated from src/pricing.js.
+
+        '
+      operationId: getManifest
+      tags:
+      - Documentation
+      security: []
+      responses:
+        '200':
+          description: Manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manifest'
+  /llms.txt:
+    get:
+      summary: Plain-text endpoint index (llms.txt convention)
+      operationId: getLlmsTxt
+      tags:
+      - Documentation
+      security: []
+      responses:
+        '200':
+          description: Markdown-style plain text listing every paid endpoint and the discovery documents
+          content:
+            text/plain:
+              schema:
+                type: string
   /docs:
     get:
       summary: Quickstart documentation
@@ -3247,6 +3269,143 @@ components:
 
         '
   schemas:
+    Manifest:
+      type: object
+      description: Agent-facing manifest served by GET / (non-HTML Accept) and GET /meta.json. Generated
+        from src/pricing.js and the route modules by src/catalog.js.
+      required:
+      - name
+      - version
+      - count
+      - endpoints
+      properties:
+        name:
+          type: string
+          example: Mercury x402
+        tagline:
+          type: string
+        version:
+          type: string
+          example: 1.3.0
+        count:
+          type: integer
+          description: Number of paid endpoints (length of endpoints)
+          example: 78
+        payment:
+          type: object
+          properties:
+            protocol:
+              type: string
+              example: x402
+            scheme:
+              type: string
+              example: exact
+            network:
+              type: string
+              example: eip155:8453
+            asset:
+              type: string
+              example: USDC
+            asset_address:
+              type: string
+              example: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+        endpoints:
+          type: array
+          description: Every paid endpoint. Changed from an object keyed by name in manifest 1.3.0; the old
+            named entries are kept under featured.
+          items:
+            $ref: '#/components/schemas/ManifestEndpoint'
+        featured:
+          type: object
+          description: The nine named entries that were the whole endpoints object before 1.3.0.
+          additionalProperties:
+            type: object
+            properties:
+              path:
+                type: string
+              method:
+                type: string
+              price:
+                type: number
+              description:
+                type: string
+              available:
+                type: boolean
+        discovery:
+          type: object
+          additionalProperties:
+            type: string
+        docs:
+          type: object
+          additionalProperties:
+            type: string
+        mcp:
+          type: object
+          properties:
+            package:
+              type: string
+            install:
+              type: string
+            npm:
+              type: string
+            tools:
+              type: array
+              items:
+                type: string
+    ManifestEndpoint:
+      type: object
+      required:
+      - path
+      - method
+      - category
+      - description
+      - price_usd
+      - price_usdc_atomic
+      - params
+      properties:
+        path:
+          type: string
+          example: /v1/fred/cpi
+        method:
+          type: string
+          enum:
+          - GET
+          - POST
+        category:
+          type: string
+          example: fred
+        description:
+          type: string
+        price_usd:
+          type: number
+          example: 0.05
+        price_usdc_atomic:
+          type: string
+          example: '50000'
+        params:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              in:
+                type: string
+                enum:
+                - path
+                - query
+                - body
+              required:
+                type: boolean
+              type:
+                type: string
+              description:
+                type: string
+        fred_series_id:
+          type: string
+          example: CPIAUCSL
+        price_note:
+          type: string
     FREDResponse:
       type: object
       required:

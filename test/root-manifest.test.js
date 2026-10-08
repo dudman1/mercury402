@@ -238,3 +238,23 @@ test('GET /openapi.json is OpenAPI 3.1 and covers every priced endpoint at the s
   // 3.1 uses JSON Schema 2020-12: `nullable` is not a keyword, type arrays are.
   assert.ok(!JSON.stringify(spec).includes('"nullable"'), 'spec still uses the 3.0 nullable keyword');
 });
+
+test('/openapi.json documents the manifest shape that GET / and /meta.json actually serve', async () => {
+  const spec = await (await fetch(`${base}/openapi.json`)).json();
+  const body = await manifest();
+  const { Manifest, ManifestEndpoint } = spec.components.schemas;
+  for (const p of ['/', '/meta.json']) {
+    assert.strictEqual(spec.paths[p].get.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/Manifest', p);
+  }
+  assert.ok(spec.paths['/llms.txt'], '/llms.txt documented');
+  // endpoints is an array since manifest 1.3.0; documenting it as an object would mislead client generators.
+  assert.strictEqual(Manifest.properties.endpoints.type, 'array');
+  assert.ok(Array.isArray(body.endpoints));
+  for (const key of Manifest.required) assert.ok(key in body, `served manifest missing required ${key}`);
+  for (const key of Object.keys(body)) assert.ok(key in Manifest.properties, `served manifest key ${key} undocumented`);
+  for (const e of body.endpoints) {
+    for (const key of ManifestEndpoint.required) assert.ok(key in e, `${e.path} missing ${key}`);
+    for (const key of Object.keys(e)) assert.ok(key in ManifestEndpoint.properties, `${e.path} key ${key} undocumented`);
+    assert.ok(ManifestEndpoint.properties.method.enum.includes(e.method), e.path);
+  }
+});
