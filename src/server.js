@@ -3132,7 +3132,7 @@ const JSON_MANIFEST = {
     },
     macroSnapshot: {
       path: '/v1/macro/snapshot/all',
-      method: 'POST',
+      method: 'GET',
       price: getPrice('/v1/macro/snapshot/all'),
       description: 'Complete macro snapshot: GDP, UNRATE, CPI, FEDFUNDS, yields, VIX, dollar index, sentiment',
       available: true
@@ -3146,14 +3146,14 @@ const JSON_MANIFEST = {
     },
     treasuryAuctions: {
       path: '/v1/treasury/auction-results/recent',
-      method: 'POST',
+      method: 'GET',
       price: getPrice('/v1/treasury/auction-results/recent'),
       description: 'Recent auction results (HQM corporate bond yield proxy)',
       available: true
     },
     treasuryTIPS: {
       path: '/v1/treasury/tips-rates/current',
-      method: 'POST',
+      method: 'GET',
       price: getPrice('/v1/treasury/tips-rates/current'),
       description: 'Current TIPS rates (5, 7, 10, 20, 30-year)',
       available: true
@@ -3193,6 +3193,13 @@ const JSON_MANIFEST = {
     quickstart: 'https://api.mercury402.com/docs',
     apiReference: 'https://api.mercury402.com/docs/api',
     openapi: 'https://api.mercury402.com/openapi.json'
+  },
+  // MCP server package (mcp-server/ in this repo, published to npm).
+  mcp: {
+    package: 'mercury402-mcp',
+    install: 'npx -y mercury402-mcp',
+    npm: 'https://www.npmjs.com/package/mercury402-mcp',
+    tools: ['list_endpoints', 'get_endpoint_data']
   }
 };
 

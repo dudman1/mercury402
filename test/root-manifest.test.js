@@ -111,3 +111,49 @@ test('other static files are unaffected', async () => {
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.text(), INDEX_HTML);
 });
+
+async function manifest() {
+  const res = await getRoot({ Accept: 'application/json' });
+  return res.json();
+}
+
+test('manifest advertises the MCP server, in sync with mcp-server/', async () => {
+  const { mcp } = await manifest();
+  const mcpPkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'mcp-server', 'package.json'), 'utf8'));
+  const mcpSrc = fs.readFileSync(path.join(__dirname, '..', 'mcp-server', 'src', 'server.ts'), 'utf8');
+  const registeredTools = [...mcpSrc.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1]);
+
+  assert.deepStrictEqual(mcp, {
+    package: mcpPkg.name,
+    install: `npx -y ${mcpPkg.name}`,
+    npm: `https://www.npmjs.com/package/${mcpPkg.name}`,
+    tools: registeredTools,
+  });
+  assert.deepStrictEqual(mcp.tools, ['list_endpoints', 'get_endpoint_data']);
+});
+
+test('manifest endpoint prices match src/pricing.js', async () => {
+  const { getPrice } = require('../src/pricing');
+  const { endpoints } = await manifest();
+  for (const [key, e] of Object.entries(endpoints)) {
+    assert.ok(typeof e.path === 'string' && e.path.startsWith('/'), key);
+    assert.ok(e.method === undefined || ['GET', 'POST'].includes(e.method), key);
+    if (e.price > 0) assert.strictEqual(e.price, getPrice(e.path), key);
+  }
+});
+
+test('every paid manifest endpoint answers its declared method with a 402', async () => {
+  const { endpoints } = await manifest();
+  const paid = Object.entries(endpoints).filter(([, e]) => e.price > 0);
+  assert.ok(paid.length > 0);
+  for (const [key, e] of paid) {
+    const method = e.method || 'GET';
+    const init = { method, headers: { Accept: 'application/json' } };
+    if (method === 'POST') {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify({ start_date: '2026-01-01', end_date: '2026-02-01' });
+    }
+    const res = await fetch(base + e.path, init);
+    assert.strictEqual(res.status, 402, `${key}: ${method} ${e.path} -> ${res.status}`);
+  }
+});

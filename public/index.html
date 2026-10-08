@@ -139,6 +139,14 @@
   .footer-links a:hover { color: var(--text-2); }
   .footer-copy { font-size: 0.72rem; color: var(--text-3); font-family: var(--mono); }
   .section-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+  .mcp-install { margin-top: 32px; align-items: flex-start; }
+  .mcp-snippets { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .mcp-snippet { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; min-width: 0; }
+  .mcp-snippet-label { font-family: var(--mono); font-size: 0.65rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .mcp-snippet pre { font-family: var(--mono); font-size: 0.76rem; color: var(--text-2); line-height: 1.55; overflow-x: auto; white-space: pre; }
+  .mcp-snippet pre .val { color: var(--accent); }
+  .mcp-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+  .step-content code { font-family: var(--mono); font-size: 0.78rem; color: var(--accent); }
   @media (max-width: 768px) {
     .nav-links { display: none; }
     .hero { padding: 120px 0 60px; }
@@ -208,6 +216,51 @@
     </div>
   </div>
 </div>
+<section id="use-with-claude">
+  <div class="container">
+    <div class="section-eyebrow">Use with Claude</div>
+    <h2 class="section-title">Mercury402 as an<br><em>MCP server.</em></h2>
+    <p class="section-desc">Give Claude and other MCP clients direct access to all 78 endpoints. One command, no install step, no account.</p>
+    <div class="quickstart mcp-install">
+      <div class="qs-code">
+        <span class="qs-prompt">$</span>
+        <span class="qs-cmd">npx -y </span><span class="qs-url">mercury402-mcp</span>
+        <button class="qs-copy" onclick="navigator.clipboard.writeText('npx -y mercury402-mcp'); this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+      </div>
+    </div>
+    <div class="how-grid">
+      <div>
+        <div class="steps-list">
+          <div class="step-item"><span class="step-num">01</span><div class="step-content"><h4>Add the server</h4><p>Paste the Claude Code command or the Claude Desktop config. Your client launches it with <code>npx</code>.</p></div></div>
+          <div class="step-item"><span class="step-num">02</span><div class="step-content"><h4>Free by default</h4><p><code>list_endpoints</code> browses every route and price. <code>get_endpoint_data</code> returns the x402 quote. Nothing is spent.</p></div></div>
+          <div class="step-item"><span class="step-num">03</span><div class="step-content"><h4>Optional paid mode</h4><p>Set <code>MERCURY402_PAYER_PRIVATE_KEY</code> to pay per call in USDC on Base, capped by <code>MERCURY402_MAX_PRICE_USD</code>. The key sits in plaintext in your client config, so use a dedicated low-balance wallet.</p></div></div>
+        </div>
+        <div class="mcp-links">
+          <a href="https://www.npmjs.com/package/mercury402-mcp" class="btn-secondary" target="_blank" rel="noopener">npm package →</a>
+          <a href="https://github.com/dudman1/mercury402/tree/master/mcp-server" class="btn-secondary" target="_blank" rel="noopener">GitHub →</a>
+        </div>
+      </div>
+      <div class="mcp-snippets">
+        <div class="mcp-snippet">
+          <div class="mcp-snippet-label">Claude Code</div>
+          <pre>claude mcp add mercury402 -- npx -y <span class="val">mercury402-mcp</span></pre>
+        </div>
+        <div class="mcp-snippet">
+          <div class="mcp-snippet-label">Claude Desktop · claude_desktop_config.json</div>
+          <pre>{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "<span class="val">mercury402-mcp</span>"]
+    }
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<hr class="section-divider">
 <section id="how-it-works">
   <div class="container">
     <div class="section-eyebrow">How it works</div>
