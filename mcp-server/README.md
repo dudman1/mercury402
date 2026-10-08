@@ -129,8 +129,15 @@ claude mcp add mercury402 -- node /absolute/path/to/mercury402/mcp-server/dist/i
 npx -y mercury402-mcp --http   # http://127.0.0.1:3402/mcp (stateless, JSON responses)
 ```
 
-The HTTP endpoint has no authentication. It binds to `127.0.0.1` by default, and the server refuses to start
-in paid mode on a non-loopback `MCP_HTTP_HOST`.
+Stateless streamable HTTP: `POST /mcp` speaks MCP, `GET /` describes the server, and `GET /healthz` is a local
+health check. The HTTP endpoint has no authentication. It binds to `127.0.0.1` by default, checks the `Host`
+header against an allowlist (loopback names plus `MCP_HTTP_ALLOWED_HOSTS`), rate-limits per client IP and
+globally, and caps request bodies.
+
+Paid mode over HTTP is loopback-only. The server refuses to start with `MERCURY402_PAYER_PRIVATE_KEY` set
+together with a non-loopback `MCP_HTTP_HOST`, a public `MCP_HTTP_ALLOWED_HOSTS` entry, `MCP_HTTP_TRUST_PROXY`,
+or `MCP_PUBLIC_URL`. In paid mode it also rejects browser requests (any `Origin` header). To serve it publicly
+behind a reverse proxy in free mode, see [`deploy/HOSTED.md`](./deploy/HOSTED.md).
 
 ## Environment variables
 
@@ -141,6 +148,12 @@ in paid mode on a non-loopback `MCP_HTTP_HOST`.
 | `MERCURY402_API_URL` | `https://api.mercury402.com` | API base URL (`https://mercury402.uk` also works) |
 | `MERCURY402_TIMEOUT_MS` | `60000` | Per-request timeout (paid calls wait for on-chain settlement) |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | `127.0.0.1` / `3402` | HTTP transport bind address (only with `--http`) |
+| `MCP_HTTP_ALLOWED_HOSTS` | unset | Comma-separated extra `Host` header names to accept (e.g. `mcp.example.com` behind a proxy). Loopback names are always accepted; anything else gets 403 |
+| `MCP_HTTP_TRUST_PROXY` | `false` | Rate-limit on Cloudflare's `CF-Connecting-IP` instead of the socket address. Enable only behind cloudflared/Cloudflare: the header is spoofable otherwise. `X-Forwarded-For` is never used |
+| `MCP_HTTP_RATE_LIMIT_PER_MIN` | `60` | `POST /mcp` requests per client IP per minute (`0` disables) |
+| `MCP_HTTP_GLOBAL_RATE_LIMIT_PER_MIN` | `600` | `POST /mcp` requests per minute across all clients (`0` disables) |
+| `MCP_HTTP_MAX_BODY_BYTES` | `65536` | Largest accepted request body; larger gets 413 |
+| `MCP_PUBLIC_URL` | unset | Public `/mcp` URL that `GET /` advertises. Setting it marks the server as public, so paid mode refuses to start |
 
 ## Example tool calls
 

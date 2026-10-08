@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { loadConfig, type Config } from './config.js';
+import { createHttpServer } from './http.js';
 import { createMercuryServer } from './server.js';
 
 // stdout carries the MCP protocol in stdio mode: log to stderr only, and never log config values.
@@ -10,47 +9,31 @@ function log(msg: string): void {
   process.stderr.write(`[mercury402-mcp] ${msg}\n`);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  const raw = Buffer.concat(chunks).toString('utf8');
-  return raw ? JSON.parse(raw) : undefined;
-}
-
-// Stateless streamable HTTP: a fresh server + transport per request.
 async function startHttp(config: Config): Promise<void> {
-  // The HTTP endpoint has no auth: anyone who can reach it could spend the payer wallet.
-  const loopback = ['127.0.0.1', '::1', 'localhost'].includes(config.httpHost);
-  if (config.payerPrivateKey && !loopback) {
-    throw new Error('Refusing to serve paid mode over HTTP on a non-loopback host (MCP_HTTP_HOST). Use stdio or 127.0.0.1.');
-  }
-  const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    if (!req.url?.startsWith('/mcp')) {
-      res.writeHead(404).end();
-      return;
-    }
-    if (req.method !== 'POST') {
-      res.writeHead(405, { Allow: 'POST' }).end();
-      return;
-    }
-    try {
-      const body = await readJson(req);
-      const server = createMercuryServer(config);
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-      res.on('close', () => {
-        void transport.close();
-        void server.close();
-      });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, body);
-    } catch (err) {
-      log(`HTTP request failed: ${err instanceof Error ? err.message : String(err)}`);
-      if (!res.headersSent) res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'Bad request' }, id: null }));
-    }
+  const { server } = createHttpServer(config, { log });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(config.httpPort, config.httpHost, resolve);
   });
-  await new Promise<void>((resolve) => http.listen(config.httpPort, config.httpHost, resolve));
-  log(`streamable HTTP listening on http://${config.httpHost}:${config.httpPort}/mcp`);
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : config.httpPort;
+  const hosts = ['loopback', ...config.httpAllowedHosts].join(', ');
+  const perIp = config.httpRateLimitPerMin ? `${config.httpRateLimitPerMin}/min per IP${config.httpTrustProxy ? ' (CF-Connecting-IP)' : ''}` : 'no per-IP limit';
+  const total = config.httpGlobalRateLimitPerMin ? `${config.httpGlobalRateLimitPerMin}/min total` : 'no global limit';
+  log(`streamable HTTP listening on http://${config.httpHost}:${port}/mcp; hosts: ${hosts}; ${perIp}, ${total}`);
+
+  // PM2 wait_ready: report "online" only once the port is bound.
+  if (typeof process.send === 'function') process.send('ready');
+
+  // PM2 6.x stops apps with SIGINT, not SIGTERM: handle both. Requests are short (stateless JSON).
+  const shutdown = (signal: string) => {
+    log(`${signal} received, closing HTTP server`);
+    server.close(() => process.exit(0));
+    server.closeIdleConnections();
+    setTimeout(() => process.exit(0), 5_000).unref();
+  };
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 async function main(): Promise<void> {

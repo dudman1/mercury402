@@ -34,7 +34,7 @@ describe('compiled package is self-contained', () => {
 
   it('never references the repo source or reads files at runtime', () => {
     const jsFiles = readdirSync(out).filter((f) => f.endsWith('.js'));
-    expect(jsFiles.sort()).toEqual(['catalog.js', 'client.js', 'config.js', 'index.js', 'payment.js', 'server.js']);
+    expect(jsFiles.sort()).toEqual(['catalog.js', 'client.js', 'config.js', 'http.js', 'index.js', 'payment.js', 'server.js']);
     for (const f of jsFiles) {
       const code = readFileSync(join(out, f), 'utf8');
       expect(code, f).not.toMatch(/\.\.\/(\.\.\/)?src|pricing\.js|new-routes|ai-routes|generate-catalog|readFileSync|createRequire/);
