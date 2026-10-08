@@ -16,6 +16,30 @@ export interface ServerDeps {
   catalog?: Catalog;
 }
 
+export interface ServerOptions {
+  /**
+   * The server is publicly exposed (publicExposure() in http.ts): callers cannot enable paid
+   * mode here, so tool text and 402 hints point them to their own x402 client or a local install.
+   */
+  hosted?: boolean;
+}
+
+const GET_ENDPOINT_DATA_USAGE =
+  'Use list_endpoints first to find paths and parameters. Path params can be inline ("/v1/fred/UNRATE") or passed in params ' +
+  '("/v1/fred/{series_id}" + {"series_id":"UNRATE"}). Other params go to the query string (GET) or JSON body (POST).';
+
+export const LOCAL_GET_ENDPOINT_DATA_DESCRIPTION =
+  'Call a Mercury402 endpoint on the live API. Without paid mode, endpoints return HTTP 402 and this tool returns ' +
+  'the price and x402 payment instructions instead of data. With paid mode enabled (MERCURY402_PAYER_PRIVATE_KEY), ' +
+  'it pays in USDC on Base (capped by MERCURY402_MAX_PRICE_USD) and returns the data. ' +
+  GET_ENDPOINT_DATA_USAGE;
+
+export const HOSTED_GET_ENDPOINT_DATA_DESCRIPTION =
+  'Call a Mercury402 endpoint on the live API. This hosted endpoint is discovery-only: endpoints return HTTP 402 and this ' +
+  'tool returns the price and x402 payment instructions instead of data. Pay with your own x402 client, or run ' +
+  'mercury402-mcp locally (npx -y mercury402-mcp) with your own wallet. ' +
+  GET_ENDPOINT_DATA_USAGE;
+
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
@@ -40,7 +64,7 @@ function formatCallResult(result: CallResult): CallToolResult {
   }
 }
 
-export function createMercuryServer(config: Config, deps: ServerDeps = {}): McpServer {
+export function createMercuryServer(config: Config, deps: ServerDeps = {}, options: ServerOptions = {}): McpServer {
   const catalog = deps.catalog ?? CATALOG;
   const payer = deps.payer ?? (config.payerPrivateKey ? createEvmPayer(config.payerPrivateKey) : undefined);
   const client = new MercuryClient({
@@ -49,6 +73,7 @@ export function createMercuryServer(config: Config, deps: ServerDeps = {}): McpS
     payer,
     maxPriceUsd: config.maxPriceUsd,
     timeoutMs: config.timeoutMs,
+    hosted: options.hosted,
   });
   const categories = [...new Set(catalog.endpoints.map((e) => e.category))].sort();
 
@@ -93,12 +118,7 @@ export function createMercuryServer(config: Config, deps: ServerDeps = {}): McpS
     'get_endpoint_data',
     {
       title: 'Call a Mercury402 endpoint',
-      description:
-        'Call a Mercury402 endpoint on the live API. Without paid mode, endpoints return HTTP 402 and this tool returns ' +
-        'the price and x402 payment instructions instead of data. With paid mode enabled (MERCURY402_PAYER_PRIVATE_KEY), ' +
-        'it pays in USDC on Base (capped by MERCURY402_MAX_PRICE_USD) and returns the data. ' +
-        'Use list_endpoints first to find paths and parameters. Path params can be inline ("/v1/fred/UNRATE") or passed in params ' +
-        '("/v1/fred/{series_id}" + {"series_id":"UNRATE"}). Other params go to the query string (GET) or JSON body (POST).',
+      description: options.hosted ? HOSTED_GET_ENDPOINT_DATA_DESCRIPTION : LOCAL_GET_ENDPOINT_DATA_DESCRIPTION,
       inputSchema: {
         path: z.string().describe('Endpoint path, e.g. "/v1/treasury/yield-curve/daily-snapshot" or "/v1/fred/UNRATE"'),
         params: z
