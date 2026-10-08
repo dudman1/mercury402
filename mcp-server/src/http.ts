@@ -50,6 +50,40 @@ export function hostnameOf(hostHeader: string | undefined): string {
   return h.split(':')[0];
 }
 
+/** A setting that makes the HTTP server reachable by others than the local machine. */
+export type PublicExposure =
+  | { kind: 'bind'; host: string }
+  | { kind: 'allowed_host'; host: string }
+  | { kind: 'trust_proxy' }
+  | { kind: 'public_url' };
+
+/**
+ * The first setting that makes the HTTP server publicly reachable, or undefined when it is
+ * loopback-only. Single source of truth for "public exposure": the paid-mode boot guard
+ * refuses to start on it, and the caller-facing payment text switches to hosted wording.
+ */
+export function publicExposure(config: Config): PublicExposure | undefined {
+  if (!LOOPBACK_BINDS.has(config.httpHost)) return { kind: 'bind', host: config.httpHost };
+  const publicHost = config.httpAllowedHosts.map(hostnameOf).find((h) => !LOOPBACK_HOSTNAMES.includes(h));
+  if (publicHost) return { kind: 'allowed_host', host: publicHost };
+  if (config.httpTrustProxy) return { kind: 'trust_proxy' };
+  if (config.publicUrl) return { kind: 'public_url' };
+  return undefined;
+}
+
+function paidModeRefusal(exposure: PublicExposure): string {
+  switch (exposure.kind) {
+    case 'bind':
+      return 'Refusing to serve paid mode over HTTP on a non-loopback host (MCP_HTTP_HOST). Use stdio or 127.0.0.1.';
+    case 'allowed_host':
+      return `Refusing to serve paid mode with a public MCP_HTTP_ALLOWED_HOSTS entry (${exposure.host}): anyone who can reach it could spend the payer wallet.`;
+    case 'trust_proxy':
+      return 'Refusing to serve paid mode with MCP_HTTP_TRUST_PROXY: a proxy in front of the server means others can reach it.';
+    case 'public_url':
+      return 'Refusing to serve paid mode with MCP_PUBLIC_URL set: a public endpoint must run in free mode.';
+  }
+}
+
 /**
  * Paid mode signs payments from a hot wallet, and HTTP has no auth: anyone who can
  * reach the endpoint could spend it. So paid mode is allowed only on a loopback bind
@@ -57,19 +91,8 @@ export function hostnameOf(hostHeader: string | undefined): string {
  */
 export function assertSafeHttpConfig(config: Config, paid = !!config.payerPrivateKey): void {
   if (!paid) return;
-  if (!LOOPBACK_BINDS.has(config.httpHost)) {
-    throw new Error('Refusing to serve paid mode over HTTP on a non-loopback host (MCP_HTTP_HOST). Use stdio or 127.0.0.1.');
-  }
-  const publicHost = config.httpAllowedHosts.map(hostnameOf).find((h) => !LOOPBACK_HOSTNAMES.includes(h));
-  if (publicHost) {
-    throw new Error(`Refusing to serve paid mode with a public MCP_HTTP_ALLOWED_HOSTS entry (${publicHost}): anyone who can reach it could spend the payer wallet.`);
-  }
-  if (config.httpTrustProxy) {
-    throw new Error('Refusing to serve paid mode with MCP_HTTP_TRUST_PROXY: a proxy in front of the server means others can reach it.');
-  }
-  if (config.publicUrl) {
-    throw new Error('Refusing to serve paid mode with MCP_PUBLIC_URL set: a public endpoint must run in free mode.');
-  }
+  const exposure = publicExposure(config);
+  if (exposure) throw new Error(paidModeRefusal(exposure));
 }
 
 /** Fixed-window counter per key. take() returns 0 when allowed, else seconds until the window resets. */
@@ -145,6 +168,8 @@ export function createHttpServer(config: Config, options: HttpServerOptions = {}
   const deps = options.deps ?? {};
   const paid = !!(deps.payer ?? config.payerPrivateKey);
   assertSafeHttpConfig(config, paid);
+  // Same predicate as the boot guard: a publicly reachable server tells callers it never pays.
+  const hosted = publicExposure(config) !== undefined;
   const log = options.log ?? (() => {});
   const allowedHosts = new Set([...LOOPBACK_HOSTNAMES, ...config.httpAllowedHosts.map(hostnameOf)]);
   const perIp = new FixedWindowLimiter(config.httpRateLimitPerMin, 60_000, options.now);
@@ -185,7 +210,7 @@ export function createHttpServer(config: Config, options: HttpServerOptions = {}
       return send(res, 400, rpcError(-32700, 'Parse error'));
     }
     stats.mcp_requests++;
-    const server = createMercuryServer(config, deps);
+    const server = createMercuryServer(config, deps, { hosted });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
       void transport.close();

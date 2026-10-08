@@ -15,6 +15,8 @@ export interface ClientOptions {
   payer?: Payer;
   maxPriceUsd: number;
   timeoutMs: number;
+  /** Publicly exposed HTTP server (see publicExposure() in http.ts): callers cannot enable paid mode. */
+  hosted?: boolean;
 }
 
 export interface PaymentQuote {
@@ -69,6 +71,17 @@ const HOW_TO_PAY = [
   'Or enable paid mode in this MCP server: set MERCURY402_PAYER_PRIVATE_KEY to a funded Base hot wallet (and optionally MERCURY402_MAX_PRICE_USD), then call get_endpoint_data again.',
 ];
 
+// A hosted (publicly exposed) server refuses to boot with a payer key, and a remote caller
+// cannot set its env vars, so it must not suggest enabling paid mode on itself.
+export const HOSTED_HOW_TO_PAY = [
+  HOW_TO_PAY[0],
+  HOW_TO_PAY[1],
+  'To pay automatically, run mercury402-mcp locally (npx -y mercury402-mcp) with MERCURY402_PAYER_PRIVATE_KEY set to a funded Base hot wallet you control.',
+];
+
+export const LOCAL_NO_PAYER_REASON = 'Payment required. Paid mode is disabled (MERCURY402_PAYER_PRIVATE_KEY not set).';
+export const HOSTED_NO_PAYER_REASON = 'Payment required. This hosted endpoint is discovery-only and never pays on your behalf.';
+
 async function readBody(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -116,7 +129,7 @@ export class MercuryClient {
       reason,
       quote: payable ? toQuote(payable) : options[0],
       all_options: options,
-      how_to_pay: HOW_TO_PAY,
+      how_to_pay: this.opts.hosted ? HOSTED_HOW_TO_PAY : HOW_TO_PAY,
       raw_body: body,
     };
   }
@@ -140,7 +153,7 @@ export class MercuryClient {
     const reqs = parsePaymentRequired(first.headers, firstBody);
     const payer = this.opts.payer;
     if (!payer) {
-      return this.paymentRequired(url, 'Payment required. Paid mode is disabled (MERCURY402_PAYER_PRIVATE_KEY not set).', reqs, firstBody);
+      return this.paymentRequired(url, this.opts.hosted ? HOSTED_NO_PAYER_REASON : LOCAL_NO_PAYER_REASON, reqs, firstBody);
     }
     if (!pay) {
       return this.paymentRequired(url, 'Payment required. Not paying because pay=false was requested.', reqs, firstBody);
