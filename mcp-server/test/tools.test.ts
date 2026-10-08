@@ -54,14 +54,15 @@ describe('get_endpoint_data without paid mode', () => {
     expect(text).toContain('$0.05');
     const body = payload(text);
     expect(body.status).toBe('payment_required');
+    // The v1 JSON body (what the live API returns) is preferred over the v2 header.
     expect(body.quote).toMatchObject({
       price_usd: 0.05,
       amount_usdc_atomic: '50000',
-      network: 'eip155:8453',
+      network: 'base',
       asset: BASE_USDC,
       pay_to: MERCHANT,
       scheme: 'exact',
-      x402_version: 2,
+      x402_version: 1,
     });
     expect(body.how_to_pay.join(' ')).toMatch(/MERCURY402_PAYER_PRIVATE_KEY/);
     expect(body.raw_body.accepts[0].maxAmountRequired).toBe('50000');
@@ -73,12 +74,12 @@ describe('get_endpoint_data without paid mode', () => {
     expect((init?.headers as Record<string, string>)['PAYMENT-SIGNATURE']).toBeUndefined();
   });
 
-  it('falls back to the v1 JSON body when the Payment-Required header is absent', async () => {
+  it('falls back to the v2 Payment-Required header when the body has no accepts', async () => {
     const r = make402('/v1/macro/bundle', 0.1);
-    const bodyOnly = new Response(await r.text(), { status: 402, headers: { 'Content-Type': 'application/json' } });
-    session = await connect(testConfig(), { fetch: mockFetch(bodyOnly) });
+    const headerOnly = new Response('{}', { status: 402, headers: { 'Payment-Required': r.headers.get('payment-required')! } });
+    session = await connect(testConfig(), { fetch: mockFetch(headerOnly) });
     const body = payload((await session.call('get_endpoint_data', { path: '/v1/macro/bundle' })).text);
-    expect(body.quote).toMatchObject({ price_usd: 0.1, amount_usdc_atomic: '100000', network: 'base', x402_version: 1 });
+    expect(body.quote).toMatchObject({ price_usd: 0.1, amount_usdc_atomic: '100000', network: 'eip155:8453', x402_version: 2 });
   });
 
   it('sends POST endpoints with a JSON body', async () => {
@@ -130,7 +131,7 @@ describe('get_endpoint_data in paid mode (mocked payment)', () => {
     expect(body.payment).toEqual({ paid: true, price_usd: 0.05, payer: payer.address, settlement });
 
     expect(payer.createPaymentHeader).toHaveBeenCalledTimes(1);
-    expect(payer.createPaymentHeader.mock.calls[0][0]).toMatchObject({ amount: '50000', payTo: MERCHANT, network: 'eip155:8453' });
+    expect(payer.createPaymentHeader.mock.calls[0][0]).toMatchObject({ amount: '50000', payTo: MERCHANT, network: 'base', x402Version: 1 });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect((fetch.mock.calls[1][1]?.headers as Record<string, string>)['PAYMENT-SIGNATURE']).toBe('FAKE_PAYMENT_HEADER');
   });
@@ -188,8 +189,12 @@ describe('get_endpoint_data in paid mode (mocked payment)', () => {
 
     const header = (fetch.mock.calls[1][1]?.headers as Record<string, string>)['PAYMENT-SIGNATURE'];
     const sent = JSON.parse(Buffer.from(header, 'base64').toString('utf8'));
+    // Same envelope as src/mcp-mercury.js: v2 wrapper, `accepted` = the v1 body's accepts[0] verbatim.
+    const v1Body = await make402('/v1/fred/UNRATE', 0.05).json();
+    expect(Object.keys(sent).sort()).toEqual(['accepted', 'payload', 'x402Version']);
     expect(sent.x402Version).toBe(2);
-    expect(sent.accepted).toMatchObject({ payTo: MERCHANT, amount: '50000' });
+    expect(sent.accepted).toEqual(v1Body.accepts[0]);
+    expect(Object.keys(sent.payload).sort()).toEqual(['authorization', 'signature']);
     const { authorization, signature } = sent.payload;
     expect(authorization).toMatchObject({ from: wallet.address, to: MERCHANT, value: '50000' });
     expect(authorization.nonce).toMatch(/^0x[0-9a-f]{64}$/);

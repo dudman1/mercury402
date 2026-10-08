@@ -48,39 +48,41 @@ function normalize(req: Record<string, unknown>, version: number, resourceFallba
   };
 }
 
+function parseV2Header(header: string): PaymentRequirement[] {
+  try {
+    const decoded = decodeBase64Json(header) as {
+      x402Version?: number;
+      accepts?: Record<string, unknown>[];
+      resource?: { url?: string; description?: string };
+    };
+    const reqs = (decoded.accepts ?? [])
+      .map((a) => normalize(a, decoded.x402Version ?? 2, decoded.resource?.url))
+      .filter((r): r is PaymentRequirement => !!r);
+    if (decoded.resource?.description) {
+      for (const r of reqs) r.description ??= decoded.resource.description;
+    }
+    return reqs;
+  } catch {
+    return [];
+  }
+}
+
 /**
- * Parses an HTTP 402 response into payment requirements. Prefers the x402 v2
- * `Payment-Required` header; falls back to the v1 JSON body `accepts[]`.
+ * Parses an HTTP 402 response into payment requirements. Prefers the v1 JSON
+ * body `accepts[]` (x402Version 1, network "base"), which is what the live API
+ * returns and what src/mcp-mercury.js echoes back as `accepted`; falls back to
+ * the v2 `Payment-Required` header only when the body has no usable entry.
  */
 export function parsePaymentRequired(headers: Headers, body: unknown): PaymentRequirement[] {
-  const header = headers.get('payment-required');
-  if (header) {
-    try {
-      const decoded = decodeBase64Json(header) as {
-        x402Version?: number;
-        accepts?: Record<string, unknown>[];
-        resource?: { url?: string; description?: string };
-      };
-      const reqs = (decoded.accepts ?? [])
-        .map((a) => normalize(a, decoded.x402Version ?? 2, decoded.resource?.url))
-        .filter((r): r is PaymentRequirement => !!r);
-      if (reqs.length) {
-        if (decoded.resource?.description) {
-          for (const r of reqs) r.description ??= decoded.resource.description;
-        }
-        return reqs;
-      }
-    } catch {
-      // fall through to the body
-    }
-  }
   const b = body as { x402Version?: number; accepts?: Record<string, unknown>[] } | null;
   if (b && Array.isArray(b.accepts)) {
-    return b.accepts
+    const reqs = b.accepts
       .map((a) => normalize(a, b.x402Version ?? 1))
       .filter((r): r is PaymentRequirement => !!r);
+    if (reqs.length) return reqs;
   }
-  return [];
+  const header = headers.get('payment-required');
+  return header ? parseV2Header(header) : [];
 }
 
 /** Picks the first requirement this client can pay (exact scheme, USDC on Base). */
@@ -143,6 +145,11 @@ export function createEvmPayer(privateKey: string): Payer {
         verifyingContract: getAddress(req.asset),
       };
       const signature = await wallet.signTypedData(domain, TRANSFER_WITH_AUTHORIZATION_TYPES, authorization);
+      // Shape verified by require402Payment() in src/server.js: it reads only the
+      // `payment-signature` header (base64 JSON), payload.authorization,
+      // payload.signature and accepted.payTo. x402Version and network are not
+      // checked; 2 matches the server's "x402 v2 payment-signature" path and
+      // src/mcp-mercury.js, which is known to settle in production.
       const payload = {
         x402Version: 2,
         accepted: req.raw,

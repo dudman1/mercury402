@@ -158,11 +158,15 @@ the price, payer address and decoded `PAYMENT-RESPONSE` settlement (transaction 
 
 ## How paid mode works
 
-1. Request the endpoint; Mercury402 answers 402 with x402 payment requirements (v2 `Payment-Required` header, v1 JSON body).
-2. The server picks the `exact` / USDC-on-Base option and checks it: network `eip155:8453`, asset = Base USDC
-   (`0x8335…2913`), price ≤ `MERCURY402_MAX_PRICE_USD`. Otherwise it returns the quote and does not pay.
+1. Request the endpoint; Mercury402 answers 402 with x402 payment requirements. The v1 JSON body
+   (`x402Version: 1`, network `base`) is used; the v2 `Payment-Required` header is a fallback.
+2. The server picks the `exact` / USDC-on-Base option and checks it: network `base` (or `eip155:8453`), asset = Base
+   USDC (`0x8335…2913`), price ≤ `MERCURY402_MAX_PRICE_USD`. Otherwise it returns the quote and does not pay.
 3. It signs an EIP-3009 `transferWithAuthorization` for exactly the quoted amount (locally, with a fresh random
-   nonce) and resends the request with a `PAYMENT-SIGNATURE` header. Mercury402 settles on-chain and returns the data.
+   nonce) and resends the request with a `PAYMENT-SIGNATURE` header containing base64 JSON
+   `{ x402Version: 2, accepted: <the 402 body's accepts[0]>, payload: { authorization, signature } }`, the same
+   shape as `src/mcp-mercury.js` and the shape `require402Payment()` in `src/server.js` verifies. Mercury402 settles
+   on-chain and returns the data.
 4. Paid requests are never retried automatically, so one tool call can't be charged twice.
 
 Security notes: use a dedicated hot wallet with a small balance; the key is only read from the environment, used
@@ -179,6 +183,8 @@ in-process for signing, and never logged, echoed, or included in tool output or 
 
 ```bash
 npm test                    # vitest; HTTP and payments are mocked, no network, no real transactions
+                            # test/server-contract.test.ts also boots ../src/server.js (needs `npm ci` at the
+                            # repo root; skipped otherwise) with on-chain settlement stubbed
 npm run typecheck
 npm run generate:catalog    # regenerate src/catalog.json after changing ../src/pricing.js or routes
 ```
