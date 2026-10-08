@@ -70,6 +70,37 @@ See [`examples/`](./examples/) for agent integration code.
 
 ---
 
+## Use with MCP
+
+The [`mercury402-mcp`](./mcp-server/) server exposes two tools, `list_endpoints` and `get_endpoint_data`, over the same 78 endpoints.
+
+```bash
+npx -y mercury402-mcp
+```
+
+**Claude Code:**
+```bash
+claude mcp add mercury402 -- npx -y mercury402-mcp
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+```json
+{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "mercury402-mcp"]
+    }
+  }
+}
+```
+
+**Hosted endpoint** (free discovery mode: lists endpoints and returns 402 quotes, never pays): `https://mcp.mercury402.com/mcp`
+
+Other MCP clients can run the same `npx -y mercury402-mcp` command over stdio. Paid mode and all configuration options: [`mcp-server/README.md`](./mcp-server/README.md).
+
+---
+
 ## x402 Payment Flow
 
 1. **Request data** → Server returns `402 Payment Required` with `Payment-Required` details

@@ -2,7 +2,7 @@
 # Mercury402 Revenue Monitor
 # Parses revenue ledger and reports metrics
 
-LEDGER="/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl"
+LEDGER="${MERCURY402_LOG_DIR:-/Users/openclaw/.openclaw}/LEDGER/mercury402-revenue.jsonl"
 
 # Check if ledger exists
 if [ ! -f "$LEDGER" ]; then

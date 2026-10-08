@@ -3210,144 +3210,6 @@ const JSON_MANIFEST = {
   }
 };
 
-const LANDING_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mercury x402</title>
-<meta name="description" content="Monetization infrastructure for autonomous agents. HTTP 402 micropayments with USDC settlement on Base and deterministic signed financial data.">
-<meta name="keywords" content="AI agents, micropayments, HTTP 402, USDC, Base, financial API, payment-native data, x402">
-<meta property="og:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
-<meta property="og:description" content="Payment-native financial data with HTTP 402 enforcement and on-chain USDC settlement. View demo of payment flow.">
-<meta property="og:image" content="https://api.mercury402.com/payment-flow-preview.png">
-<meta property="og:url" content="https://api.mercury402.com/">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Mercury x402 — AI Agent Monetization Infrastructure">
-<meta name="twitter:description" content="Payment-native financial data via HTTP 402 micropayments with on-chain USDC settlement.">
-<meta name="twitter:image" content="https://api.mercury402.com/payment-flow-preview.png">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,sans-serif;background:radial-gradient(circle at 20% 0%,rgba(31,111,235,0.15),transparent 40%),radial-gradient(circle at 80% 100%,rgba(56,139,253,0.12),transparent 40%),#0d1117;color:#e6edf3;min-height:100vh;padding:3rem 1rem}
-  .container{max-width:960px;margin:0 auto}
-  h1{font-size:2.8rem;font-weight:700;letter-spacing:-.6px;margin-bottom:.6rem}
-  .tagline{font-size:1.15rem;color:#e6edf3;margin-bottom:.4rem}
-  .subtext{font-size:.9rem;color:#8b949e;margin-bottom:2.5rem}
-  .bullets{list-style:none;margin-bottom:2.5rem}
-  .bullets li{padding:.45rem 0;display:flex;align-items:center;gap:.6rem;color:#c9d1d9}
-  .bullets li::before{content:"→";color:#58a6ff;font-weight:700}
-  .cards{display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:2.5rem;margin-top:1.5rem}
-  .card{flex:1;min-width:200px;background:linear-gradient(145deg,#111827,#0f172a);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1.6rem;transition:all .2s ease}
-  .card:hover{border-color:rgba(31,111,235,0.5);transform:translateY(-3px)}
-  .card h3{font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:#8b949e;margin-bottom:.6rem}
-  .card .price{font-size:2rem;font-weight:700;color:#58a6ff}
-  .card .price span{font-size:1rem;color:#8b949e;font-weight:400}
-  .card p{font-size:.85rem;color:#8b949e;margin-top:.4rem}
-  .links{display:flex;gap:.8rem;flex-wrap:wrap}
-  a.btn{display:inline-block;padding:.55rem 1.2rem;border-radius:6px;text-decoration:none;font-size:.9rem;font-weight:500;border:1px solid #30363d;color:#c9d1d9;background:#161b22;transition:all .2s ease}
-  a.btn:hover{border-color:#58a6ff;color:#58a6ff}
-  a.btn.primary{background:linear-gradient(90deg,#1f6feb,#388bfd);color:#fff;border:none;box-shadow:0 6px 20px rgba(31,111,235,0.35)}
-  a.btn.primary:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(31,111,235,0.45)}
-  footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid #21262d;font-size:.8rem;color:#484f58}
-  .cred-strip{display:flex;gap:.6rem;flex-wrap:wrap;font-size:.75rem;color:#8b949e;margin-bottom:2.2rem;letter-spacing:.4px;opacity:.85}
-  .cred-strip span{background:rgba(255,255,255,0.05);padding:.35rem .6rem;border-radius:6px}
-  .usecases{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;margin-bottom:2.8rem}
-  .usecases h4{font-size:.95rem;margin-bottom:.35rem;color:#e6edf3}
-  .usecases p{font-size:.8rem;color:#8b949e;line-height:1.4}
-  .trust-line{font-size:.8rem;color:#8b949e;margin-bottom:1rem;letter-spacing:.3px}
-  .footer-line{font-size:.75rem;color:#6e7681;margin-top:3rem;opacity:.7}
-  .positioning{margin-bottom:2.8rem}
-  .positioning h3{font-size:1.05rem;margin-bottom:.6rem;color:#e6edf3}
-  .positioning p{font-size:.85rem;color:#8b949e;line-height:1.5;max-width:700px}
-  .preview{margin:2.5rem 0 1.8rem 0;text-align:center}
-  .preview img{width:100%;max-width:880px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 10px 40px rgba(0,0,0,0.45);transition:all .2s ease}
-  .preview img:hover{transform:translateY(-4px);box-shadow:0 20px 60px rgba(0,0,0,0.6)}
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Mercury x402</h1>
-  <p class="tagline">Monetization Infrastructure for Autonomous Agents</p>
-  <p class="subtext">Enable agents to pay and get paid via HTTP 402 micropayments &mdash; with instant USDC settlement and cryptographically signed responses.</p>
-  <div class="cred-strip">
-    <span>HTTP 402</span>
-    <span>•</span>
-    <span>EIP-3009</span>
-    <span>•</span>
-    <span>Base Mainnet (8453)</span>
-    <span>•</span>
-    <span>USDC Settlement</span>
-    <span>•</span>
-    <span>Deterministic JSON</span>
-  </div>
-  <div class="positioning">
-    <h3>Why This Matters</h3>
-    <p>Most AI agents consume APIs. Very few can participate in payment-native systems. Mercury x402 turns financial data into a monetizable primitive &mdash; allowing agents to operate without subscriptions, API keys, or centralized billing systems.</p>
-  </div>
-  <ul class="bullets">
-    <li>Pay-per-call via x402 — no API keys</li>
-    <li>Instant USDC settlement on Base (8453)</li>
-    <li>Every response cryptographically signed on-chain</li>
-  </ul>
-  <div class="usecases">
-    <div>
-      <h4>Trading Systems</h4>
-      <p>Automated macro-driven execution without subscription-based data feeds.</p>
-    </div>
-    <div>
-      <h4>AI Agents</h4>
-      <p>Autonomous agents capable of paying per request and operating without API keys.</p>
-    </div>
-    <div>
-      <h4>Research Infrastructure</h4>
-      <p>Deterministic financial snapshots designed for verifiable, monetizable pipelines.</p>
-    </div>
-  </div>
-  <div class="cards">
-    <div class="card">
-      <h3>FRED Series</h3>
-      <div class="price">$0.05<span>/call</span></div>
-      <p>52 named series + any of 800K+ FRED series (CPI, GDP, UNRATE, PCE, M2, VIX)</p>
-    </div>
-    <div class="card">
-      <h3>Forex & Spreads</h3>
-      <div class="price">$0.05<span>/call</span></div>
-      <p>EUR/USD, GBP/USD, USD/JPY, USD/CNY + yield curve spreads</p>
-    </div>
-    <div class="card">
-      <h3>Macro Bundle</h3>
-      <div class="price">$0.10<span>/call</span></div>
-      <p>Treasury + CPI + GDP + Employment + Fed Funds in one call</p>
-    </div>
-    <div class="card">
-      <h3>Recession Probability</h3>
-      <div class="price">$0.10<span>/call</span></div>
-      <p>Yield curve + unemployment recession model (logistic v1)</p>
-    </div>
-    <div class="card">
-      <h3>Economic Dashboard</h3>
-      <div class="price">$0.50<span>/call</span></div>
-      <p>GDP, CPI, and Unemployment in one composite call</p>
-    </div>
-  </div>
-  <p class="trust-line">Designed for builders who want agents that transact &mdash; not just query.</p>
-  <div class="preview">
-    <a href="/demo">
-      <img src="/payment-flow-preview.png" alt="x402 Payment Flow Preview">
-    </a>
-  </div>
-  <a class="btn primary" href="/demo" style="display:inline-block;margin-bottom:1.5rem">View Payment Flow &#8594;</a>
-  <div class="links" style="opacity:.85">
-    <a class="btn" href="/docs/api">API Reference</a>
-    <a class="btn" href="/docs">Quickstart</a>
-    <a class="btn" href="/.well-known/x402">x402 Discovery</a>
-    <a class="btn" href="/health">Health</a>
-  </div>
-  <p class="footer-line">Mercury x402 &mdash; Financial data as a payment-native building block for autonomous systems.</p>
-</div>
-</body>
-</html>`;
-
 const DOCS_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3430,15 +3292,6 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
 </div>
 </body>
 </html>`;
-
-app.get('/', (req, res) => {
-  const accept = req.headers['accept'] || '';
-  const ua = req.headers['user-agent'] || '';
-  if (accept.includes('text/html') || ua.includes('Mozilla')) {
-    return res.set('Content-Type', 'text/html').send(LANDING_HTML);
-  }
-  res.json(JSON_MANIFEST);
-});
 
 app.get('/meta.json', (req, res) => {
   res.json(JSON_MANIFEST);
@@ -3579,8 +3432,7 @@ app.get('/openapi.json', (req, res) => {
     res.status(500).json({
       error: {
         code: 'SPEC_LOAD_ERROR',
-        message: 'Failed to load OpenAPI specification',
-        detail: e.message
+        message: 'Failed to load OpenAPI specification'
       }
     });
   }
