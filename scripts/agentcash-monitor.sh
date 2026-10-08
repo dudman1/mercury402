@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-WORK_DIR="/Users/openclaw/wealthforge"
+WORK_DIR="${MERCURY402_LOG_DIR:-/Users/openclaw/wealthforge}"
 INTEL_DIR="${WORK_DIR}/intel"
 TODAY=$(date +%Y-%m-%d)
 REPORT_FILE="${INTEL_DIR}/${TODAY}.md"

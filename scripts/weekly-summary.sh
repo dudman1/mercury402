@@ -1,7 +1,7 @@
 #!/bin/bash
 # Mercury402 Weekly Summary - Posts to X as @Mercuryclaw1
 
-LEDGER="/Users/openclaw/.openclaw/LEDGER/mercury402-revenue.jsonl"
+LEDGER="${MERCURY402_LOG_DIR:-/Users/openclaw/.openclaw}/LEDGER/mercury402-revenue.jsonl"
 
 if [ ! -f "$LEDGER" ] || [ ! -s "$LEDGER" ]; then
     echo "No revenue data to report"

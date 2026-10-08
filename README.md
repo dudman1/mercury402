@@ -70,6 +70,80 @@ See [`examples/`](./examples/) for agent integration code.
 
 ---
 
+## Use with MCP
+
+The hosted MCP server runs at **https://mcp.mercury402.com/mcp** (free discovery mode). It returns the x402 payment quote; callers pay with their own wallet or a local `mercury402-mcp` instance.
+
+### Quick connect (10 seconds)
+
+| IDE / Client | Config |
+|--------------|--------|
+| **Claude Desktop** (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Claude Desktop** (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| **Claude Code** | `claude mcp add mercury402 -- npx -y mercury402-mcp` |
+| **Cursor** | Settings → MCP → Add server |
+| **Windsurf** | Settings → MCP → Add server |
+| **Cline** | Settings → MCP Servers |
+| **Continue** | `.continue/config.json` |
+
+### Config snippets
+
+**Claude Desktop** (add to `mcpServers` object):
+```json
+{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "mercury402-mcp"]
+    }
+  }
+}
+```
+
+**Claude Code:**
+```bash
+claude mcp add mercury402 -- npx -y mercury402-mcp
+```
+
+**Cursor / Windsurf / Cline** (Settings → MCP → Add new server):
+```json
+{
+  "name": "mercury402",
+  "command": "npx",
+  "args": ["-y", "mercury402-mcp"]
+}
+```
+
+**Continue** (`.continue/config.json`):
+```json
+{
+  "mcpServers": {
+    "mercury402": {
+      "command": "npx",
+      "args": ["-y", "mercury402-mcp"]
+    }
+  }
+}
+```
+
+### Remote (hosted) MCP endpoint
+
+For clients that support remote MCP servers (Claude connectors, ChatGPT tools, etc.):
+```
+https://mcp.mercury402.com/mcp
+```
+This is the free discovery mode endpoint. `list_endpoints` works; `get_endpoint_data` returns the x402 quote.
+
+### Paid mode (optional, local only)
+
+To have the local MCP server pay per call automatically:
+```bash
+claude mcp add mercury402 -e MERCURY402_PAYER_PRIVATE_KEY=<your-wallet-key> -e MERCURY402_MAX_PRICE_USD=0.50 -- npx -y mercury402-mcp
+```
+> **Warning:** The private key is stored in plaintext in your client config. Use a dedicated wallet with only a small USDC balance on Base.
+
+---
+
 ## x402 Payment Flow
 
 1. **Request data** → Server returns `402 Payment Required` with `Payment-Required` details

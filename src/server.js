@@ -3431,15 +3431,6 @@ Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
 </body>
 </html>`;
 
-app.get('/', (req, res) => {
-  const accept = req.headers['accept'] || '';
-  const ua = req.headers['user-agent'] || '';
-  if (accept.includes('text/html') || ua.includes('Mozilla')) {
-    return res.set('Content-Type', 'text/html').send(LANDING_HTML);
-  }
-  res.json(JSON_MANIFEST);
-});
-
 app.get('/meta.json', (req, res) => {
   res.json(JSON_MANIFEST);
 });
@@ -3579,8 +3570,7 @@ app.get('/openapi.json', (req, res) => {
     res.status(500).json({
       error: {
         code: 'SPEC_LOAD_ERROR',
-        message: 'Failed to load OpenAPI specification',
-        detail: e.message
+        message: 'Failed to load OpenAPI specification'
       }
     });
   }
