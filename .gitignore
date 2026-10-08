@@ -38,3 +38,6 @@ SERVER_PRIVATE_KEY
 dist/
 build/
 .env*
+
+# Editor/hand-made backup copies (server.js.bak-*, pricing.js.bak, *.backup-*). Git history is the backup.
+*.bak*
