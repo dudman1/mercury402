@@ -766,7 +766,11 @@ function receiptHasMerchantTransfer(receipt, from, requiredUnits) {
   return false;
 }
 
-function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
+// Revenue-ledger row. `reason` is the machine-readable rejection reason for a
+// failed or uncharged attempt and null on a settled payment; the settlement
+// transaction, when there is one, goes in `tx_hash` (settled payments,
+// reverted or unconfirmed broadcasts), never in rejection_reason.
+function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null, txHash = null) {
   const entry = {
     timestamp: Date.now(),
     date: new Date().toISOString(),
@@ -775,7 +779,8 @@ function logPayment(endpoint, amount, customerId = 'anon', verified = false, rea
     customer: customerId,
     success: true,
     verified: verified,
-    rejection_reason: reason
+    rejection_reason: reason,
+    tx_hash: txHash || null
   };
   
   try {
@@ -1084,7 +1089,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       gate.state = 'done';
       releaseReservation();
       console.error(`x402 payment-signature error: ${detail} [${reason}]`);
-      logPayment(endpointPath, 0, meta.from || 'anon', false, reason);
+      logPayment(endpointPath, 0, meta.from || 'anon', false, reason, meta.tx_hash || null);
       res.locals.paymentMeta = {
         wallet_address: meta.from || null,
         nonce: meta.nonce || null,
@@ -1217,7 +1222,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
         releaseReservation();
         const reason = 'receipt_unknown';
         console.error(`x402: ${reason} for ${tx.hash} (payer ${from}) [${reason}]`);
-        logPayment(endpointPath, 0, from, false, `${reason}:${tx.hash}`);
+        logPayment(endpointPath, 0, from, false, reason, tx.hash);
         res.locals.paymentMeta = {
           wallet_address: from,
           nonce,
@@ -1249,7 +1254,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       markRedeemed(redemptionKey, endpointPath);
       markRedeemed(`tx:${String(tx.hash).toLowerCase()}`, endpointPath);
       releaseReservation();
-      logPayment(endpointPath, price, from, true, tx.hash);
+      logPayment(endpointPath, price, from, true, null, tx.hash);
       res.locals.paymentMeta = {
         wallet_address: from,
         nonce,
