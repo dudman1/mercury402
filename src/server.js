@@ -134,6 +134,13 @@ if (!MERCHANT_WALLET) {
   process.exit(1);
 }
 
+// The dev-only `Bearer x402_test` token serves paid data without any payment.
+// Refuse to start rather than run production with it switched on.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_TOKEN === 'true') {
+  console.error('❌ ALLOW_TEST_TOKEN=true with NODE_ENV=production — refusing to start (test tokens would serve paid data for free)');
+  process.exit(1);
+}
+
 // Bazaar schema metadata for x402scan discovery
 // Fixed BAZAAR_SCHEMAS structure for x402scan compatibility
 // Replace lines 117-181 in ~/mercury-x402-service/src/server.js
@@ -664,97 +671,6 @@ const ACCESS_LOG = path.join(LOG_BASE_DIR, 'LOGS', 'mercury402-access.jsonl');
 const MAX_LOG_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_ROTATED_FILES = 7;
 
-// Parse x402 token for payment metadata (wallet, tx_hash)
-// Defensive decoder: tries multiple formats (JWT, base64 JSON, hex JSON)
-function parsePaymentToken(token) {
-  if (!token || !token.startsWith('x402_')) {
-    return {
-      wallet_address: null,
-      tx_hash: null,
-      token_id: token,
-      wallet_source: 'invalid_format'
-    };
-  }
-
-  const tokenBody = token.replace('x402_', '');
-  
-  // Strategy 1: Try base64-encoded JSON
-  try {
-    const decoded = Buffer.from(tokenBody, 'base64').toString('utf8');
-    const json = JSON.parse(decoded);
-    
-    if (json && (json.wallet || json.wallet_address) && (json.tx || json.tx_hash)) {
-      return {
-        wallet_address: json.wallet || json.wallet_address || null,
-        tx_hash: json.tx || json.tx_hash || null,
-        token_id: token,
-        wallet_source: 'base64_claim',
-        merchant: json.merchant || null,
-        amount: json.amount || null,
-        network: json.network || null,
-        timestamp: json.timestamp || json.iat || null
-      };
-    }
-  } catch (e) {
-    // Not base64 JSON, try next format
-  }
-
-  // Strategy 2: Try hex-encoded JSON
-  try {
-    const decoded = Buffer.from(tokenBody, 'hex').toString('utf8');
-    const json = JSON.parse(decoded);
-    
-    if (json && (json.wallet || json.wallet_address) && (json.tx || json.tx_hash)) {
-      return {
-        wallet_address: json.wallet || json.wallet_address || null,
-        tx_hash: json.tx || json.tx_hash || null,
-        token_id: token,
-        wallet_source: 'hex_claim',
-        merchant: json.merchant || null,
-        amount: json.amount || null,
-        network: json.network || null,
-        timestamp: json.timestamp || json.iat || null
-      };
-    }
-  } catch (e) {
-    // Not hex JSON, try next format
-  }
-
-  // Strategy 3: Try JWT decode (without verification)
-  try {
-    const parts = tokenBody.split('.');
-    if (parts.length === 3) {
-      // JWT format: header.payload.signature
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      
-      if (payload && (payload.wallet || payload.wallet_address) && (payload.tx || payload.tx_hash)) {
-        return {
-          wallet_address: payload.wallet || payload.wallet_address || null,
-          tx_hash: payload.tx || payload.tx_hash || null,
-          token_id: token,
-          wallet_source: 'jwt_claim',
-          merchant: payload.merchant || null,
-          amount: payload.amount || null,
-          network: payload.network || null,
-          timestamp: payload.timestamp || payload.iat || null,
-          expires: payload.exp || null
-        };
-      }
-    }
-  } catch (e) {
-    // Not JWT or parsing failed
-  }
-
-  // Fallback: token is unparseable, return nulls
-  console.warn(`Unable to parse x402 token format: ${token.substring(0, 20)}...`);
-  return {
-    wallet_address: null,
-    tx_hash: null,
-    token_id: token,
-    wallet_source: 'unparseable'
-  };
-}
-
 async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
   try {
     const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }, { staticNetwork: true });
@@ -1147,8 +1063,8 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
             if (verification.verified) {
               // SECURITY (2026-04-20): record both sig-nonce and tx-hash
               // redemption keys. The sig key blocks replay of the same
-              // authorization; the tx key additionally blocks a bearer-token
-              // that merely references this settled tx from being reused.
+              // authorization. The tx key is kept as defence in depth now
+              // that no code path redeems a bare tx hash.
               markRedeemed(redemptionKey, endpointPath);
               markRedeemed(`tx:${String(receipt.hash).toLowerCase()}`, endpointPath);
 
@@ -1198,123 +1114,41 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
     }
     
 
-    // Parse payment token for metadata
-    const tokenMeta = parsePaymentToken(token);
-    
-    // Validate token: accept test tokens ONLY in development
+    // `Authorization: Bearer x402_...` reached here. The only token the
+    // server recognises is the dev-only `x402_test`. The unsigned claim token
+    // (`x402_<base64 {wallet, tx}>`, a bare pointer to an on-chain tx) was
+    // removed: it bound no payer to the request, so any USDC transfer to the
+    // merchant could be redeemed by whoever learned its hash, and the access
+    // log credited whichever wallet the client named. Paid requests use the
+    // PAYMENT-SIGNATURE / X-PAYMENT flow above.
+    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
     const isTestToken = token === 'x402_test' || token.startsWith('x402_test');
     const allowTestTokens = process.env.ALLOW_TEST_TOKEN === 'true';
-    
+
     if (isTestToken && allowTestTokens) {
       // Test token in dev mode - log as unverified
-      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
       logPayment(endpointPath, price, customerId, false, 'test_token_dev_mode');
-      
+
       res.locals.paymentMeta = {
-        wallet_address: tokenMeta.wallet_address,
-        tx_hash: tokenMeta.tx_hash,
-        wallet_source: tokenMeta.wallet_source,
+        wallet_address: null,
+        tx_hash: null,
+        wallet_source: 'test_token',
         verified: false,
         price_usd: price
       };
-      
+
       return next();
     }
-    
-    if (isTestToken && !allowTestTokens) {
-      // Test token in production - reject
-      const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
-      const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
-      res.locals.paymentMeta = { verified: false, price_usd: 0 };
-      return res
-        .status(402)
-        .set('Payment-Required', paymentRequired)
-        .json(paymentRequiredBody);
-    }
 
-    // SECURITY (2026-04-20): legacy unsigned `x402_<base64-json>` bearer tokens
-    // are trivially replayable — the token is just a pointer to an on-chain
-    // tx, carries no signature over the request, and anyone who obtains it
-    // can reuse the same tx against the API indefinitely. In production we
-    // reject them outright and require the x402 `payment-signature` flow.
-    // ALLOW_LEGACY_BEARER=true is an explicit escape hatch for dev/testing.
+    logPayment(endpointPath, 0, customerId, false,
+      isTestToken ? 'test_token_rejected_in_production' : 'legacy_bearer_rejected');
     const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
-    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    const rejectLegacyBearer =
-      process.env.NODE_ENV === 'production' &&
-      process.env.ALLOW_LEGACY_BEARER !== 'true';
-
-    if (rejectLegacyBearer) {
-      logPayment(endpointPath, 0, customerId, false, 'legacy_bearer_rejected_in_production');
-      res.locals.paymentMeta = { verified: false, price_usd: 0 };
-      return res.status(402).set('Payment-Required', paymentRequired).json(
-        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
-      );
-    }
-
-    // DEV / OPT-IN LEGACY PATH: verify tx on-chain AND enforce one-time
-    // redemption so the same tx can't be replayed across requests.
-    if (!tokenMeta.tx_hash) {
-      // Token parsed but no tx_hash found
-      logPayment(endpointPath, 0, customerId, false, 'no_tx_hash_in_token');
-      res.locals.paymentMeta = { verified: false, price_usd: 0 };
-      return res.status(402).set('Payment-Required', paymentRequired).json(
-        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
-      );
-    }
-
-    const legacyRedemptionKey = `tx:${String(tokenMeta.tx_hash).toLowerCase()}`;
-    if (isRedeemed(legacyRedemptionKey)) {
-      // SECURITY (2026-04-20): this tx has already been redeemed at this
-      // or another endpoint; reject replay.
-      logPayment(endpointPath, 0, customerId, false, 'replay_rejected_tx_already_redeemed');
-      res.locals.paymentMeta = {
-        wallet_address: tokenMeta.wallet_address,
-        tx_hash: tokenMeta.tx_hash,
-        verified: false,
-        price_usd: 0
-      };
-      return res.status(402).set('Payment-Required', paymentRequired).json(
-        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
-      );
-    }
-
-    // Verify transaction on-chain
-    const verification = await verifyPaymentOnChain(
-      tokenMeta.tx_hash,
-      price,
-      MERCHANT_WALLET
-    );
-
-    if (!verification.verified) {
-      // Verification failed - log and reject
-      logPayment(endpointPath, 0, customerId, false, verification.reason);
-      res.locals.paymentMeta = {
-        wallet_address: tokenMeta.wallet_address,
-        tx_hash: tokenMeta.tx_hash,
-        verified: false,
-        price_usd: 0
-      };
-
-      return res.status(402).set('Payment-Required', paymentRequired).json(
-        buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod)
-      );
-    }
-
-    // VERIFIED ✅ - mark one-time redemption, log, and proceed
-    markRedeemed(legacyRedemptionKey, endpointPath);
-    logPayment(endpointPath, price, customerId, true, null);
-
-    res.locals.paymentMeta = {
-      wallet_address: tokenMeta.wallet_address,
-      tx_hash: tokenMeta.tx_hash,
-      wallet_source: tokenMeta.wallet_source,
-      verified: true,
-      price_usd: price,
-      block_number: verification.block_number
-    };
-
-    return next();
+    const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
+    res.locals.paymentMeta = { verified: false, price_usd: 0 };
+    return res
+      .status(402)
+      .set('Payment-Required', paymentRequired)
+      .json(paymentRequiredBody);
   };
 }
 
