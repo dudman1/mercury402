@@ -148,7 +148,7 @@ if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_TOKEN === 't
 const BAZAAR_SCHEMAS = {
   '/v1/fred/{series_id}': {
     info: {
-      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } }, queryParams: { date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)', example: '2026-01-01' }, observation_start: { type: 'string', description: 'Start date for range query (YYYY-MM-DD)', example: '2020-01-01' }, observation_end: { type: 'string', description: 'End date for range query (YYYY-MM-DD)', example: '2023-12-31' }, limit: { type: 'integer', description: 'Max observations to return', example: 5 } } },
+      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } }, queryParams: { date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)', example: '2026-01-01' }, observation_start: { type: 'string', description: 'Start date for range query (YYYY-MM-DD)', example: '2020-01-01' }, observation_end: { type: 'string', description: 'End date for range query (YYYY-MM-DD)', example: '2023-12-31' }, limit: { type: 'integer', description: 'Max observations to return, 1-1000 (limit > 1 costs 2x; ignored with date or a range)', example: 5 } } },
       output: { type: 'json', example: { series_id: 'UNRATE', realtime_start: '2026-03-11', realtime_end: '2026-03-11', observations: [{ date: '2024-01-01', value: '3.7' }] } }
     },
     schema: {
@@ -173,7 +173,7 @@ const BAZAAR_SCHEMAS = {
                 date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)' },
                 observation_start: { type: 'string', description: 'Range start date (YYYY-MM-DD)' },
                 observation_end: { type: 'string', description: 'Range end date (YYYY-MM-DD)' },
-                limit: { type: 'integer', description: 'Max observations to return (default 1)' }
+                limit: { type: 'integer', description: 'Max observations to return, 1-1000 (default 1; limit > 1 costs 2x; ignored with date or a range)' }
               }
             }
           },
@@ -766,7 +766,11 @@ function receiptHasMerchantTransfer(receipt, from, requiredUnits) {
   return false;
 }
 
-function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
+// Revenue-ledger row. `reason` is the machine-readable rejection reason for a
+// failed or uncharged attempt and null on a settled payment; the settlement
+// transaction, when there is one, goes in `tx_hash` (settled payments,
+// reverted or unconfirmed broadcasts), never in rejection_reason.
+function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null, txHash = null) {
   const entry = {
     timestamp: Date.now(),
     date: new Date().toISOString(),
@@ -775,7 +779,8 @@ function logPayment(endpoint, amount, customerId = 'anon', verified = false, rea
     customer: customerId,
     success: true,
     verified: verified,
-    rejection_reason: reason
+    rejection_reason: reason,
+    tx_hash: txHash || null
   };
   
   try {
@@ -1084,7 +1089,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       gate.state = 'done';
       releaseReservation();
       console.error(`x402 payment-signature error: ${detail} [${reason}]`);
-      logPayment(endpointPath, 0, meta.from || 'anon', false, reason);
+      logPayment(endpointPath, 0, meta.from || 'anon', false, reason, meta.tx_hash || null);
       res.locals.paymentMeta = {
         wallet_address: meta.from || null,
         nonce: meta.nonce || null,
@@ -1217,7 +1222,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
         releaseReservation();
         const reason = 'receipt_unknown';
         console.error(`x402: ${reason} for ${tx.hash} (payer ${from}) [${reason}]`);
-        logPayment(endpointPath, 0, from, false, `${reason}:${tx.hash}`);
+        logPayment(endpointPath, 0, from, false, reason, tx.hash);
         res.locals.paymentMeta = {
           wallet_address: from,
           nonce,
@@ -1249,7 +1254,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       markRedeemed(redemptionKey, endpointPath);
       markRedeemed(`tx:${String(tx.hash).toLowerCase()}`, endpointPath);
       releaseReservation();
-      logPayment(endpointPath, price, from, true, tx.hash);
+      logPayment(endpointPath, price, from, true, null, tx.hash);
       res.locals.paymentMeta = {
         wallet_address: from,
         nonce,
@@ -1619,16 +1624,61 @@ function skipNamedFredSeries(req, res, next) {
   next();
 }
 
+// ---- FRED query shape and pricing ------------------------------------------
+// Two tiers, matching the catalog / openapi: a single observation costs the
+// base price; a multi-observation response (observation_start + observation_end,
+// or limit > 1 on a latest-first query) costs 2x. `limit` is bounded to the
+// openapi maximum of 1000 and is ignored when `date` or a range is given, which
+// is how the handler has always treated it.
+const FRED_MAX_LIMIT = 1000;
+
+// Shape of a /v1/fred/:series_id request, decided once and used by the price
+// function, the pre-payment guard and the handler so they cannot disagree.
+function fredRequestShape(query) {
+  const q = query || {};
+  const hasRange = Boolean(q.observation_start && q.observation_end);
+  const hasDate = Boolean(q.date);
+  let limit = 1;
+  let limitValid = true;
+  if (q.limit !== undefined) {
+    const raw = String(q.limit);
+    limitValid = typeof q.limit === 'string' && /^\d+$/.test(raw) && Number(raw) >= 1 && Number(raw) <= FRED_MAX_LIMIT;
+    limit = limitValid ? Number(raw) : 1;
+  }
+  const multi = hasRange || (!hasDate && limit > 1);
+  return { hasRange, hasDate, limit, limitValid, multi };
+}
+
+function fredPrice(req) {
+  const basePrice = getPrice('/v1/fred/{series_id}');
+  return fredRequestShape(req.query).multi ? basePrice * 2 : basePrice;
+}
+
+// Free 400 for a malformed `limit`, before the 402 challenge: no payment is
+// requested for a request the handler could not serve as priced.
+function fredQueryGuard(req, res, next) {
+  const shape = fredRequestShape(req.query);
+  if (!shape.limitValid) {
+    return res.status(400).json({
+      error: {
+        code: 'INVALID_LIMIT',
+        message: `limit must be an integer between 1 and ${FRED_MAX_LIMIT}. No payment was requested.`,
+        charged: false
+      }
+    });
+  }
+  next();
+}
+
 // SECURITY (2026-04-20): pass a dynamic price resolver so range queries
 // (observation_start + observation_end) are actually charged at 2× the
 // single-point price. Previously the middleware charged the base price
 // while the handler internally computed 2×, letting callers pay for 1
 // observation and receive an unbounded window.
-app.get('/v1/fred/:series_id', skipNamedFredSeries, fredSeriesGuard, require402Payment('/v1/fred/{series_id}', (req) => {
-  const basePrice = getPrice('/v1/fred/{series_id}');
-  const isRange = req.query && req.query.observation_start && req.query.observation_end;
-  return isRange ? basePrice * 2 : basePrice;
-}), async (req, res) => {
+// SECURITY (2026-10-10): `limit` is now part of the same tier (limit > 1 is a
+// multi-observation response, priced 2x) and bounded; previously it was
+// forwarded to FRED unbounded at the single-point price.
+app.get('/v1/fred/:series_id', skipNamedFredSeries, fredQueryGuard, fredSeriesGuard, require402Payment('/v1/fred/{series_id}', fredPrice), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
       return res.status(503).json({
@@ -1640,12 +1690,9 @@ app.get('/v1/fred/:series_id', skipNamedFredSeries, fredSeriesGuard, require402P
     }
 
     const { series_id } = req.params;
-    const { date, observation_start, observation_end, limit } = req.query;
-
-    // Determine pricing based on query type
-    const basePrice = getPrice('/v1/fred/{series_id}');
-    const isRange = observation_start && observation_end;
-    const price = isRange ? basePrice * 2 : basePrice;
+    const { date, observation_start, observation_end } = req.query;
+    const shape = fredRequestShape(req.query);
+    const price = fredPrice(req);
 
     // Build FRED API params
     const fredParams = {};
@@ -1656,9 +1703,9 @@ app.get('/v1/fred/:series_id', skipNamedFredSeries, fredSeriesGuard, require402P
       fredParams.observation_start = observation_start;
       fredParams.observation_end = observation_end;
     } else {
-      // Latest observation
+      // Latest observation(s); shape.limit is validated (1..FRED_MAX_LIMIT)
       fredParams.sort_order = 'desc';
-      fredParams.limit = limit || 1;
+      fredParams.limit = shape.limit;
     }
 
     // Fetch from FRED (with caching)
@@ -2688,7 +2735,7 @@ app.get('/.well-known/x402', (req, res) => {
             properties: {
               limit: {
                 type: 'integer',
-                description: 'Number of observations to return (FRED only)'
+                description: 'Number of observations to return, 1-1000 (FRED only; limit > 1 costs 2x)'
               },
               observation_start: {
                 type: 'string',
@@ -3474,7 +3521,7 @@ function buildLlmsTxt() {
   for (const [category, list] of byCategory) {
     lines.push('', `### ${category}`, '');
     for (const e of list) {
-      lines.push(`- ${e.method} ${e.path} — $${e.price_usd.toFixed(2)} — ${e.description}`);
+      lines.push(`- ${e.method} ${e.path} — $${e.price_usd.toFixed(2)} — ${e.description}${e.price_note ? ` (${e.price_note})` : ''}`);
     }
   }
   lines.push('');

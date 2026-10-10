@@ -162,6 +162,8 @@ function assertRejected(server, res, row, { reason, from, nonce }) {
   assert.strictEqual(revenue.verified, false);
   assert.strictEqual(revenue.rejection_reason, reason);
   assert.strictEqual(revenue.customer, from);
+  assert.ok('tx_hash' in revenue, 'ledger rows always carry tx_hash');
+  if (reason !== 'settle_reverted') assert.strictEqual(revenue.tx_hash, null);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +295,8 @@ test('happy path: 200, exactly one settlement, payment + price headers, verified
   const revenue = server.revenueRows().at(-1);
   assert.strictEqual(revenue.verified, true);
   assert.strictEqual(revenue.amount, getPrice(FRED_ROUTE));
+  assert.strictEqual(revenue.tx_hash, settled.hash, 'settled row carries the tx in tx_hash');
+  assert.strictEqual(revenue.rejection_reason, null, 'settled row has no rejection reason');
 
   // replaying the same authorization is refused before anything touches the chain
   const m2 = server.mark();
@@ -320,7 +324,8 @@ test('mined receipt from tx.wait() is final: a failing receipt re-fetch cannot t
   assert.strictEqual(server.redemptionRows().length, 2);
   assert.strictEqual(server.revenueRows().filter((r) => r.verified === true).length, 1);
   assert.strictEqual(server.revenueRows().at(-1).customer, PAYER.address);
-  assert.strictEqual(server.revenueRows().at(-1).rejection_reason, settled.hash);
+  assert.strictEqual(server.revenueRows().at(-1).tx_hash, settled.hash);
+  assert.strictEqual(server.revenueRows().at(-1).rejection_reason, null);
   assert.ok(authorization.nonce);
 });
 
@@ -352,7 +357,8 @@ test('broadcast but receipt unreadable: 502 charged:"unknown" with tx_hash, neve
   const revenue = server.revenueRows().at(-1);
   assert.strictEqual(revenue.amount, 0);
   assert.strictEqual(revenue.customer, PAYER.address);
-  assert.match(revenue.rejection_reason, /^receipt_unknown:0x/);
+  assert.strictEqual(revenue.rejection_reason, 'receipt_unknown');
+  assert.strictEqual(revenue.tx_hash, settled.hash);
 });
 
 test('settlement reverts after the handler succeeded: body discarded, 402 settle_reverted attributed to the payer', async (t) => {
