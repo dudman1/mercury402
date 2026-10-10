@@ -671,64 +671,99 @@ const ACCESS_LOG = path.join(LOG_BASE_DIR, 'LOGS', 'mercury402-access.jsonl');
 const MAX_LOG_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_ROTATED_FILES = 7;
 
-async function verifyPaymentOnChain(tx_hash, expected_amount_usd, merchant_wallet) {
-  try {
-    const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }, { staticNetwork: true });
-    const USDC_CONTRACT = process.env.USDC_CONTRACT_BASE;
-    
-    // Fetch transaction receipt (includes logs)
-    const receipt = await provider.getTransactionReceipt(tx_hash);
-    
-    if (!receipt || receipt.status !== 1) {
-      return { verified: false, reason: 'rpc_tx_not_found_or_failed' };
-    }
-    
-    // Parse USDC Transfer event logs
-    // Transfer event signature: Transfer(address indexed from, address indexed to, uint256 value)
-    const transferTopic = ethers.id('Transfer(address,address,uint256)');
-    
-    const transferLog = receipt.logs.find(log => 
-      log.address.toLowerCase() === USDC_CONTRACT.toLowerCase() &&
-      log.topics[0] === transferTopic
-    );
-    
-    if (!transferLog) {
-      return { verified: false, reason: 'rpc_no_usdc_transfer' };
-    }
-    
-    // Decode log: topics[1] = from, topics[2] = to, data = amount
-    const recipientAddress = '0x' + transferLog.topics[2].slice(26); // Remove padding
-    const amountHex = transferLog.data;
-    const amountWei = BigInt(amountHex);
-    const amountUSDC = Number(amountWei) / 1e6; // USDC has 6 decimals
-    
-    // Verify recipient matches merchant wallet
-    if (recipientAddress.toLowerCase() !== merchant_wallet.toLowerCase()) {
-      return { 
-        verified: false, 
-        reason: `rpc_wrong_recipient_expected_${merchant_wallet}_got_${recipientAddress}` 
-      };
-    }
-    
-    // Verify amount >= expected (allow slight underpayment tolerance of 1 cent)
-    const tolerance = 0.01;
-    if (amountUSDC < (expected_amount_usd - tolerance)) {
-      return { 
-        verified: false, 
-        reason: `rpc_insufficient_amount_expected_${expected_amount_usd}_got_${amountUSDC}` 
-      };
-    }
-    
-    return { 
-      verified: true, 
-      actual_amount_usd: amountUSDC, 
-      block_number: receipt.blockNumber 
-    };
-    
-  } catch (error) {
-    console.error('RPC verification error:', error.message);
-    return { verified: false, reason: `rpc_error_${error.message.substring(0, 50)}` };
+// EIP-712 domain + types of USDC's EIP-3009 transferWithAuthorization on Base.
+// Used to recover the signer locally before anything touches the chain.
+const USDC_DOMAIN_NAME = 'USD Coin';
+const USDC_DOMAIN_VERSION = '2';
+const EIP3009_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+};
+// Standard x402 clients sign validBefore = now + the advertised
+// maxTimeoutSeconds (120 above), so the window must stay generous: an
+// authorization is rejected only when validBefore is within this many
+// seconds of now, and that check is repeated right before broadcast.
+const VALIDITY_SLACK_SECONDS = 5;
+// validAfter may sit this far in the future to absorb client clock skew.
+const CLOCK_SKEW_SECONDS = 10;
+const SETTLE_WAIT_MS = 30000;
+const RECEIPT_RETRIES = 3;
+const RECEIPT_RETRY_MS = 1000;
+const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
+
+function usdcDomain() {
+  return {
+    name: USDC_DOMAIN_NAME,
+    version: USDC_DOMAIN_VERSION,
+    chainId: parseInt(process.env.CHAIN_ID || '8453'),
+    verifyingContract: process.env.USDC_CONTRACT_BASE,
+  };
+}
+
+function getProvider() {
+  return sharedProvider || new ethers.JsonRpcProvider(
+    process.env.BASE_RPC_URL,
+    { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' },
+    { staticNetwork: true }
+  );
+}
+
+function facilitatorUsdc(provider) {
+  const key = process.env.SERVER_PRIVATE_KEY;
+  const facilitatorWallet = new ethers.Wallet(key.startsWith('0x') ? key : '0x' + key, provider);
+  return new ethers.Contract(
+    process.env.USDC_CONTRACT_BASE,
+    [
+      'function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)',
+      'function balanceOf(address account) view returns (uint256)',
+    ],
+    facilitatorWallet
+  );
+}
+
+// Maps an ethers / USDC error to a machine-readable rejection_reason.
+// `phase` is 'simulate' (eth_call before the handler) or 'settle' (broadcast).
+function classifyChainError(err, phase) {
+  const text = String((err && (err.reason || err.shortMessage || err.message)) || '').toLowerCase();
+  const isRevert = (err && err.code === 'CALL_EXCEPTION') ||
+    /exceeds balance|authorization is|not yet valid|invalid signature|execution reverted/.test(text);
+  if ((err && err.code === 'INSUFFICIENT_FUNDS') || /insufficient funds/.test(text)) return 'facilitator_insufficient_gas';
+  // A revert at broadcast time (after the simulation passed, e.g. the payer's
+  // balance moved in between) is always settle_reverted; the USDC reason
+  // string stays in the console detail.
+  if (phase === 'settle') return isRevert ? 'settle_reverted' : 'rpc_error';
+  if (/exceeds balance/.test(text)) return 'insufficient_balance';
+  if (/authorization is used|used or canceled/.test(text)) return 'nonce_used';
+  if (/authorization is expired/.test(text)) return 'expired';
+  if (/not yet valid/.test(text)) return 'not_yet_valid';
+  if (/invalid signature/.test(text)) return 'sig_invalid';
+  if (isRevert) return 'simulation_reverted';
+  return 'rpc_error';
+}
+
+// True when the mined receipt carries a USDC Transfer(from -> merchant) of at
+// least `requiredUnits`. Informational once status === 1: the transfer already
+// happened, so a mismatch is logged, never turned into a rejection.
+function receiptHasMerchantTransfer(receipt, from, requiredUnits) {
+  const usdc = String(process.env.USDC_CONTRACT_BASE || '').toLowerCase();
+  const merchant = String(MERCHANT_WALLET).toLowerCase();
+  const payer = String(from).toLowerCase();
+  for (const log of (receipt && receipt.logs) || []) {
+    if (!log || String(log.address).toLowerCase() !== usdc) continue;
+    if (!log.topics || log.topics[0] !== TRANSFER_TOPIC || log.topics.length < 3) continue;
+    const logFrom = '0x' + log.topics[1].slice(26).toLowerCase();
+    const logTo = '0x' + log.topics[2].slice(26).toLowerCase();
+    let value;
+    try { value = BigInt(log.data); } catch (_) { continue; }
+    if (logFrom === payer && logTo === merchant && value >= requiredUnits) return true;
   }
+  return false;
 }
 
 function logPayment(endpoint, amount, customerId = 'anon', verified = false, reason = null) {
@@ -814,11 +849,15 @@ function logAccess(req, res, startTime, paymentMeta = null) {
     endpoint: req.path,
     wallet_address: paymentMeta?.wallet_address || null,
     tx_hash: paymentMeta?.tx_hash || null,
+    nonce: paymentMeta?.nonce || null,
     wallet_source: paymentMeta?.wallet_source || null,
     verified: paymentMeta?.verified || false,
     status: res.statusCode,
     duration_ms: duration,
     price_usd: paymentMeta?.price_usd || 0,
+    // null for requests that carried no payment artifact (probes); a
+    // machine-readable reason for every rejected or uncharged payment attempt.
+    rejection_reason: paymentMeta?.rejection_reason || null,
     cache_hit: res.locals.cacheHit || false
   };
   
@@ -885,7 +924,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
       network: 'eip155:8453',
       amount: String(Math.floor(price * 1000000)),
       payTo: MERCHANT_WALLET,
-      maxTimeoutSeconds: 30,
+      maxTimeoutSeconds: 120,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       extra: {
         name: 'USD Coin',
@@ -932,7 +971,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       description,
       mimeType: 'application/json',
       payTo: MERCHANT_WALLET,
-      maxTimeoutSeconds: 30,
+      maxTimeoutSeconds: 120,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       outputSchema: (() => {
         const bz = bazaarForEndpoint(endpointPath);
@@ -952,6 +991,50 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
   };
 }
 
+// Authorizations that passed pre-checks and are waiting for their handler or
+// settlement. Keyed like the redemption ledger so two concurrent requests
+// carrying the same authorization cannot both reach the chain.
+const pendingRedemptions = new Set();
+// USDC units reserved per payer (lowercase address) by requests between
+// pre-check and release, so N concurrent authorizations from one wallet with
+// funds for one call cannot all pass the balance check against the same money.
+const inFlightValue = new Map();
+function getInFlight(from) { return inFlightValue.get(from.toLowerCase()) || 0n; }
+function addInFlight(from, units) {
+  const k = from.toLowerCase();
+  inFlightValue.set(k, (inFlightValue.get(k) || 0n) + units);
+}
+function subInFlight(from, units) {
+  const k = from.toLowerCase();
+  const left = (inFlightValue.get(k) || 0n) - units;
+  if (left > 0n) inFlightValue.set(k, left); else inFlightValue.delete(k);
+}
+
+class PaymentRejection extends Error {
+  constructor(reason, detail) {
+    super(detail || reason);
+    this.reason = reason;
+  }
+}
+
+// Payment gate for every priced route.
+//
+//   1. Pre-checks (cheap, no broadcast): shape, payTo, value, validity window,
+//      local EIP-712 signature recovery, redemption ledger, then an eth_call
+//      simulation of transferWithAuthorization so an empty wallet or a used
+//      nonce is rejected before the handler spends any upstream money.
+//   2. The handler runs with its response intercepted. A non-2xx answer is
+//      sent unchanged and nothing is charged. A 2xx answer is held back,
+//      the authorization is settled on-chain, and only a mined status-1
+//      receipt releases the body. A settlement failure discards the body
+//      and answers 402 with the reason.
+//   3. Once a transaction has been broadcast the client never sees a fresh
+//      402 challenge: a reverted tx is a 402 carrying its reason and hash, an
+//      unreadable receipt is a 502 {charged:"unknown", tx_hash}.
+//
+// Every rejected or uncharged payment attempt is logged with the payer's
+// address, nonce and a rejection_reason. Requests with no payment artifact
+// keep logging null wallet and no reason, so probes stay distinguishable.
 function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
   return async (req, res, next) => {
     const startTime = Date.now();
@@ -960,195 +1043,417 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
     // pricing (e.g. FRED observation_start/observation_end) is enforced at
     // payment time rather than silently applied in the handler.
     const price = (typeof priceOrFn === 'function') ? priceOrFn(req) : priceOrFn;
+    const requiredUnits = BigInt(Math.floor(price * 1000000));
 
-    // Check for x402 payment token in Authorization header
-    const authHeader = req.headers.authorization || '';
-
-    // Parse token from "Bearer x402_..." format
-    const bearerMatch = authHeader.match(/^Bearer\s+(x402_\S+)$/);
-    const token = bearerMatch ? bearerMatch[1] : null;
-    
-    // Intercept response to log access with final status
-    const originalJson = res.json.bind(res);
-    res.json = function(body) {
-      const paymentMeta = res.locals.paymentMeta || { verified: false, price_usd: 0 };
-      logAccess(req, res, startTime, paymentMeta);
-      return originalJson(body);
+    // gate.state: 'prechecks' -> 'handler' -> 'settling' -> 'releasing' -> 'done'
+    const gate = { state: 'prechecks', payment: null };
+    // What this request holds while in flight: its redemption key and the
+    // payer's USDC units. Released exactly once on every exit path.
+    const reservation = { key: null, from: null, units: 0n };
+    const releaseReservation = () => {
+      if (!reservation.key) return;
+      pendingRedemptions.delete(reservation.key);
+      subInFlight(reservation.from, reservation.units);
+      reservation.key = null;
     };
-    
-    if (!token) {
-      // x402 payment header: v2 clients send PAYMENT-SIGNATURE, v1 clients (which
-      // follow the v1 402 body) send X-PAYMENT. Same base64 JSON envelope; the
-      // v2 header wins if both are present.
-      const paymentSig = req.headers['payment-signature'] || req.headers['x-payment'];
-      if (paymentSig) {
-        try {
-          // Decode x402 v2 PaymentPayload: base64 → JSON
-          const paymentPayload = JSON.parse(Buffer.from(paymentSig, 'base64').toString('utf8'));
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    const originalEnd = res.end.bind(res);
 
-          // x402 v2 wraps the scheme payload inside .payload
-          const schemePayload = paymentPayload.payload || paymentPayload;
-          const authorization = schemePayload.authorization;
-          if (!authorization || !authorization.from) {
-            throw new Error('Missing authorization in payment payload');
-          }
-
-          // Validate payment requirements match this endpoint.
-          // SECURITY (2026-04-20): amount must meet the *effective* price
-          // (including range multipliers) computed above, and payTo must match.
-          const requiredAmount = BigInt(Math.floor(price * 1000000));
-          const paidAmount = BigInt(authorization.value);
-          if (paidAmount < requiredAmount) {
-            throw new Error(`Insufficient payment: required ${requiredAmount}, got ${paidAmount}`);
-          }
-          const accepted = paymentPayload.accepted;
-          if (accepted && accepted.payTo && accepted.payTo.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
-            throw new Error(`Wrong payTo: expected ${MERCHANT_WALLET}, got ${accepted.payTo}`);
-          }
-          if (authorization.to && authorization.to.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
-            throw new Error(`Wrong authorization.to: expected ${MERCHANT_WALLET}, got ${authorization.to}`);
-          }
-
-          // SECURITY (2026-04-20): enforce one-time redemption of this
-          // authorization. Key is (from, nonce) — unique per EIP-3009 auth.
-          // The USDC contract also rejects reused nonces on-chain, but we
-          // pre-check to avoid paying gas for guaranteed-failing replays
-          // and to stop replays before any side-effects.
-          const redemptionKey = `sig:${String(authorization.from).toLowerCase()}:${String(authorization.nonce).toLowerCase()}`;
-          if (isRedeemed(redemptionKey)) {
-            throw new Error('Authorization already redeemed (replay rejected)');
-          }
-
-          // Parse EIP-3009 signature: single hex string → v, r, s
-          const sig = schemePayload.signature || authorization.signature;
-          let v, r, s;
-          if (sig) {
-            const parsed = ethers.Signature.from(sig);
-            v = parsed.v;
-            r = parsed.r;
-            s = parsed.s;
-          } else if (authorization.v !== undefined) {
-            // Legacy format: v, r, s already split
-            v = authorization.v;
-            r = authorization.r;
-            s = authorization.s;
-          } else {
-            throw new Error('No signature found in payment payload');
-          }
-
-          // Execute transferWithAuthorization on-chain.
-          // Tracked in inFlightSettlements so SIGTERM can drain before exit.
-          const settlePromise = (async () => {
-            const provider = sharedProvider || new ethers.JsonRpcProvider(process.env.BASE_RPC_URL, { chainId: parseInt(process.env.CHAIN_ID || '8453'), name: 'base' }, { staticNetwork: true });
-            const facilitatorWallet = new ethers.Wallet(
-              process.env.SERVER_PRIVATE_KEY.startsWith('0x') ? process.env.SERVER_PRIVATE_KEY : '0x' + process.env.SERVER_PRIVATE_KEY,
-              provider
-            );
-            const USDC = new ethers.Contract(
-              process.env.USDC_CONTRACT_BASE,
-              ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
-              facilitatorWallet
-            );
-            const tx = await USDC.transferWithAuthorization(
-              authorization.from,
-              authorization.to,
-              authorization.value,
-              authorization.validAfter,
-              authorization.validBefore,
-              authorization.nonce,
-              v, r, s
-            );
-            const receipt = await tx.wait();
-            const verification = await verifyPaymentOnChain(receipt.hash, price, MERCHANT_WALLET);
-            if (verification.verified) {
-              // SECURITY (2026-04-20): record both sig-nonce and tx-hash
-              // redemption keys. The sig key blocks replay of the same
-              // authorization. The tx key is kept as defence in depth now
-              // that no code path redeems a bare tx hash.
-              markRedeemed(redemptionKey, endpointPath);
-              markRedeemed(`tx:${String(receipt.hash).toLowerCase()}`, endpointPath);
-
-              // Set PAYMENT-RESPONSE header for x402 clients
-              const settleResponse = Buffer.from(JSON.stringify({
-                success: true,
-                transaction: receipt.hash,
-                network: 'eip155:8453',
-                payer: authorization.from
-              })).toString('base64');
-              res.set('PAYMENT-RESPONSE', settleResponse);
-
-              res.locals.paymentMeta = {
-                wallet_address: authorization.from,
-                tx_hash: receipt.hash,
-                wallet_source: 'x402_eip3009',
-                verified: true,
-                price_usd: price
-              };
-              logPayment(endpointPath, price, authorization.from, true, receipt.hash);
-              return true;
-            }
-            // Settlement succeeded but on-chain verification failed
-            console.error('x402 payment settled but on-chain verify failed:', verification.reason);
-            return false;
-          })();
-          inFlightSettlements.add(settlePromise);
-          let settled;
-          try {
-            settled = await settlePromise;
-          } finally {
-            inFlightSettlements.delete(settlePromise);
-          }
-          if (settled) return next();
-        } catch (err) {
-          console.error('x402 payment-signature error:', err.message);
-        }
+    // Every response funnels through res.end; log the access row exactly once,
+    // with the final status and whatever paymentMeta the path set.
+    let accessLogged = false;
+    res.end = function (...args) {
+      if (!accessLogged) {
+        accessLogged = true;
+        logAccess(req, res, startTime, res.locals.paymentMeta || { verified: false, price_usd: 0 });
       }
-      // No valid payment found
+      return originalEnd(...args);
+    };
+
+    const sendChallenge = (reason) => {
       const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
       const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
-      res.locals.paymentMeta = { verified: false, price_usd: 0 };
-      return res
-        .status(402)
-        .set('Payment-Required', paymentRequired)
-        .json(paymentRequiredBody);
-    }
-    
+      res.status(402).set('Payment-Required', paymentRequired);
+      if (reason) res.set('X-Payment-Error', reason);
+      return originalJson(paymentRequiredBody);
+    };
 
-    // `Authorization: Bearer x402_...` reached here. The only token the
-    // server recognises is the dev-only `x402_test`. The unsigned claim token
-    // (`x402_<base64 {wallet, tx}>`, a bare pointer to an on-chain tx) was
-    // removed: it bound no payer to the request, so any USDC transfer to the
-    // merchant could be redeemed by whoever learned its hash, and the access
-    // log credited whichever wallet the client named. Paid requests use the
-    // PAYMENT-SIGNATURE / X-PAYMENT flow above.
-    const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
-    const isTestToken = token === 'x402_test' || token.startsWith('x402_test');
-    const allowTestTokens = process.env.ALLOW_TEST_TOKEN === 'true';
-
-    if (isTestToken && allowTestTokens) {
-      // Test token in dev mode - log as unverified
-      logPayment(endpointPath, price, customerId, false, 'test_token_dev_mode');
-
+    // meta: { from, nonce, tx_hash }
+    const rejectPayment = (reason, detail, meta = {}) => {
+      gate.state = 'done';
+      releaseReservation();
+      console.error(`x402 payment-signature error: ${detail} [${reason}]`);
+      logPayment(endpointPath, 0, meta.from || 'anon', false, reason);
       res.locals.paymentMeta = {
-        wallet_address: null,
-        tx_hash: null,
-        wallet_source: 'test_token',
+        wallet_address: meta.from || null,
+        nonce: meta.nonce || null,
+        tx_hash: meta.tx_hash || null,
+        wallet_source: 'x402_eip3009',
         verified: false,
+        price_usd: 0,
+        rejection_reason: reason
+      };
+      return sendChallenge(reason);
+    };
+
+    // The handler answered non-2xx (or used a response path that cannot be
+    // settled): send it as is, charge nothing, record why.
+    const releaseUncharged = (reason) => {
+      const { from, nonce } = gate.payment;
+      gate.state = 'done';
+      releaseReservation();
+      logPayment(endpointPath, 0, from, false, reason);
+      res.locals.paymentMeta = {
+        wallet_address: from,
+        nonce,
+        tx_hash: null,
+        wallet_source: 'x402_eip3009',
+        verified: false,
+        price_usd: 0,
+        rejection_reason: reason
+      };
+    };
+
+    // A paid handler must answer through res.json; a 2xx through any other
+    // path cannot be held back for settlement, so it fails closed.
+    const unsettledResponsePath = (how) => {
+      console.error(`x402: paid handler for ${endpointPath} answered via ${how} with ${res.statusCode}; refusing to serve unsettled`);
+      releaseUncharged('handler_unsettled_response_path');
+      if (res.headersSent) return null;
+      res.status(500);
+      return originalJson({ error: { code: 'INTERNAL_ERROR', message: 'response path cannot settle payment' } });
+    };
+
+    res.json = function (body) {
+      if (gate.state !== 'handler') return originalJson(body);
+      const status = res.statusCode;
+      if (status < 200 || status >= 300) {
+        releaseUncharged(`handler_${status}_not_charged`);
+        return originalJson(body);
+      }
+      gate.state = 'settling';
+      const settlement = settleAndRelease(body).catch((err) => {
+        // Defensive: settleAndRelease handles its own failures; anything that
+        // escapes must still end the request without serving the body.
+        console.error(`x402: settlement path threw for ${endpointPath}: ${err && err.stack ? err.stack : err}`);
+        if (!res.headersSent) rejectPayment('internal_error', err && err.message ? err.message : String(err), { from: gate.payment.from, nonce: gate.payment.nonce });
+      });
+      inFlightSettlements.add(settlement);
+      settlement.finally(() => inFlightSettlements.delete(settlement));
+      return res;
+    };
+    res.send = function (body) {
+      if (gate.state === 'handler') {
+        if (res.statusCode >= 200 && res.statusCode < 300) return unsettledResponsePath('res.send');
+        releaseUncharged(`handler_${res.statusCode}_not_charged`);
+      }
+      return originalSend(body);
+    };
+    const gatedEnd = res.end;
+    res.end = function (...args) {
+      if (gate.state === 'handler') {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const replaced = unsettledResponsePath('res.end'); // null once headers are already out
+          if (replaced !== null) return replaced;
+        } else {
+          releaseUncharged(`handler_${res.statusCode}_not_charged`);
+        }
+      }
+      return gatedEnd(...args);
+    };
+
+    async function settleAndRelease(body) {
+      const { authorization, signature, from, nonce, redemptionKey } = gate.payment;
+      const meta = { from, nonce };
+
+      // The handler may have taken a while: an authorization that is about to
+      // expire would only revert on-chain, so reject it instead of broadcasting.
+      const nowAtSettle = Math.floor(Date.now() / 1000);
+      if (Number(authorization.validBefore) <= nowAtSettle + VALIDITY_SLACK_SECONDS) {
+        return rejectPayment('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtSettle})`, meta);
+      }
+
+      let provider;
+      let tx;
+      try {
+        provider = getProvider();
+        const USDC = facilitatorUsdc(provider);
+        tx = await USDC.transferWithAuthorization(
+          authorization.from,
+          authorization.to,
+          authorization.value,
+          authorization.validAfter,
+          authorization.validBefore,
+          authorization.nonce,
+          signature.v, signature.r, signature.s
+        );
+      } catch (err) {
+        // Nothing was broadcast: the authorization is still unspent.
+        return rejectPayment(classifyChainError(err, 'settle'), err.message, meta);
+      }
+
+      // Broadcast happened. From here on the client never gets a fresh challenge.
+      meta.tx_hash = tx.hash;
+      let receipt = null;
+      try {
+        receipt = await tx.wait(1, SETTLE_WAIT_MS);
+      } catch (err) {
+        if (err && err.receipt) receipt = err.receipt; // ethers throws on status 0 and attaches the receipt
+        else console.error(`x402: tx.wait failed for ${tx.hash}: ${err.message}`);
+      }
+      for (let attempt = 0; !receipt && attempt < RECEIPT_RETRIES; attempt++) {
+        await new Promise((r) => setTimeout(r, RECEIPT_RETRY_MS));
+        try {
+          receipt = await provider.getTransactionReceipt(tx.hash);
+        } catch (err) {
+          console.error(`x402: receipt fetch ${attempt + 1}/${RECEIPT_RETRIES} failed for ${tx.hash}: ${err.message}`);
+        }
+      }
+
+      if (!receipt) {
+        // Unknown outcome: the payer may or may not have been charged.
+        gate.state = 'done';
+        releaseReservation();
+        const reason = 'receipt_unknown';
+        console.error(`x402: ${reason} for ${tx.hash} (payer ${from}) [${reason}]`);
+        logPayment(endpointPath, 0, from, false, `${reason}:${tx.hash}`);
+        res.locals.paymentMeta = {
+          wallet_address: from,
+          nonce,
+          tx_hash: tx.hash,
+          wallet_source: 'x402_eip3009',
+          verified: false,
+          price_usd: 0,
+          rejection_reason: reason
+        };
+        res.status(502).set('X-Payment-Error', reason);
+        return originalJson({
+          error: {
+            code: 'SETTLEMENT_UNCONFIRMED',
+            message: `Payment transaction ${tx.hash} was broadcast but its receipt could not be read. Check the transaction on-chain before retrying.`
+          },
+          charged: 'unknown',
+          tx_hash: tx.hash
+        });
+      }
+
+      if (receipt.status !== 1) {
+        return rejectPayment('settle_reverted', `tx ${tx.hash} reverted on-chain`, meta);
+      }
+
+      // Mined with status 1: the payer is charged. Record it before anything else.
+      if (!receiptHasMerchantTransfer(receipt, from, requiredUnits)) {
+        console.error(`x402: mined tx ${tx.hash} has no matching USDC Transfer(${from} -> ${MERCHANT_WALLET}) log; serving anyway`);
+      }
+      markRedeemed(redemptionKey, endpointPath);
+      markRedeemed(`tx:${String(tx.hash).toLowerCase()}`, endpointPath);
+      releaseReservation();
+      logPayment(endpointPath, price, from, true, tx.hash);
+      res.locals.paymentMeta = {
+        wallet_address: from,
+        nonce,
+        tx_hash: tx.hash,
+        wallet_source: 'x402_eip3009',
+        verified: true,
         price_usd: price
       };
-
-      return next();
+      const settleResponse = Buffer.from(JSON.stringify({
+        success: true,
+        transaction: tx.hash,
+        network: 'eip155:8453',
+        payer: from
+      })).toString('base64');
+      res.set('PAYMENT-RESPONSE', settleResponse);
+      gate.state = 'releasing';
+      return originalJson(body);
     }
 
-    logPayment(endpointPath, 0, customerId, false,
-      isTestToken ? 'test_token_rejected_in_production' : 'legacy_bearer_rejected');
-    const paymentRequired = encodePaymentRequired(price, endpointPath, req.path, routeMethod);
-    const paymentRequiredBody = buildV1PaymentRequiredBody(price, endpointPath, req.path, routeMethod);
-    res.locals.paymentMeta = { verified: false, price_usd: 0 };
-    return res
-      .status(402)
-      .set('Payment-Required', paymentRequired)
-      .json(paymentRequiredBody);
+    // ---- Bearer tokens -------------------------------------------------------
+    const authHeader = req.headers.authorization || '';
+    const bearerMatch = authHeader.match(/^Bearer\s+(x402_\S+)$/);
+    const token = bearerMatch ? bearerMatch[1] : null;
+
+    if (token) {
+      // The only token the server recognises is the dev-only `x402_test`. The
+      // unsigned claim token (`x402_<base64 {wallet, tx}>`) was removed: it
+      // bound no payer to the request. Paid requests use PAYMENT-SIGNATURE /
+      // X-PAYMENT below.
+      const customerId = req.headers['x-customer-id'] || req.ip || 'anon';
+      const isTestToken = token === 'x402_test' || token.startsWith('x402_test');
+      const allowTestTokens = process.env.ALLOW_TEST_TOKEN === 'true';
+
+      if (isTestToken && allowTestTokens) {
+        // Test token in dev mode - log as unverified
+        logPayment(endpointPath, price, customerId, false, 'test_token_dev_mode');
+        res.locals.paymentMeta = {
+          wallet_address: null,
+          tx_hash: null,
+          wallet_source: 'test_token',
+          verified: false,
+          price_usd: price
+        };
+        return next();
+      }
+
+      logPayment(endpointPath, 0, customerId, false,
+        isTestToken ? 'test_token_rejected_in_production' : 'legacy_bearer_rejected');
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
+      return sendChallenge();
+    }
+
+    // ---- x402 payment header -------------------------------------------------
+    // v2 clients send PAYMENT-SIGNATURE, v1 clients (which follow the v1 402
+    // body) send X-PAYMENT. Same base64 JSON envelope; v2 wins if both present.
+    const paymentSig = req.headers['payment-signature'] || req.headers['x-payment'];
+    if (!paymentSig) {
+      // No payment artifact at all: a probe. No reason, no wallet.
+      res.locals.paymentMeta = { verified: false, price_usd: 0 };
+      return sendChallenge();
+    }
+
+    const meta = {};
+    const fail = (reason, detail) => { throw new PaymentRejection(reason, detail); };
+    try {
+      if (!process.env.USDC_CONTRACT_BASE || !process.env.SERVER_PRIVATE_KEY) {
+        fail('server_misconfigured', 'USDC_CONTRACT_BASE / SERVER_PRIVATE_KEY not set');
+      }
+
+      let paymentPayload;
+      try {
+        paymentPayload = JSON.parse(Buffer.from(String(paymentSig), 'base64').toString('utf8'));
+      } catch (e) {
+        fail('malformed_payment', `payment header is not base64 JSON: ${e.message}`);
+      }
+      if (!paymentPayload || typeof paymentPayload !== 'object') fail('malformed_payment', 'payment payload is not an object');
+
+      // x402 v2 wraps the scheme payload inside .payload
+      const schemePayload = paymentPayload.payload || paymentPayload;
+      const authorization = schemePayload && schemePayload.authorization;
+      if (!authorization || typeof authorization !== 'object') fail('malformed_payment', 'missing authorization in payment payload');
+      if (!ethers.isAddress(authorization.from)) fail('malformed_payment', 'authorization.from is not an address');
+      meta.from = ethers.getAddress(authorization.from);
+
+      if (!/^0x[0-9a-fA-F]{64}$/.test(String(authorization.nonce))) fail('invalid_nonce', 'authorization.nonce must be 32-byte hex');
+      meta.nonce = String(authorization.nonce).toLowerCase();
+
+      if (!ethers.isAddress(authorization.to) || authorization.to.toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
+        fail('wrong_payto', `authorization.to must be ${MERCHANT_WALLET}, got ${authorization.to}`);
+      }
+      const accepted = paymentPayload.accepted;
+      if (accepted && accepted.payTo && String(accepted.payTo).toLowerCase() !== MERCHANT_WALLET.toLowerCase()) {
+        fail('wrong_payto', `accepted.payTo must be ${MERCHANT_WALLET}, got ${accepted.payTo}`);
+      }
+
+      // SECURITY (2026-04-20): amount must meet the *effective* price
+      // (including range multipliers) computed above.
+      let paidUnits;
+      try { paidUnits = BigInt(authorization.value); } catch (_) { fail('malformed_payment', 'authorization.value is not an integer'); }
+      if (paidUnits < requiredUnits) fail('insufficient_value', `required ${requiredUnits}, got ${paidUnits}`);
+
+      const now = Math.floor(Date.now() / 1000);
+      const validAfter = Number(authorization.validAfter);
+      const validBefore = Number(authorization.validBefore);
+      if (!Number.isFinite(validAfter) || !Number.isFinite(validBefore)) fail('malformed_payment', 'validAfter/validBefore are not numbers');
+      if (validAfter > now + CLOCK_SKEW_SECONDS) fail('not_yet_valid', `validAfter ${validAfter} is more than ${CLOCK_SKEW_SECONDS}s in the future (now ${now})`);
+      if (validBefore <= now + VALIDITY_SLACK_SECONDS) fail('expired', `validBefore ${validBefore} is within ${VALIDITY_SLACK_SECONDS}s of now (${now})`);
+
+      // Signature: single hex string, or legacy split v/r/s.
+      const rawSig = schemePayload.signature || authorization.signature;
+      let signature;
+      try {
+        if (rawSig) signature = ethers.Signature.from(rawSig);
+        else if (authorization.v !== undefined) signature = ethers.Signature.from({ v: Number(authorization.v), r: authorization.r, s: authorization.s });
+        else fail('sig_invalid', 'no signature in payment payload');
+      } catch (e) {
+        if (e instanceof PaymentRejection) throw e;
+        fail('sig_invalid', `unparseable signature: ${e.message}`);
+      }
+      let recovered;
+      try {
+        recovered = ethers.verifyTypedData(usdcDomain(), EIP3009_TYPES, {
+          from: authorization.from,
+          to: authorization.to,
+          value: authorization.value,
+          validAfter: authorization.validAfter,
+          validBefore: authorization.validBefore,
+          nonce: authorization.nonce,
+        }, signature);
+      } catch (e) {
+        fail('sig_invalid', `signature does not recover: ${e.message}`);
+      }
+      if (recovered.toLowerCase() !== meta.from.toLowerCase()) {
+        fail('sig_invalid', `signature recovers ${recovered}, not authorization.from ${meta.from}`);
+      }
+
+      // One-time redemption of this authorization: (from, nonce) is unique per
+      // EIP-3009 authorization. Checked here cheaply, and again below in the
+      // same synchronous step that reserves it.
+      const redemptionKey = `sig:${meta.from.toLowerCase()}:${meta.nonce}`;
+      if (isRedeemed(redemptionKey) || pendingRedemptions.has(redemptionKey)) {
+        fail('already_redeemed', 'authorization already redeemed (replay rejected)');
+      }
+
+      // Balance check against the payer's funds minus what other in-flight
+      // requests from the same wallet already hold. No await between the
+      // compare and the reservation, so concurrent requests see each other.
+      const USDC = facilitatorUsdc(getProvider());
+      let balance;
+      try {
+        balance = BigInt(await USDC.balanceOf(authorization.from));
+      } catch (e) {
+        fail('rpc_error', `balanceOf failed: ${e.message}`);
+      }
+      if (isRedeemed(redemptionKey) || pendingRedemptions.has(redemptionKey)) {
+        fail('already_redeemed', 'authorization already redeemed (replay rejected)');
+      }
+      const held = getInFlight(meta.from);
+      if (balance < held + paidUnits) {
+        fail('insufficient_balance', `balance ${balance} < in-flight ${held} + value ${paidUnits}`);
+      }
+      pendingRedemptions.add(redemptionKey);
+      addInFlight(meta.from, paidUnits);
+      reservation.key = redemptionKey;
+      reservation.from = meta.from;
+      reservation.units = paidUnits;
+
+      // Simulate the transfer (eth_call, no gas, no broadcast) so a used nonce
+      // or anything else the contract rejects is caught before the handler
+      // does any work.
+      try {
+        await USDC.transferWithAuthorization.staticCall(
+          authorization.from,
+          authorization.to,
+          authorization.value,
+          authorization.validAfter,
+          authorization.validBefore,
+          authorization.nonce,
+          signature.v, signature.r, signature.s
+        );
+      } catch (e) {
+        fail(classifyChainError(e, 'simulate'), `${e.message} (simulation)`);
+      }
+
+      gate.payment = { authorization, signature, from: meta.from, nonce: meta.nonce, redemptionKey };
+      gate.state = 'handler';
+      return next();
+    } catch (err) {
+      if (err instanceof PaymentRejection) {
+        if (err.reason === 'server_misconfigured') {
+          gate.state = 'done';
+          console.error(`x402 payment-signature error: ${err.message} [${err.reason}]`);
+          res.locals.paymentMeta = {
+            wallet_address: meta.from || null, nonce: meta.nonce || null, tx_hash: null,
+            wallet_source: 'x402_eip3009', verified: false, price_usd: 0, rejection_reason: err.reason
+          };
+          return res.status(503).set('X-Payment-Error', err.reason).json({
+            error: { code: 'SERVICE_UNAVAILABLE', message: 'payment verification is not configured on this server' }
+          });
+        }
+        return rejectPayment(err.reason, err.message, meta);
+      }
+      return rejectPayment('internal_error', err && err.message ? err.message : String(err), meta);
+    }
   };
 }
 
@@ -2330,7 +2635,7 @@ app.get('/.well-known/x402', (req, res) => {
         network: 'eip155:8453', // Base mainnet
         amount: String(Math.floor(parseFloat(price) * 1000000)), // Convert to USDC units (6 decimals)
         payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
+        maxTimeoutSeconds: 120,
         asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
         extra: {
           name: ENDPOINT_DESCRIPTIONS[endpoint] || endpoint,

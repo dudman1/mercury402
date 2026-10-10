@@ -3,8 +3,8 @@
 // own modules for a copy whose network-facing classes never touch a chain:
 //   - JsonRpcProvider: rejects every call (no RPC traffic).
 //   - Contract: records the transferWithAuthorization() arguments the server
-//     would submit on-chain to MERCURY_TEST_SETTLE_LOG, then throws, so the
-//     request ends as an unsettled 402. No transaction is ever sent.
+//     would simulate/submit on-chain to MERCURY_TEST_SETTLE_LOG, then throws,
+//     so the request ends as an unsettled 402. No transaction is ever sent.
 const SETTLE_LOG = process.env.MERCURY_TEST_SETTLE_LOG;
 if (!SETTLE_LOG) return;
 
@@ -24,10 +24,16 @@ class NoNetworkProvider {
 class RecordingContract {
   constructor(address) {
     this.address = address;
-  }
-  async transferWithAuthorization(...args) {
-    fs.appendFileSync(SETTLE_LOG, JSON.stringify({ contract: this.address, args: args.map(String) }) + '\n');
-    throw new Error('SETTLEMENT_STUBBED');
+    // Shaped like an ethers v6 contract method: the server simulates with
+    // `.staticCall(...)` before it would ever send. Either entry point records
+    // the arguments and fails, so no transaction is ever sent.
+    const record = async (...args) => {
+      fs.appendFileSync(SETTLE_LOG, JSON.stringify({ contract: this.address, args: args.map(String) }) + '\n');
+      throw new Error('SETTLEMENT_STUBBED');
+    };
+    record.staticCall = record;
+    this.transferWithAuthorization = record;
+    this.balanceOf = async () => 1000000000000n;
   }
 }
 
