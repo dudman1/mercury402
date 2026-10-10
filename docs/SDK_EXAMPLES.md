@@ -11,7 +11,7 @@ Base URL: `https://api.mercury402.com`
 ## Important
 
 Production Mercury expects the `payment-signature` header.
-Unsigned manually constructed `Authorization: Bearer x402_<token>` flows are deprecated and rejected in production.
+`Authorization: Bearer x402_<token>` is not a payment; the unsigned claim-token flow was removed and such requests get the 402 challenge.
 
 ---
 

@@ -166,7 +166,7 @@ Mode: payment-signature flow
 
 **Problem:** Server keeps rejecting your request
 
-**Solution:** Your client must retry with a valid `payment-signature` generated from the current `Payment-Required` descriptor. Manually constructed `Authorization: Bearer x402_<token>` values are rejected in production.
+**Solution:** Your client must retry with a valid `payment-signature` generated from the current `Payment-Required` descriptor. `Authorization: Bearer x402_<token>` is not a payment; the unsigned claim-token flow was removed and such requests get the 402 challenge.
 
 ### `Request timeout`
 

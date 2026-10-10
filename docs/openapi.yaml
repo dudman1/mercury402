@@ -3263,9 +3263,7 @@ components:
         4. Retry the request with `payment-signature`
 
 
-        **Legacy bearer compatibility:**
-
-        Unsigned `Authorization: Bearer x402_<token>` flow is disabled in production unless `ALLOW_LEGACY_BEARER=true`.
+        `Authorization: Bearer x402_<token>` is not a payment. The unsigned claim-token flow was removed; such requests get the 402 challenge.
 
         '
   schemas:
