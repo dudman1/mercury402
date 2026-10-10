@@ -195,10 +195,10 @@
           "in": "query",
           "required": false,
           "type": "integer",
-          "description": "Max observations to return"
+          "description": "Max observations to return, 1-1000 (limit > 1 costs 2x; ignored when date or a range is given)"
         }
       ],
-      "price_note": "Price doubles (2x) when both observation_start and observation_end are supplied."
+      "price_note": "Price doubles (2x) for a multi-observation response: when both observation_start and observation_end are supplied, or when limit > 1."
     },
     {
       "path": "/v1/fred/a-rated-spread",

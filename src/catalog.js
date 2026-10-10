@@ -37,7 +37,7 @@ const PARAMS = {
     { name: 'date', in: 'query', required: false, type: 'string', description: 'Single observation date YYYY-MM-DD' },
     { name: 'observation_start', in: 'query', required: false, type: 'string', description: 'Range start YYYY-MM-DD (range queries cost 2x)' },
     { name: 'observation_end', in: 'query', required: false, type: 'string', description: 'Range end YYYY-MM-DD (range queries cost 2x)' },
-    { name: 'limit', in: 'query', required: false, type: 'integer', description: 'Max observations to return' },
+    { name: 'limit', in: 'query', required: false, type: 'integer', description: 'Max observations to return, 1-1000 (limit > 1 costs 2x; ignored when date or a range is given)' },
   ],
   '/v1/treasury/yield-curve/daily-snapshot': [
     { name: 'date', in: 'query', required: false, type: 'string', description: 'Snapshot date YYYY-MM-DD (default: latest)' },
@@ -53,7 +53,7 @@ const PARAMS = {
 };
 
 const PRICE_NOTES = {
-  '/v1/fred/{series_id}': 'Price doubles (2x) when both observation_start and observation_end are supplied.',
+  '/v1/fred/{series_id}': 'Price doubles (2x) for a multi-observation response: when both observation_start and observation_end are supplied, or when limit > 1.',
 };
 
 // Payment block published to agents alongside the endpoint list. The live

@@ -2174,9 +2174,9 @@ paths:
 
         **Pricing:**
 
-        - Single date or latest: $0.05
+        - Single observation (latest, `date`, or `limit=1`): $0.05
 
-        - Date range (observation_start + observation_end): $0.10
+        - Multi-observation response (`observation_start` + `observation_end`, or `limit` > 1): $0.10
 
 
         **Common Series:**
@@ -2246,7 +2246,9 @@ paths:
           maximum: 1000
           default: 1
           example: 5
-        description: Max observations to return (ignored if date/range specified)
+        description: Max observations to return, 1-1000. limit > 1 is a multi-observation response
+          and costs $0.10; ignored if date/range specified. Values outside 1-1000 get a free 400
+          (INVALID_LIMIT) before any payment is requested.
       responses:
         '200':
           description: Successful response with data and provenance
