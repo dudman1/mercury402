@@ -28,7 +28,9 @@ function providerCalls(src) {
 
 test('every JsonRpcProvider in src/server.js pins the base network with staticNetwork: true', () => {
   const calls = providerCalls(SRC);
-  assert.ok(calls.length >= 5, `expected shared + 4 fallback providers, found ${calls.length}`);
+  // shared provider + fallbacks: getProvider() (payment path), facilitator
+  // balance refresh, /health throwaway.
+  assert.ok(calls.length >= 4, `expected shared + 3 fallback providers, found ${calls.length}`);
   for (const { line, args } of calls) {
     assert.strictEqual(args, `process.env.BASE_RPC_URL, ${NETWORK}, { staticNetwork: true }`, `server.js:${line}`);
   }
