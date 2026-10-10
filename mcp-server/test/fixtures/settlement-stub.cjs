@@ -33,6 +33,7 @@ class RecordingContract {
     };
     record.staticCall = record;
     this.transferWithAuthorization = record;
+    this.balanceOf = async () => 1000000000000n;
   }
 }
 

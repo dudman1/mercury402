@@ -17,6 +17,7 @@ class StubContract {
     const send = async (...args) => recordAndFail(...args);
     send.staticCall = async (...args) => recordAndFail(...args);
     this.transferWithAuthorization = send;
+    this.balanceOf = async () => 1000000000000n;
   }
 }
 

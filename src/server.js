@@ -685,9 +685,13 @@ const EIP3009_TYPES = {
     { name: 'nonce', type: 'bytes32' },
   ],
 };
-// An authorization that expires sooner than this is rejected up front: it
-// would likely expire between the handler finishing and the tx being mined.
-const VALIDITY_SLACK_SECONDS = 30;
+// Standard x402 clients sign validBefore = now + the advertised
+// maxTimeoutSeconds (120 above), so the window must stay generous: an
+// authorization is rejected only when validBefore is within this many
+// seconds of now, and that check is repeated right before broadcast.
+const VALIDITY_SLACK_SECONDS = 5;
+// validAfter may sit this far in the future to absorb client clock skew.
+const CLOCK_SKEW_SECONDS = 10;
 const SETTLE_WAIT_MS = 30000;
 const RECEIPT_RETRIES = 3;
 const RECEIPT_RETRY_MS = 1000;
@@ -715,7 +719,10 @@ function facilitatorUsdc(provider) {
   const facilitatorWallet = new ethers.Wallet(key.startsWith('0x') ? key : '0x' + key, provider);
   return new ethers.Contract(
     process.env.USDC_CONTRACT_BASE,
-    ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
+    [
+      'function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)',
+      'function balanceOf(address account) view returns (uint256)',
+    ],
     facilitatorWallet
   );
 }
@@ -917,7 +924,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
       network: 'eip155:8453',
       amount: String(Math.floor(price * 1000000)),
       payTo: MERCHANT_WALLET,
-      maxTimeoutSeconds: 30,
+      maxTimeoutSeconds: 120,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       extra: {
         name: 'USD Coin',
@@ -964,7 +971,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       description,
       mimeType: 'application/json',
       payTo: MERCHANT_WALLET,
-      maxTimeoutSeconds: 30,
+      maxTimeoutSeconds: 120,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       outputSchema: (() => {
         const bz = bazaarForEndpoint(endpointPath);
@@ -988,6 +995,20 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
 // settlement. Keyed like the redemption ledger so two concurrent requests
 // carrying the same authorization cannot both reach the chain.
 const pendingRedemptions = new Set();
+// USDC units reserved per payer (lowercase address) by requests between
+// pre-check and release, so N concurrent authorizations from one wallet with
+// funds for one call cannot all pass the balance check against the same money.
+const inFlightValue = new Map();
+function getInFlight(from) { return inFlightValue.get(from.toLowerCase()) || 0n; }
+function addInFlight(from, units) {
+  const k = from.toLowerCase();
+  inFlightValue.set(k, (inFlightValue.get(k) || 0n) + units);
+}
+function subInFlight(from, units) {
+  const k = from.toLowerCase();
+  const left = (inFlightValue.get(k) || 0n) - units;
+  if (left > 0n) inFlightValue.set(k, left); else inFlightValue.delete(k);
+}
 
 class PaymentRejection extends Error {
   constructor(reason, detail) {
@@ -1026,6 +1047,15 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
 
     // gate.state: 'prechecks' -> 'handler' -> 'settling' -> 'releasing' -> 'done'
     const gate = { state: 'prechecks', payment: null };
+    // What this request holds while in flight: its redemption key and the
+    // payer's USDC units. Released exactly once on every exit path.
+    const reservation = { key: null, from: null, units: 0n };
+    const releaseReservation = () => {
+      if (!reservation.key) return;
+      pendingRedemptions.delete(reservation.key);
+      subInFlight(reservation.from, reservation.units);
+      reservation.key = null;
+    };
     const originalJson = res.json.bind(res);
     const originalSend = res.send.bind(res);
     const originalEnd = res.end.bind(res);
@@ -1049,10 +1079,10 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       return originalJson(paymentRequiredBody);
     };
 
-    // meta: { from, nonce, tx_hash, reservedKey }
+    // meta: { from, nonce, tx_hash }
     const rejectPayment = (reason, detail, meta = {}) => {
       gate.state = 'done';
-      if (meta.reservedKey) pendingRedemptions.delete(meta.reservedKey);
+      releaseReservation();
       console.error(`x402 payment-signature error: ${detail} [${reason}]`);
       logPayment(endpointPath, 0, meta.from || 'anon', false, reason);
       res.locals.paymentMeta = {
@@ -1070,9 +1100,9 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
     // The handler answered non-2xx (or used a response path that cannot be
     // settled): send it as is, charge nothing, record why.
     const releaseUncharged = (reason) => {
-      const { from, nonce, redemptionKey } = gate.payment;
+      const { from, nonce } = gate.payment;
       gate.state = 'done';
-      pendingRedemptions.delete(redemptionKey);
+      releaseReservation();
       logPayment(endpointPath, 0, from, false, reason);
       res.locals.paymentMeta = {
         wallet_address: from,
@@ -1107,7 +1137,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
         // Defensive: settleAndRelease handles its own failures; anything that
         // escapes must still end the request without serving the body.
         console.error(`x402: settlement path threw for ${endpointPath}: ${err && err.stack ? err.stack : err}`);
-        if (!res.headersSent) rejectPayment('internal_error', err && err.message ? err.message : String(err), { from: gate.payment.from, nonce: gate.payment.nonce, reservedKey: gate.payment.redemptionKey });
+        if (!res.headersSent) rejectPayment('internal_error', err && err.message ? err.message : String(err), { from: gate.payment.from, nonce: gate.payment.nonce });
       });
       inFlightSettlements.add(settlement);
       settlement.finally(() => inFlightSettlements.delete(settlement));
@@ -1135,7 +1165,15 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
 
     async function settleAndRelease(body) {
       const { authorization, signature, from, nonce, redemptionKey } = gate.payment;
-      const meta = { from, nonce, reservedKey: redemptionKey };
+      const meta = { from, nonce };
+
+      // The handler may have taken a while: an authorization that is about to
+      // expire would only revert on-chain, so reject it instead of broadcasting.
+      const nowAtSettle = Math.floor(Date.now() / 1000);
+      if (Number(authorization.validBefore) <= nowAtSettle + VALIDITY_SLACK_SECONDS) {
+        return rejectPayment('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtSettle})`, meta);
+      }
+
       let provider;
       let tx;
       try {
@@ -1176,7 +1214,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       if (!receipt) {
         // Unknown outcome: the payer may or may not have been charged.
         gate.state = 'done';
-        pendingRedemptions.delete(redemptionKey);
+        releaseReservation();
         const reason = 'receipt_unknown';
         console.error(`x402: ${reason} for ${tx.hash} (payer ${from}) [${reason}]`);
         logPayment(endpointPath, 0, from, false, `${reason}:${tx.hash}`);
@@ -1210,7 +1248,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       }
       markRedeemed(redemptionKey, endpointPath);
       markRedeemed(`tx:${String(tx.hash).toLowerCase()}`, endpointPath);
-      pendingRedemptions.delete(redemptionKey);
+      releaseReservation();
       logPayment(endpointPath, price, from, true, tx.hash);
       res.locals.paymentMeta = {
         wallet_address: from,
@@ -1317,8 +1355,8 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       const validAfter = Number(authorization.validAfter);
       const validBefore = Number(authorization.validBefore);
       if (!Number.isFinite(validAfter) || !Number.isFinite(validBefore)) fail('malformed_payment', 'validAfter/validBefore are not numbers');
-      if (validAfter > now) fail('not_yet_valid', `validAfter ${validAfter} is in the future (now ${now})`);
-      if (now >= validBefore - VALIDITY_SLACK_SECONDS) fail('expired', `validBefore ${validBefore} is within ${VALIDITY_SLACK_SECONDS}s of now (${now})`);
+      if (validAfter > now + CLOCK_SKEW_SECONDS) fail('not_yet_valid', `validAfter ${validAfter} is more than ${CLOCK_SKEW_SECONDS}s in the future (now ${now})`);
+      if (validBefore <= now + VALIDITY_SLACK_SECONDS) fail('expired', `validBefore ${validBefore} is within ${VALIDITY_SLACK_SECONDS}s of now (${now})`);
 
       // Signature: single hex string, or legacy split v/r/s.
       const rawSig = schemePayload.signature || authorization.signature;
@@ -1349,19 +1387,40 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       }
 
       // One-time redemption of this authorization: (from, nonce) is unique per
-      // EIP-3009 authorization. Reserved now so a concurrent duplicate cannot
-      // reach the chain while this one is in flight.
+      // EIP-3009 authorization. Checked here cheaply, and again below in the
+      // same synchronous step that reserves it.
       const redemptionKey = `sig:${meta.from.toLowerCase()}:${meta.nonce}`;
       if (isRedeemed(redemptionKey) || pendingRedemptions.has(redemptionKey)) {
         fail('already_redeemed', 'authorization already redeemed (replay rejected)');
       }
-      pendingRedemptions.add(redemptionKey);
-      meta.reservedKey = redemptionKey;
 
-      // Simulate the transfer (eth_call, no gas, no broadcast) so an empty
-      // wallet or a used nonce is rejected before the handler does any work.
+      // Balance check against the payer's funds minus what other in-flight
+      // requests from the same wallet already hold. No await between the
+      // compare and the reservation, so concurrent requests see each other.
+      const USDC = facilitatorUsdc(getProvider());
+      let balance;
       try {
-        const USDC = facilitatorUsdc(getProvider());
+        balance = BigInt(await USDC.balanceOf(authorization.from));
+      } catch (e) {
+        fail('rpc_error', `balanceOf failed: ${e.message}`);
+      }
+      if (isRedeemed(redemptionKey) || pendingRedemptions.has(redemptionKey)) {
+        fail('already_redeemed', 'authorization already redeemed (replay rejected)');
+      }
+      const held = getInFlight(meta.from);
+      if (balance < held + paidUnits) {
+        fail('insufficient_balance', `balance ${balance} < in-flight ${held} + value ${paidUnits}`);
+      }
+      pendingRedemptions.add(redemptionKey);
+      addInFlight(meta.from, paidUnits);
+      reservation.key = redemptionKey;
+      reservation.from = meta.from;
+      reservation.units = paidUnits;
+
+      // Simulate the transfer (eth_call, no gas, no broadcast) so a used nonce
+      // or anything else the contract rejects is caught before the handler
+      // does any work.
+      try {
         await USDC.transferWithAuthorization.staticCall(
           authorization.from,
           authorization.to,
@@ -2576,7 +2635,7 @@ app.get('/.well-known/x402', (req, res) => {
         network: 'eip155:8453', // Base mainnet
         amount: String(Math.floor(parseFloat(price) * 1000000)), // Convert to USDC units (6 decimals)
         payTo: MERCHANT_WALLET,
-        maxTimeoutSeconds: 30,
+        maxTimeoutSeconds: 120,
         asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
         extra: {
           name: ENDPOINT_DESCRIPTIONS[endpoint] || endpoint,

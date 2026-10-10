@@ -15,7 +15,9 @@
 //
 // Env knobs:
 //   MERCURY_TEST_SEED_TX='{"hash","from","to","value"}'  pre-seed one receipt
-//   MERCURY_TEST_EMPTY_WALLETS=0xabc,0xdef   these payers revert "exceeds balance"
+//   MERCURY_TEST_EMPTY_WALLETS=0xabc,0xdef   these payers have balance 0
+//   MERCURY_TEST_WALLET_BALANCES='{"0xabc":"150000"}'  USDC units per payer
+//                                 (others: 1e12). Settling debits the balance.
 //   MERCURY_TEST_SETTLE_REVERT=1   simulation passes, the broadcast reverts
 //   MERCURY_TEST_RECEIPT_MISSING=1 provider.getTransactionReceipt always null
 //   MERCURY_TEST_WAIT_FAILS=1      tx.wait() throws a timeout instead of a receipt
@@ -27,6 +29,14 @@ const { ethers } = require('ethers');
 const USDC = process.env.USDC_CONTRACT_BASE;
 const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
 const EMPTY_WALLETS = new Set(String(process.env.MERCURY_TEST_EMPTY_WALLETS || '').toLowerCase().split(',').filter(Boolean));
+const BALANCES = new Map(Object.entries(JSON.parse(process.env.MERCURY_TEST_WALLET_BALANCES || '{}'))
+  .map(([addr, units]) => [addr.toLowerCase(), BigInt(units)]));
+const DEFAULT_BALANCE = 1000000000000n;
+function balanceOf(addr) {
+  const k = String(addr).toLowerCase();
+  if (EMPTY_WALLETS.has(k)) return 0n;
+  return BALANCES.has(k) ? BALANCES.get(k) : DEFAULT_BALANCE;
+}
 const receipts = new Map();
 const usedNonces = new Set();
 
@@ -58,7 +68,7 @@ function revert(reason) {
 function simulate(from, to, value, validAfter, validBefore, nonce) {
   const key = `${String(from).toLowerCase()}:${String(nonce).toLowerCase()}`;
   if (usedNonces.has(key)) throw revert('FiatTokenV2: authorization is used or canceled');
-  if (EMPTY_WALLETS.has(String(from).toLowerCase())) throw revert('ERC20: transfer amount exceeds balance');
+  if (balanceOf(from) < BigInt(value)) throw revert('ERC20: transfer amount exceeds balance');
   return key;
 }
 
@@ -81,6 +91,7 @@ class StubContract {
       const receipt = makeReceipt(hash, from, to, value);
       receipts.set(hash, receipt);
       usedNonces.add(key);
+      BALANCES.set(String(from).toLowerCase(), balanceOf(from) - BigInt(value));
       console.log(`SETTLED ${JSON.stringify({ hash, from, to, value: String(value), nonce })}`);
       return {
         hash,
@@ -101,6 +112,10 @@ class StubContract {
       console.log(`SIMULATED ${JSON.stringify({ from, to, value: String(value), nonce })}`);
     };
     this.transferWithAuthorization = send;
+    this.balanceOf = async (addr) => {
+      await new Promise((r) => setTimeout(r, 20));
+      return balanceOf(addr);
+    };
   }
 }
 

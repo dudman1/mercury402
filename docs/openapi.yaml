@@ -24,7 +24,8 @@ info:
     settled on-chain before it is released. Any non-2xx handler response (400/404/5xx) is sent
     unchanged and costs nothing. A rejected payment is a 402 whose `X-Payment-Error` header
     names the reason (`sig_invalid`, `expired`, `wrong_payto`, `insufficient_value`,
-    `insufficient_balance`, `nonce_used`, `already_redeemed`, `settle_reverted`, `rpc_error`, ...).
+    `insufficient_balance`, `nonce_used`, `already_redeemed`, `expired_before_settle`, `settle_reverted`, `rpc_error`, ...).
+    `insufficient_balance` also covers funds already held by other in-flight requests from the same wallet.
     If a settlement transaction was broadcast but its receipt could not be read, the response is
     `502 SETTLEMENT_UNCONFIRMED` carrying `charged = "unknown"` and the `tx_hash` to check,
     never a fresh 402.
@@ -3751,8 +3752,8 @@ components:
             type: string
           description: Present only when a payment artifact was sent and rejected; machine-readable
             reason (sig_invalid, expired, not_yet_valid, wrong_payto, insufficient_value, invalid_nonce,
-            malformed_payment, insufficient_balance, nonce_used, already_redeemed, settle_reverted,
-            rpc_error). Absent on a plain challenge.
+            malformed_payment, insufficient_balance, nonce_used, already_redeemed, expired_before_settle,
+            settle_reverted, rpc_error). Absent on a plain challenge.
       content:
         application/json:
           schema:

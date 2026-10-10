@@ -220,7 +220,7 @@ test('default server: handler outcomes decide the charge; pre-checks reject with
   await t.test('expired authorization: 402 expired', async () => {
     const m = server.mark();
     const now = Math.floor(Date.now() / 1000);
-    const { header, authorization } = await payment(FRED_ROUTE, { overrides: { validBefore: String(now + 10) } });
+    const { header, authorization } = await payment(FRED_ROUTE, { overrides: { validBefore: String(now + 3) } });
     const res = await call(server.base, FRED_ROUTE, { headers: { 'payment-signature': header } });
     await settle();
     assertRejected(server, res, server.accessRows().at(-1), { reason: 'expired', from: PAYER.address, nonce: authorization.nonce });
@@ -369,4 +369,105 @@ test('settlement reverts after the handler succeeded: body discarded, 402 settle
   assert.strictEqual(res.body.data, undefined, 'no data without a settled payment');
   assert.strictEqual(res.headers.get('payment-response'), null);
   assert.deepStrictEqual(server.redemptionRows(), []);
+});
+
+// ---------------------------------------------------------------------------
+// Review follow-ups on this branch.
+
+test('standard x402 client (validBefore = now + advertised maxTimeoutSeconds): 200 and one settlement', async (t) => {
+  const server = await boot({ MERCURY_TEST_FRED_OBSERVATIONS: '1' });
+  t.after(() => server.stop());
+
+  // Take the timeout from the 402 itself, both the v1 body and the v2 header.
+  const unpaid = await call(server.base, FRED_ROUTE);
+  assert.strictEqual(unpaid.status, 402);
+  const v1 = unpaid.body.accepts[0];
+  const v2Header = unpaid.headers.get('payment-required').replace(/-/g, '+').replace(/_/g, '/');
+  const v2 = JSON.parse(Buffer.from(v2Header, 'base64').toString('utf8')).accepts[0];
+  assert.strictEqual(v2.maxTimeoutSeconds, v1.maxTimeoutSeconds);
+
+  // Sign exactly like the reference x402 client libraries do, with whatever
+  // timeout the server advertised.
+  const now = Math.floor(Date.now() / 1000);
+  const m = server.mark();
+  const { header } = await payment(FRED_ROUTE, {
+    overrides: { validAfter: String(now - 600), validBefore: String(now + v1.maxTimeoutSeconds) },
+  });
+  const res = await call(server.base, FRED_ROUTE, { headers: { 'payment-signature': header } });
+  await settle();
+  assert.strictEqual(res.status, 200, `advertised maxTimeoutSeconds=${v1.maxTimeoutSeconds}: got ${res.status} ${res.headers.get('x-payment-error')}`);
+  assert.strictEqual(server.count(/^SETTLED /gm, m), 1);
+  assert.ok(res.headers.get('payment-response'));
+  assert.strictEqual(server.accessRows().at(-1).verified, true);
+
+  // AI handlers plus settlement have to fit inside the advertised window.
+  assert.strictEqual(v1.maxTimeoutSeconds, 120);
+});
+
+test('authorization that expires while the handler runs: expired_before_settle, nothing broadcast', async (t) => {
+  const server = await boot({ MERCURY_TEST_FRED_OBSERVATIONS: '1', MERCURY_TEST_UPSTREAM_DELAY_MS: '2500' });
+  t.after(() => server.stop());
+
+  const now = Math.floor(Date.now() / 1000);
+  const m = server.mark();
+  // Passes the pre-check (more than 5s left) but not the re-check after a 2.5s handler.
+  const { header, authorization } = await payment(FRED_ROUTE, { overrides: { validBefore: String(now + 7) } });
+  const res = await call(server.base, FRED_ROUTE, { headers: { 'payment-signature': header } });
+  await settle();
+  assert.strictEqual(server.count(/^SANDBOX_UPSTREAM_CALL /gm, m), 1, 'handler ran');
+  assert.strictEqual(server.count(/^SETTLED /gm, m), 0, 'nothing broadcast');
+  assertRejected(server, res, server.accessRows().at(-1), { reason: 'expired_before_settle', from: PAYER.address, nonce: authorization.nonce });
+  assert.strictEqual(res.body.data, undefined);
+});
+
+test('one wallet funded for one call, 5 concurrent /v1/ai/ask: 1 handler run, 1 settlement, 4 x insufficient_balance', async (t) => {
+  const wallet = ethers.Wallet.createRandom();
+  const units = String(Math.floor(getPrice('/v1/ai/ask') * 1000000));
+  const server = await boot({
+    MERCURY_TEST_FRED_OBSERVATIONS: '1',
+    MERCURY_TEST_AI_STUB: '1',
+    OPENROUTER_API_KEY: 'sandbox-key',
+    MERCURY_TEST_WALLET_BALANCES: JSON.stringify({ [wallet.address]: units }),
+    // Real upstreams take time. With zero latency the first request settles
+    // (and the stub debits the wallet) before the others are even simulated,
+    // which hides the problem; 300ms makes the five handlers overlap.
+    MERCURY_TEST_UPSTREAM_DELAY_MS: '300',
+  });
+  t.after(() => server.stop());
+
+  const m = server.mark();
+  const headers = await Promise.all(Array.from({ length: 5 }, () => payment('/v1/ai/ask', { signer: wallet, from: wallet.address })));
+  const results = await Promise.all(headers.map(({ header }) => call(server.base, '/v1/ai/ask', {
+    method: 'POST',
+    headers: { 'payment-signature': header },
+    body: { question: 'What is the latest unemployment rate and its trend?' },
+  })));
+  await settle();
+
+  const outcomes = results.map((r) => [r.status, r.headers.get('x-payment-error')]);
+  assert.strictEqual(server.count(/^SANDBOX_UPSTREAM_CALL https:\/\/openrouter\.ai/gm, m), 1,
+    `exactly one handler may reach the AI upstream; outcomes ${JSON.stringify(outcomes)}`);
+  assert.strictEqual(server.count(/^SETTLED /gm, m), 1);
+  const statuses = results.map((r) => r.status).sort();
+  assert.deepStrictEqual(statuses, [200, 402, 402, 402, 402], JSON.stringify(outcomes));
+  const reasons = results.filter((r) => r.status === 402).map((r) => r.headers.get('x-payment-error'));
+  assert.deepStrictEqual(reasons, Array(4).fill('insufficient_balance'));
+  const ok = results.find((r) => r.status === 200);
+  assert.ok(ok.body.data.answer_md);
+
+  const rows = server.accessRows().filter((r) => r.endpoint === '/v1/ai/ask');
+  assert.strictEqual(rows.length, 5);
+  assert.strictEqual(rows.filter((r) => r.verified === true).length, 1);
+  assert.strictEqual(rows.filter((r) => r.rejection_reason === 'insufficient_balance').length, 4);
+  for (const r of rows) assert.strictEqual(r.wallet_address, wallet.address);
+
+  // The reservation is released after settlement: a later single call from the
+  // now-empty wallet is rejected for its real balance, not a stale hold.
+  const m2 = server.mark();
+  const { header } = await payment('/v1/ai/ask', { signer: wallet, from: wallet.address });
+  const later = await call(server.base, '/v1/ai/ask', { method: 'POST', headers: { 'payment-signature': header }, body: { question: 'And the CPI trend over the last year?' } });
+  await settle();
+  assert.strictEqual(later.status, 402);
+  assert.strictEqual(later.headers.get('x-payment-error'), 'insufficient_balance');
+  assert.strictEqual(server.count(/^SANDBOX_UPSTREAM_CALL /gm, m2), 0);
 });
