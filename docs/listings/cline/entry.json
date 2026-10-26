@@ -1,0 +1,45 @@
+{
+  "$schema": "../../../schemas/mcp.schema.json",
+  "id": "mercury402",
+  "type": "mcp",
+  "name": "Mercury402",
+  "tagline": "Treasury/FRED financial data over x402: 78 pay-per-call US endpoints, free to browse and quote",
+  "description": "Mercury402 serves Treasury/FRED financial data over x402: 78 pay-per-call US financial data endpoints covering Treasury yields and auctions, 53 FRED endpoints, forex, yield spreads, breakeven inflation, macro composites and AI briefings. Each call is priced per request ($0.05 to $0.50) and paid in USDC on Base. No API key, no subscription.\n\nTools: `list_endpoints` (browse all 78 endpoints with prices and parameters, read-only) and `get_endpoint_data` (call an endpoint and return the data, or the HTTP 402 quote and payment instructions).\n\nFree by default: without a wallet the server only lists endpoints and returns quotes. Paid mode is opt-in and capped per call. Not affiliated with mercury-x402-mcp (io.github.mercuryx402).",
+  "author": {
+    "name": "dudman1",
+    "url": "https://github.com/dudman1"
+  },
+  "homepage": "https://mercury402.com",
+  "repo": "https://github.com/dudman1/mercury402/tree/master/mcp-server",
+  "icon": "./icon.png",
+  "tags": [
+    "finance",
+    "data"
+  ],
+  "license": "MIT",
+  "verified": false,
+  "featured": false,
+  "install": {
+    "args": [
+      "mercury402",
+      "--",
+      "npx",
+      "-y",
+      "mercury402-mcp"
+    ],
+    "env": [
+      {
+        "name": "MERCURY402_PAYER_PRIVATE_KEY",
+        "required": false,
+        "description": "Optional. Private key of a dedicated low-balance USDC-on-Base wallet for paid mode. Without it the server only lists endpoints and returns 402 quotes. Stored in plaintext in the client config: never use a main wallet.",
+        "url": "https://github.com/dudman1/mercury402/tree/master/mcp-server#paid-mode-optional"
+      },
+      {
+        "name": "MERCURY402_MAX_PRICE_USD",
+        "required": false,
+        "description": "Optional per-call spending cap in USD for paid mode (default 0.50)."
+      }
+    ],
+    "notes": "Free by default: discovery plus 402 quotes, no wallet needed. Hosted alternative with nothing to install: https://mcp.mercury402.com/mcp (Streamable HTTP, no auth, discovery-only, never pays)."
+  }
+}
