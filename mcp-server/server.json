@@ -1,0 +1,47 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dudman1/mercury402-mcp",
+  "title": "Mercury402",
+  "description": "Pay-per-call financial data over x402 (USDC on Base): Treasury, FRED, forex, yield spreads, macro",
+  "version": "0.1.4",
+  "websiteUrl": "https://mercury402.com",
+  "repository": {
+    "url": "https://github.com/dudman1/mercury402",
+    "source": "github",
+    "id": "1172993361",
+    "subfolder": "mcp-server"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "mercury402-mcp",
+      "version": "0.1.4",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MERCURY402_PAYER_PRIVATE_KEY",
+          "description": "Opt-in paid mode: private key of a dedicated low-balance wallet holding USDC on Base. Leave unset for free discovery mode.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "MERCURY402_MAX_PRICE_USD",
+          "description": "Per-call spending cap in USD for paid mode.",
+          "isRequired": false,
+          "format": "number",
+          "default": "0.5"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.mercury402.com/mcp"
+    }
+  ]
+}
