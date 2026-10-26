@@ -35,7 +35,8 @@ x402scan blocker: 69 of 84 resources fail with "Missing input schema" on the reg
 
 ### A3. Unpaid POST probe gets the 402 first; paid request still validates before settlement
 
-- Touches: `src/server.js:2321-2324`. The order is deliberate, per the comment at lines 2321-2323:
+- Touches: `src/server.js:2321-2324` and `src/server.js:1681` (second route, below). The order is deliberate, per
+  the comment at lines 2321-2323:
   ```js
   // SECURITY (2026-04-20): preValidateTreasuryHistorical now runs BEFORE
   // require402Payment so malformed/invalid date-range requests return 400
@@ -60,8 +61,14 @@ x402scan blocker: 69 of 84 resources fail with "Missing input schema" on the reg
   - unpaid + empty body → 402 with `PAYMENT-REQUIRED`;
   - artifact + empty body → 400 `MISSING_PARAMS` and no settle call;
   - artifact + valid body → the existing path.
-- Before building, grep for other routes with a validator ahead of `require402Payment`. This is the only one seen;
-  that it is the only one is UNVERIFIED.
+- **Second route, same rule:** `GET /v1/fred/:series_id` (`src/server.js:1681`) runs `fredQueryGuard`
+  (`:1659-1670`, 400 `INVALID_LIMIT` on a bad `limit`) and `fredSeriesGuard` (`:1504-1525`) before
+  `require402Payment`. A3 covers both routes: same artifact gate in front of both guards, same three tests per route
+  (for FRED, "malformed" = bad `limit` or a rejected series). A grep of every `require402Payment` registration in
+  `src/server.js`, `src/new-routes.js` and `src/ai-routes.js` found no third route with a guard ahead of it.
+- Dev-only path: `Bearer x402_test` (`src/server.js:1282-1301`) is honored only when `ALLOW_TEST_TOKEN=true`. It
+  carries no payment header and nobody is charged on it (logged as unverified, `verified: false`). The artifact
+  gate doesn't change it.
 
 ### A4. Standard base64 in `PAYMENT-REQUIRED`
 
@@ -70,13 +77,19 @@ x402scan blocker: 69 of 84 resources fail with "Missing input schema" on the reg
   - This matches the x402 transport spec (http.md line 12, "Base64-encoded `PaymentRequired` schema in header") and
     `@x402/core`'s `Base64EncodedRegex = /^[A-Za-z0-9+/]*={0,2}$/`.
   - It clears CDP's `valid_json` failure on `/v1/treasury/yield-curve/daily-snapshot`.
-- Before building, check for any in-repo decoder or test that expects base64url (UNVERIFIED). Node
-  `Buffer.from(x, 'base64')` accepts both, so Node clients keep working.
+- In-repo decoders: checked 2026-10-25, every one accepts padded standard base64, so nothing in-repo breaks.
+  `test/fred-named-routes.test.js:81`, `test/fred-limit-pricing.test.js:125`, `test/payer-protection.test.js:391`
+  and `mcp-server/src/payment.ts:27` (each normalizes, then decodes with `'base64'`). Node
+  `Buffer.from(x, 'base64')` accepts both alphabets, so Node clients keep working.
+- Must change in the same PR:
+  - `src/server.js:3431`: HTML copy says the header is "base64url-encoded". Change it to "base64-encoded".
+  - `mcp-server/test/helpers.ts:32`: builds a base64url fixture. Switch it to standard padded base64 so the tests
+    exercise what the server sends.
 
 ### A5. Bazaar extension: concrete `info` values, and coverage beyond 9 routes
 
 - Touches: `BAZAAR_SCHEMAS` at `src/server.js:148-455`; the `/v1/fred/{series_id}` entry is at
-  `src/server.js:149-175`.
+  `src/server.js:149-203`.
 - Change 1: `info.input.queryParams` and `pathParams` hold concrete example values (e.g. `series_id: "UNRATE"`), and
   type descriptors move to `schema`. The bazaar spec: "Facilitators **must** validate `info` against `schema` before
   cataloging."
@@ -107,5 +120,6 @@ self-settle from our own facilitator wallet, so A alone does not list us.
 - Which 15 of the 84 x402scan resources pass. The "+ 76 more" list did not expand in the headless browser.
 - Whether x402scan reads the input schema from our v1 402 body or from the v2 header's bazaar extension (A1/A5).
 - Whether the x402.org facilitator catalog (separate from CDP Bazaar) is worth targeting as a non-CDP option.
-- Whether anything in-repo decodes our header as base64url only (A4).
-- Whether `/v1/treasury/yield-curve/historical` is the only route that validates before `require402Payment` (A3).
+
+Closed 2026-10-25 (review): A4's in-repo decoder question (all accept padded base64) and A3's "only route"
+question (it isn't; `/v1/fred/:series_id` also validates first, now covered in A3).

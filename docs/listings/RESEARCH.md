@@ -3,7 +3,7 @@
 Working log for getting Mercury402 listed in MCP and x402 directories. Every finding carries the live URL it was
 read from and the date. UNVERIFIED means not checked against a live source yet.
 
-Seeded 2026-10-25 from `openclaw-config/handoffs/2026-10-25-2000-hermes-mercury402-distribution-research.md`.
+Seeded 2026-10-25 from an internal research handoff.
 Branch `feat/distribution-listings`, base `da00406`.
 
 ## 1. x402scan
@@ -17,7 +17,7 @@ Read 2026-10-25: https://www.x402scan.com/discovery/spec
   84 resources; every row seen shows `ERR Unknown error`.
   - `/v1/breakeven/10y`: 402 ✗, x402 parses ✗, accepts ✗, input schema ✗, output schema ✗, ownership ✗,
     OG image ✗, favicon ✓.
-- **Our 402 works when hit directly.** From the mini, 75/75 GETs and 1 POST return 402 with `PAYMENT-REQUIRED`.
+- **Our 402 works when hit directly.** From our own network, 75/75 GETs and 1 POST return 402 with `PAYMENT-REQUIRED`.
 - **Spec gaps confirmed:**
   - `x-payment-info.price` has no `mode`. Ours: `{"currency":"USD","amount":"0.15"}`; spec requires `mode: "fixed"`.
   - `POST /v1/treasury/yield-curve/historical` returns 400 on `{}`. Spec says probes must reach the 402 before body
@@ -51,12 +51,11 @@ Other URLs read: https://www.x402scan.com/discovery
     `POST /v1/ai/ask`, `GET /v1/ai/briefing`, `GET /v1/breakeven/10y`.
 - **Part 1's "ERR Unknown error" on every row:** not reproduced today. Cause UNVERIFIED.
 - **(a) Outside fetch, `GET /v1/breakeven/10y`:** fetched via https://api.hackertarget.com/httpheaders/ (third-party
-  datacenter, `CF-RAY ...-IAD`) and from the mini (`CF-RAY ...-ORD`), same second. Both returned:
+  datacenter, `CF-RAY ...-IAD`) and from our own network (`CF-RAY ...-ORD`), same second. Both returned:
   - `402`, `etag W/"231-xK1RkPXbhF7J55Jpx89JlmV30LU"`, `content-length 561`;
   - a `payment-required` header of 584 chars.
 
-  No Cloudflare challenge on either path, so Cloudflare blocking is ruled out. Local log
-  `logs/x402scan-headers-compare.log` (not committed).
+  No Cloudflare challenge on either path, so Cloudflare blocking is ruled out.
 - **(b) base64 vs base64url:**
   - x402scan's spec (https://www.x402scan.com/discovery/spec.md) never mentions base64.
   - The x402 transport spec does, at
@@ -125,7 +124,7 @@ Indexing happens on CDP's facilitator `settle` call. There's no registration for
 - Inference: "a resource using its own facilitator wallet" can't be listed in the CDP Bazaar. Nothing on these
   three pages describes a submit-without-settle path.
 
-### Why validate says `valid=false` (re-run 2026-10-25 ~20:22 EDT, raw JSON in `logs/cdp-validate_*.json`, local only)
+### Why validate says `valid=false` (re-run 2026-10-25 ~20:22 EDT)
 
 What it simulates, per https://docs.cdp.coinbase.com/api-reference/v2/rest-api/x402-facilitator/validate-x402-endpoint.md:
 > Returns a uniform array of preflight check results (reachable, returns402, hasBazaarExtension, parse) and a
@@ -247,14 +246,16 @@ no version field.
   (https://raw.githubusercontent.com/modelcontextprotocol/registry/main/cmd/publisher/commands/publish.go).
 - `validate` POSTs to `https://registry.modelcontextprotocol.io/v0/validate` without auth
   (https://raw.githubusercontent.com/modelcontextprotocol/registry/main/cmd/publisher/commands/validate.go).
-- `mcp-publisher` is not installed on the mini (`which mcp-publisher` → not found).
+- `mcp-publisher` is not installed locally (`which mcp-publisher` → not found).
 
 ### Validation of `mcp-server/server.json` (2026-10-25)
 
 - Local: Draft-7 validation against the 2025-12-11 schema (python `jsonschema` via `uv run`) → `schema errors: 0`,
-  description 97 chars. Raw: `logs/server-json-schema.log` (local only, not committed).
+  description 97 chars.
 - Live: `POST https://registry.modelcontextprotocol.io/v0/validate` with the file body → HTTP 200
-  `{"valid":true,"issues":[]}`. Raw: `logs/registry-validate.log`.
+  `{"valid":true,"issues":[]}`.
+- Re-validated after the title/description change (title 50 chars, description 95): `/v0/validate` → HTTP 200
+  `{"valid":true,"issues":[]}`.
 - Caveat (inference from npm.go above): the npm `mcpName` ownership fetch needs `mercury402-mcp@0.1.4` on npm, which
   is 404 today. `validate` passing does not prove publish will pass until 0.1.4 is live with `mcpName`.
 - `Input.format` enum is `string | number | boolean | filepath`, so `MERCURY402_MAX_PRICE_USD` uses `"number"`.
@@ -273,8 +274,9 @@ with web_extract the same evening. Listing copy: `docs/listings/claude-connector
   policy https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy (re-read) ·
   auth https://claude.com/docs/connectors/building/authentication.
 - **Mechanism:** account-based developer portal; pick "MCP connector" and give it one remote server URL. Needs a
-  paid Claude plan (Pro/Max/Team/Enterprise); "Free accounts can't submit". The older Console form is "no longer
-  supported". Anthropic scans each submission and lists it under the Community label by default.
+  paid Claude plan (Pro/Max/Team/Enterprise); "Free accounts can't submit"
+  (https://claude.com/docs/directory/publish.md:33). The older Console form "is no longer supported"
+  (publish.md:101). Anthropic scans each submission and lists it under the Community label by default.
 - **Fields (from the docs, not the live form):** Server URL (https, remote) · Connection mode (Universal URL |
   Multiple URLs | URL pattern) · Tools (auto-synced; the portal flags tools missing a title or annotations) ·
   Server name ≤100 · One-liner ≤200 · Description ≤2,000 · Categories 1-5 · Documentation URL · Privacy policy
@@ -282,10 +284,11 @@ with web_extract the same evening. Listing copy: `docs/listings/claude-connector
   website, review contact · Auth type (`none` is a supported value: "No authentication (authless server)") ·
   Data handling (first-party/proxied/third-party, PHI, sponsored) · Test & launch instructions · seven compliance
   acknowledgments.
-- **Auth for us:** fine. Review criteria (re-read): "OAuth 2.0 if your tools act on a user's account, or no
-  authentication for public data". No IP allowlist or domain proof needed.
+- **Auth for us:** fine. Submission page pre-submission checklist
+  (https://claude.com/docs/connectors/building/submission.md:22): "OAuth 2.0 if your tools act on a user's
+  account, or no authentication for public data". No IP allowlist or domain proof needed.
 - **Already listed?** No. https://claude.com/marketplace/connectors-plugins (HTTP 200, 1,463,701 bytes) has 0
-  hits for "mercury402" or "dudman1" (`logs/part3-verify.log`, 20:53 EDT). The only "Mercury" there is the
+  hits for "mercury402" or "dudman1" (checked 20:53 EDT). The only "Mercury" there is the
   unrelated bank (`https://mcp.mercury.com/mcp`).
 - **What we lack:** real privacy page and support contact (`/privacy`, `/support` return the homepage; see §6) ·
   an icon (only `favicon.ico`) · a paid-plan Claude account to submit from · correct annotations on
@@ -295,14 +298,17 @@ with web_extract the same evening. Listing copy: `docs/listings/claude-connector
 
 Three texts, quoted verbatim:
 
-- Directory Policy §4.A (re-read, support.claude.com-a75603bea8.md:65): "A. Software that transfers money,
+- Directory Policy §4.A (re-read, https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy):
+  "A. Software that transfers money,
   cryptocurrency, or other financial assets, or executes financial transactions autonomously on behalf of users,
   without human-in-the-loop safeguards." Preamble to §4: "Unless otherwise expressly permitted by us in writing,
   we do not allow Software with certain capabilities into our Directories."
-- Connector checklist, "Unsupported use cases" (re-read, claude.com-54ecb65fec.md:77): "Connectors that do the
+- Connector checklist, "Unsupported use cases" (re-read,
+  https://claude.com/docs/connectors/building/review-criteria.md:73-75): "Connectors that do the
   following aren't accepted: * Transfer money, cryptocurrency, or other financial assets". No human-in-the-loop
   qualifier here.
-- Submission step 9 (re-read, claude.com-a51f9d8c64.md:184): "Seven policy acknowledgments covering the
+- Submission step 9 (re-read, https://claude.com/docs/connectors/building/submission.md:172): "Seven policy
+  acknowledgments covering the
   directory guidelines, first-party API usage, financial transactions, AI media generation, prompt injection,
   conversation data collection, and public documentation. All seven are required."
 
@@ -350,12 +356,10 @@ Whether to submit is Dustin's decision.
 ### Part 3 directory checks (2026-10-25 ~20:30-21:15 EDT)
 
 Method: one read-only subagent per site (none wrote to the repo or logged in anywhere), then my own re-reads and
-live re-checks, logged in `logs/part3-verify.log` (local only, not committed). Mercury402 is listed in **none**
-of these directories.
+live re-checks. Mercury402 is listed in **none** of these directories.
 
-STATUS.md re-check (openclaw-config `6aace61`, current as of 2026-10-08): the only ✓/✅ in the file is line 116,
-the watchdog test, which isn't a listing claim. Item 10 (line 189) already says "nothing submitted yet". Live
-checks agree.
+Prior status claims re-checked: none of them says Mercury402 is listed or submitted anywhere, and the live checks
+agree.
 
 Payoff note: the Official MCP Registry (§3) feeds three of these directly. PulseMCP ingests it, Glama
 "ingests and re-publishes everything in the official registry", and Windsurf/Devin custom registries "must
@@ -513,7 +517,7 @@ Read: https://payapi.market/list · https://payapi.market/llms.txt · https://pa
 - **Our fit, from a live 402 on `/v1/breakeven/10y`:**
   - v1 body: `network base`, asset USDC `0x8335...2913`, `extra {"name":"USD Coin","version":"2"}`, payTo
     `0xF8d5...C6D2`.
-  - `api.mercury402.com` is our own domain on a named cloudflared tunnel, not trycloudflare. Inference: it's
+  - `api.mercury402.com` is our own domain behind a named Cloudflare route, not trycloudflare. Inference: it's
     "durable" under their rule.
 - **Already listed?** No. https://payapi.market/agent/list (HTTP 200, 162,911 bytes) contains no "mercury" string,
   and https://payapi.market/marketplace?q=mercury402 has no mercury402 hit.
@@ -523,9 +527,9 @@ Read: https://payapi.market/list · https://payapi.market/llms.txt · https://pa
 ## 6. mercury402.com hosting and the site pages
 
 - mercury402.com = Cloudflare Pages project `mercury402` (CNAME -> mercury402.pages.dev). No Git connected; deployed
-  by direct upload of `public/` from dudman1/mercury402, from the MBP:
-  `cd ~/mercury402 && git pull && npx -y wrangler@3 pages deploy public --project-name mercury402 --branch main --commit-dirty=true`
-  Source: openclaw-config/mercury402/STATUS.md:28 and :61-65. Not served by the mini.
+  by direct upload of `public/` from dudman1/mercury402:
+  `npx -y wrangler@3 pages deploy public --project-name mercury402 --branch main --commit-dirty=true`
+  It is not served by the API host.
 - Verified 2026-10-25: live https://mercury402.com/ (61,374 bytes) is byte-identical (cmp) to `public/index.html`
   at ceb5b47 (last touched a9b10d5). Response headers: `server: cloudflare`, no origin headers.
 - Why /privacy, /terms, /support return the homepage: `public/` has no `404.html`, so Pages runs in SPA mode.
@@ -534,49 +538,36 @@ Read: https://payapi.market/list · https://payapi.market/llms.txt · https://pa
   All three return HTTP 200 + homepage bytes, so a directory link-checker sees a 200 but no policy text. Same for
   `/logo.png`, `/icon.png`, `/apple-touch-icon.png` (200, text/html, 61,374 B): there is no logo asset.
 - Same `public/` is also served by the API via `app.use(express.static(path.join(__dirname, '../public')))`
-  (src/server.js:125). http://127.0.0.1:4020/privacy -> 404 today.
+  (src/server.js:125). On the API host, `/privacy` -> 404 today.
 - Later PR (not this one): add `public/privacy.html`, `public/terms.html`, `public/support.html` (Pages serves
   `/privacy` for `privacy.html`; same doc: "`/contact.html` will be redirected to `/contact`"), footer links in
   `public/index.html`, and consider `public/404.html` so unknown paths stop returning 200 + homepage. Deploy =
   Dustin's wrangler step above. Side effect: express.static would also serve them at api.mercury402.com/privacy.html.
 - Copy drafts: `docs/listings/site-pages/{privacy,terms,support}.md`.
-- Contact: no email on the site. STATUS.md:33 says `support@mercury402.com` routes via Cloudflare Email Routing to
-  Gmail; MX = route{1,2,3}.mx.cloudflare.net (dig 2026-10-25). Delivery untested -> UNVERIFIED; support page uses
+- Contact: no email on the site. `support@mercury402.com` is meant to route via Cloudflare Email Routing; MX =
+  route{1,2,3}.mx.cloudflare.net (dig 2026-10-25). Delivery untested -> UNVERIFIED; support page uses
   GitHub issues. Private vulnerability reporting on dudman1/mercury402 is OFF (`{"enabled":false}`).
 
 ## 7. Name collision: mercuryx402/mercury-x402-mcp
 
-Record only. No action taken or proposed. Checked 2026-10-25 21:13-21:15 EDT; raw output in `logs/collision.log`
-(local only).
+Record only. No action taken or proposed. Checked 2026-10-25.
 
-- **Where it shows up for our name:**
-  - Glama search https://glama.ai/mcp/servers?query=mercury402 returns it as the only hit; connector page
-    https://glama.ai/mcp/connectors/io.github.mercuryx402/mercury-x402-mcp (200, title "mercury-x402-mcp - MCP
-    Connector | Glama").
-  - PulseMCP https://www.pulsemcp.com/servers/mercuryx402-mercury ("Mercury x402", community, subagent read).
-    `?q=mercury402` returns 0; `?q=mercury` includes it.
-  - Official MCP Registry: `search=io.github.mercuryx402` → `io.github.mercuryx402/mercury-x402-mcp` v1.0.1,
-    remote `https://network.mercury-hq.com/mcp`, "Agent-payable web data over x402: 18 keyless services an agent
-    pays per call."
-- **Repo:** https://github.com/mercuryx402/mercury-x402-mcp. Created 2026-06-05T09:04:05Z, last push
-  2026-06-07T02:00:38Z, 0 stars, 0 forks, MIT, not a fork. Description: "MCP server: 17 keyless,
+- **Official MCP Registry:** `search=io.github.mercuryx402` → `io.github.mercuryx402/mercury-x402-mcp` v1.0.1,
+  remote `https://network.mercury-hq.com/mcp`, "Agent-payable web data over x402: 18 keyless services an agent
+  pays per call."
+- **Glama:** search https://glama.ai/mcp/servers?query=mercury402 returns it as the only hit; connector page
+  https://glama.ai/mcp/connectors/io.github.mercuryx402/mercury-x402-mcp (200, title "mercury-x402-mcp - MCP
+  Connector | Glama").
+- **PulseMCP:** https://www.pulsemcp.com/servers/mercuryx402-mercury ("Mercury x402", community). `?q=mercury402`
+  returns 0; `?q=mercury` includes it.
+- **Repo:** https://github.com/mercuryx402/mercury-x402-mcp, description "MCP server: 17 keyless,
   signed-provenance web-data tools your AI agent can pay for itself over x402 on Base mainnet (USDC). No API key,
-  no account." Homepage `https://mercury-x402-jed.fly.dev`.
-- **Origin/author, as far as the repo says:**
-  - Owner `mercuryx402`: GitHub user, no name/bio/company/email, created 2026-06-05T09:43:09Z, i.e. about 39 min
-    *after* the repo (inference: the repo was created elsewhere and transferred in).
-  - Contributors: `Mercurysignals` 7 commits (user since 2025-04-12, no name/company), `mercuryx402` 1.
-    Earliest commit `66563c6` 2026-06-05 by Mercurysignals.
-  - `package.json`: no `author`, `homepage` or `repository`; `mcpName` `io.github.mercuryx402/mercury-x402-mcp`.
-    npm `mercury-x402-mcp` latest 1.0.1, maintainer `mercurynetwork`, created 2026-06-05T06:34:23Z.
-  - README (46 lines) has no author or contact line. The owner's other repos: `mercury-docs`, `mercury-x402-sdk`,
-    `mercury-desktop`, `mercuryx402`, `awesome-mcp-servers`, all created 2026-06-05 to 06-07.
-  - Its llms.txt calls itself "MERCURY x402 — The agent-payable web-data network".
-- **Product overlap:** different product. Theirs sells web-data tools (fetch, markdown, extract, DNS, sitemap),
-  and its MCP root says tools/call "needs a Mercury API key". Ours sells US financial data. Same words in the
-  name ("mercury", "x402") and same rail (x402, USDC on Base).
+  no account." The repo names no author.
+- **Product overlap:** different product. Theirs sells web-data tools (fetch, markdown, extract, DNS, sitemap).
+  Ours sells US financial data. Same words in the name ("mercury", "x402") and same rail (x402, USDC on Base).
 - **Why it matters for listings:** searches for "mercury402" on Glama and "mercury" on PulseMCP surface theirs,
-  not ours. Our listing copy should say "Mercury402" (one word, with 402) and "US financial data" up front.
+  not ours. Our listing copy says "Mercury402" (one word, with 402) and leads with "Treasury/FRED financial data
+  over x402"; `mcp-server/server.json` title and description now do too.
 
 ## Our own endpoints (2026-10-25)
 

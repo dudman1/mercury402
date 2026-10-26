@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.dudman1/mercury402-mcp",
-  "title": "Mercury402",
-  "description": "Pay-per-call financial data over x402 (USDC on Base): Treasury, FRED, forex, yield spreads, macro",
+  "title": "Mercury402: Treasury/FRED financial data over x402",
+  "description": "Treasury/FRED financial data over x402: pay-per-call US yields, macro and forex in USDC on Base",
   "version": "0.1.4",
   "websiteUrl": "https://mercury402.com",
   "repository": {

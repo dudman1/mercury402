@@ -20,7 +20,12 @@ Shared prerequisites, referenced by number below:
 
 ## 1. Publish privacy, terms and support pages (prerequisite)
 
-**Needed by:** item 4 (Claude, required fields, and missing privacy = "immediate rejection"). Helpful for items 3
+**Needed by:** item 4. Privacy policy URL and support contact are required Claude listing fields (connector
+submission page), and Directory Policy 3.A says software that "connects to a remote service must provide a clear,
+accessible privacy policy link". The "Missing or incomplete privacy policies result in immediate rejection" line
+comes from the submission page's *local*-connectors privacy section
+(https://claude.com/docs/connectors/building/submission.md:73-91), not a rule written for remote connectors. Treat
+it as the likely bar anyway. Helpful for items 3
 and 6 (website and docs links). Items 2, 5 and 7 don't need it.
 
 - **URLs to create:** https://mercury402.com/privacy · https://mercury402.com/terms · https://mercury402.com/support
@@ -39,9 +44,9 @@ Steps (a separate PR in dudman1/mercury402, not this one):
 4. Decide on support: the draft uses GitHub issues because `support@mercury402.com` delivery is untested. Send a
    test mail first if you want the address on the page. Optional: turn on private vulnerability reporting
    (currently `{"enabled":false}`), which the support page's security link assumes.
-5. Deploy from the MBP (STATUS.md:61-65):
+5. Deploy (Dustin's Cloudflare Pages direct upload of `public/`):
    ```bash
-   cd ~/mercury402 && git pull && npx -y wrangler@3 pages deploy public --project-name mercury402 --branch main --commit-dirty=true
+   git pull && npx -y wrangler@3 pages deploy public --project-name mercury402 --branch main --commit-dirty=true
    ```
 6. Check:
    ```bash
@@ -63,54 +68,44 @@ Windsurf/Devin custom registries (same schema). RESEARCH.md §3, §5.
 - **Name (permanent):** `io.github.dudman1/mercury402-mcp`
 - **Prerequisites:** none of P1-P4. Needs a GitHub login as **dudman1**.
 
-### 2a. Before merge: title and description (Dustin decides)
-
-Current `mcp-server/server.json`: `title` = `Mercury402`, `description` = `Pay-per-call financial data over x402
-(USDC on Base): Treasury, FRED, forex, yield spreads, macro` (97). Neither contains "Treasury/FRED financial data
-over x402". Proposed (schema max 100 each):
-
-```json
-"title": "Mercury402: Treasury/FRED financial data over x402",
-"description": "Treasury/FRED financial data over x402: pay-per-call US yields, macro and forex in USDC on Base"
-```
-
-(50 and 95 chars.) `mcp-publisher` reads `server.json` from the checkout, so this can change any time before
-step 2f without a new npm release. That's an inference from how the publisher works and is UNVERIFIED. Not
-applied: changing PR #33 files is outside this docs pass.
-
-### 2b-2g. Release, then publish
+### Release, then publish
 
 All commands are also in the PR #33 body.
 
-b. Merge PR #33 (ff-only). On an up-to-date `master`, tag per `mcp-server/RELEASING.md`. The version fields are
-   already 0.1.4, so skip its `npm version`/`sed` steps:
+a. Merge PR #33 as a fast-forward. "ff-only" means Dustin's local git merge, not a GitHub merge-button option
+   (GitHub's buttons make a merge commit, squash, or rebase with new hashes):
+   ```bash
+   git checkout master && git pull --ff-only && git merge --ff-only origin/feat/distribution-listings && git push origin master
+   ```
+   Then, on that up-to-date `master`, tag per `mcp-server/RELEASING.md`. The version fields are already 0.1.4, so
+   skip its `npm version`/`sed` steps:
    ```bash
    git tag v0.1.4 && git push origin v0.1.4
    ```
    That runs **Publish mercury402-mcp** (`.github/workflows/publish-mcp.yml`, trusted publishing, provenance).
-c. Wait for npm:
+b. Wait for npm:
    ```bash
    npm view mercury402-mcp@0.1.4 version mcpName
    # expect: version = '0.1.4'  mcpName = 'io.github.dudman1/mercury402-mcp'
    ```
-d. Install `mcp-publisher` v1.8.4:
+c. Install `mcp-publisher` v1.8.4:
    ```bash
    cd /tmp
    curl -L -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.4/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz"
    tar xzf mcp-publisher.tar.gz mcp-publisher && ./mcp-publisher --version
    ```
-e. Validate, then log in as dudman1:
+d. Validate, then log in as dudman1:
    ```bash
    cd <master-checkout>/mcp-server
    /tmp/mcp-publisher validate server.json
    /tmp/mcp-publisher login github
    # open https://github.com/login/device, enter the printed code, authorize as dudman1
    ```
-f. Publish:
+e. Publish:
    ```bash
    /tmp/mcp-publisher publish server.json
    ```
-g. Registry search check:
+f. Registry search check:
    ```bash
    curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.dudman1/mercury402-mcp"
    curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=mercury"
