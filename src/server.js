@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const { getPrice } = require('./pricing');
 const { getCatalog } = require('./catalog');
+const { loadOpenApi, buildBazaarIndex } = require('./bazaar-discovery');
 const { preValidateTreasuryHistorical } = require('./treasury-historical-validate');
 const { paymentHeaderOf, bearerTokenOf } = require('./x402-headers');
 const { errorHandler, installProcessGuards } = require('./error-guards');
@@ -105,7 +106,8 @@ function getCacheMetrics() {
   };
 }
 
-app.use(cors());
+// Browsers only let x402 clients read these response headers if CORS exposes them.
+app.use(cors({ exposedHeaders: ['PAYMENT-REQUIRED', 'PAYMENT-SIGNATURE', 'PAYMENT-RESPONSE', 'X-PAYMENT-RESPONSE'] }));
 app.use(express.json());
 
 // GET / content negotiation. Must run before express.static, which would
@@ -526,10 +528,29 @@ const BAZAAR_SCHEMAS = {
   }
 };
 
+// Every other priced route gets its bazaar block generated from its
+// docs/openapi.yaml operation (src/bazaar-discovery.js). The spec is loaded
+// once at startup; a route missing from it gets the empty-properties shape.
+const BAZAAR_INDEX = (() => {
+  let doc = {};
+  try {
+    doc = loadOpenApi();
+  } catch (e) {
+    console.warn(`⚠️  bazaar: could not load docs/openapi.yaml (${e.message}); every non-explicit route gets the empty-properties shape`);
+  }
+  const index = buildBazaarIndex(getCatalog().endpoints, BAZAAR_SCHEMAS, doc);
+  if (index.missing.length) {
+    console.warn(`⚠️  bazaar: no OpenAPI operation for ${index.missing.length} priced route(s), using the empty-properties shape: ${index.missing.join(', ')}`);
+  }
+  return index.byKey;
+})();
+
 // The bazaar extension for an endpoint, as emitted on the wire. A deep copy so
-// callers can't mutate BAZAAR_SCHEMAS; info and schema pass through unchanged.
-function bazaarForEndpoint(endpointPath) {
-  const bz = BAZAAR_SCHEMAS[endpointPath];
+// callers can't mutate the index; info and schema pass through unchanged.
+// Explicit BAZAAR_SCHEMAS entries are method-agnostic.
+function bazaarForEndpoint(endpointPath, method) {
+  const bz = BAZAAR_SCHEMAS[endpointPath]
+    || BAZAAR_INDEX.get(`${String(method || 'GET').toUpperCase()} ${endpointPath}`);
   if (!bz) return null;
   return JSON.parse(JSON.stringify(bz));
 }
@@ -1006,7 +1027,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   };
 
   // Add Bazaar extensions if schema exists for this endpoint
-  const bazaarSchema = bazaarForEndpoint(endpointPath);
+  const bazaarSchema = bazaarForEndpoint(endpointPath, method);
   if (bazaarSchema) {
     paymentRequiredV2.extensions = {
       bazaar: bazaarSchema
@@ -1036,7 +1057,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       maxTimeoutSeconds: 120,
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       outputSchema: (() => {
-        const bz = bazaarForEndpoint(endpointPath);
+        const bz = bazaarForEndpoint(endpointPath, normalizedMethod);
         const exampleVal = bz && bz.info && bz.info.output && bz.info.output.example ? bz.info.output.example : {};
         return {
           input: bz && bz.info ? bz.info.input : { type: 'http', method: normalizedMethod, discoverable: true },
@@ -1048,7 +1069,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
         version: '2'
       }
     }],
-    ...(bazaarForEndpoint(endpointPath) ? { extensions: { bazaar: bazaarForEndpoint(endpointPath) } } : {})
+    ...(bazaarForEndpoint(endpointPath, normalizedMethod) ? { extensions: { bazaar: bazaarForEndpoint(endpointPath, normalizedMethod) } } : {})
   };
 }
 
@@ -2748,22 +2769,7 @@ app.get('/.well-known/x402', (req, res) => {
           price_usd: price
         },
         // Bazaar discovery metadata — required by x402scan/Bazaar validators
-        ...(bazaarForEndpoint(endpoint)
-          ? { extensions: { bazaar: bazaarForEndpoint(endpoint) } }
-          : {
-              extensions: {
-                bazaar: {
-                  info: { input: { type: 'http', method: method } },
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      input: { type: 'object', properties: { queryParams: { type: 'object', properties: {} } } },
-                      output: { type: 'object', properties: { example: { source: 'mercury402', endpoint: endpoint, description: ENDPOINT_DESCRIPTIONS[endpoint] || '' } } }
-                    }
-                  }
-                }
-              }
-            })
+        ...(bazaarForEndpoint(endpoint, method) ? { extensions: { bazaar: bazaarForEndpoint(endpoint, method) } } : {})
       };
     });
   

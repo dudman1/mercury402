@@ -103,6 +103,30 @@ paths:
         - x402: {}
       tags:
       - AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                  minLength: 8
+                  maxLength: 500
+                  description: Natural-language question (8-500 chars)
+                series:
+                  type: array
+                  maxItems: 6
+                  items:
+                    type: string
+                  description: Optional Mercury402 FRED paths, e.g. ["/v1/fred/cpi"] (max 6)
+              required:
+              - question
+            example:
+              question: How has core CPI inflation trended over the last year?
+              series:
+              - /v1/fred/cpi-core
       responses:
         '200':
           description: Paid success — JSON payload with data and provenance

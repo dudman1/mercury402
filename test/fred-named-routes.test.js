@@ -100,8 +100,10 @@ test('every named FRED endpoint returns its own 402 descriptor, not the generic 
     assert.strictEqual(accept.payTo, MERCHANT, `${p}: payTo`);
     assert.strictEqual(accept.network, 'base', `${p}: network`);
     assert.strictEqual(accept.asset, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', `${p}: asset`);
-    // The generic route attaches the {series_id} bazaar schema; named routes have none.
-    assert.strictEqual(body.extensions, undefined, `${p}: generic bazaar schema attached`);
+    // The generic route attaches the {series_id} bazaar schema (date / range /
+    // limit query params); named routes carry their own zero-parameter one.
+    assert.ok(body.extensions && body.extensions.bazaar, `${p}: no bazaar block`);
+    assert.deepStrictEqual(body.extensions.bazaar.info.input, { type: 'http', method: 'GET', queryParams: {} }, `${p}: generic bazaar schema attached`);
     assert.strictEqual(v2.accepts[0].amount, amount, `${p}: v2 amount`);
     assert.strictEqual(v2.resource.url, `https://api.mercury402.com${p}`, `${p}: v2 resource`);
   }
