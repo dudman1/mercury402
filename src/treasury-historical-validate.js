@@ -1,5 +1,12 @@
 // Pre-payment validation for POST /v1/treasury/yield-curve/historical.
 // Kept in its own module so it can be unit-tested without booting server.js.
+//
+// Runs before require402Payment. An unpaid request (no payment artifact) is
+// passed straight through so it gets the 402 challenge like every other priced
+// route — x402 probes must see a 402, not a 400. A request that does carry a
+// payment is validated here, so bad dates get a free 400 before verify/settle.
+
+const { hasPaymentArtifact } = require('./x402-headers');
 
 const MAX_RANGE_DAYS = 90;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -22,6 +29,8 @@ function parseIsoDate(value) {
 }
 
 function preValidateTreasuryHistorical(req, res, next) {
+  if (!hasPaymentArtifact(req)) return next();
+
   const { start_date, end_date } = req.body || {};
 
   if (!start_date || !end_date) {

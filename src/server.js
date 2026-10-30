@@ -10,6 +10,7 @@ require('dotenv').config();
 const { getPrice } = require('./pricing');
 const { getCatalog } = require('./catalog');
 const { preValidateTreasuryHistorical } = require('./treasury-historical-validate');
+const { paymentHeaderOf, bearerTokenOf } = require('./x402-headers');
 const { errorHandler, installProcessGuards } = require('./error-guards');
 
 installProcessGuards();
@@ -141,14 +142,20 @@ if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_TOKEN === 't
   process.exit(1);
 }
 
-// Bazaar schema metadata for x402scan discovery
-// Fixed BAZAAR_SCHEMAS structure for x402scan compatibility
-// Replace lines 117-181 in ~/mercury-x402-service/src/server.js
+// Bazaar discovery extension (extensions.bazaar) for priced routes.
+// Shape per the x402 v2 bazaar spec (coinbase/x402 specs/extensions/bazaar.md):
+// - info.input: { type: 'http', method, queryParams?, headers? } for GET, or
+//   { type: 'http', method, bodyType, body, queryParams?, headers? } for POST.
+//   queryParams / body hold EXAMPLE VALUES (scalars), not JSON-schema fragments.
+// - info.output: { type: 'json', example }.
+// - schema: JSON Schema (draft 2020-12) that `info` must validate against;
+//   facilitators (CDP, x402scan) reject the extension if it does not.
+// Path params are not declared: resource.url already carries the concrete path.
 
 const BAZAAR_SCHEMAS = {
   '/v1/fred/{series_id}': {
     info: {
-      input: { type: 'http', method: 'GET', pathParams: { series_id: { type: 'string', description: 'FRED series ID (e.g., UNRATE, GDP, CPIAUCSL)', example: 'UNRATE' } }, queryParams: { date: { type: 'string', description: 'Single date observation (YYYY-MM-DD)', example: '2026-01-01' }, observation_start: { type: 'string', description: 'Start date for range query (YYYY-MM-DD)', example: '2020-01-01' }, observation_end: { type: 'string', description: 'End date for range query (YYYY-MM-DD)', example: '2023-12-31' }, limit: { type: 'integer', description: 'Max observations to return, 1-1000 (limit > 1 costs 2x; ignored with date or a range)', example: 5 } } },
+      input: { type: 'http', method: 'GET', queryParams: { date: '2026-01-01', observation_start: '2020-01-01', observation_end: '2023-12-31', limit: 5 } },
       output: { type: 'json', example: { series_id: 'UNRATE', realtime_start: '2026-03-11', realtime_end: '2026-03-11', observations: [{ date: '2024-01-01', value: '3.7' }] } }
     },
     schema: {
@@ -160,13 +167,6 @@ const BAZAAR_SCHEMAS = {
           properties: {
             type: { type: 'string', const: 'http' },
             method: { type: 'string', const: 'GET' },
-            pathParams: {
-              type: 'object',
-              properties: {
-                series_id: { type: 'string', description: 'FRED series ID' }
-              },
-              required: ['series_id']
-            },
             queryParams: {
               type: 'object',
               properties: {
@@ -177,25 +177,33 @@ const BAZAAR_SCHEMAS = {
               }
             }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            series_id: { type: 'string' },
-            realtime_start: { type: 'string' },
-            realtime_end: { type: 'string' },
-            observations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  date: { type: 'string' },
-                  value: { type: 'string' }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                series_id: { type: 'string' },
+                realtime_start: { type: 'string' },
+                realtime_end: { type: 'string' },
+                observations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      date: { type: 'string' },
+                      value: { type: 'string' }
+                    }
+                  }
                 }
               }
             }
-          }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -203,7 +211,7 @@ const BAZAAR_SCHEMAS = {
   },
   '/v1/treasury/yield-curve/daily-snapshot': {
     info: {
-      input: { type: 'http', method: 'GET', queryParams: { date: { type: 'string', description: 'Specific date for yield curve (YYYY-MM-DD)', example: '2026-03-01' } } },
+      input: { type: 'http', method: 'GET', queryParams: { date: '2026-03-01' } },
       output: { type: 'json', example: { date: '2026-03-11', rates: { '1_MONTH': 5.42, '3_MONTH': 5.38 } } }
     },
     schema: {
@@ -222,14 +230,22 @@ const BAZAAR_SCHEMAS = {
               }
             }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            date: { type: 'string' },
-            rates: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                date: { type: 'string' },
+                rates: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -251,16 +267,24 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            timestamp: { type: 'string' },
-            gdp: { type: 'object' },
-            unemployment: { type: 'object' },
-            inflation: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                timestamp: { type: 'string' },
+                gdp: { type: 'object' },
+                unemployment: { type: 'object' },
+                inflation: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -282,15 +306,23 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            timestamp: { type: 'string' },
-            cpi: { type: 'object' },
-            core_cpi: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                timestamp: { type: 'string' },
+                cpi: { type: 'object' },
+                core_cpi: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -312,15 +344,23 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            timestamp: { type: 'string' },
-            unemployment_rate: { type: 'object' },
-            labor_force_participation: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                timestamp: { type: 'string' },
+                unemployment_rate: { type: 'object' },
+                labor_force_participation: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -342,14 +382,22 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            timestamp: { type: 'string' },
-            indicators: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                timestamp: { type: 'string' },
+                indicators: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -380,15 +428,23 @@ const BAZAAR_SCHEMAS = {
               additionalProperties: false
             }
           },
-          required: ['type', 'method', 'bodyType', 'body']
+          required: ['type', 'method', 'bodyType', 'body'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            start_date: { type: 'string' },
-            end_date: { type: 'string' },
-            data: { type: 'array' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                start_date: { type: 'string' },
+                end_date: { type: 'string' },
+                data: { type: 'array' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -410,14 +466,22 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            timestamp: { type: 'string' },
-            auctions: { type: 'array' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                timestamp: { type: 'string' },
+                auctions: { type: 'array' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -439,14 +503,22 @@ const BAZAAR_SCHEMAS = {
             method: { type: 'string', const: 'GET' },
             queryParams: { type: 'object', description: 'No query parameters required', properties: {} }
           },
-          required: ['type', 'method']
+          required: ['type', 'method'],
+          additionalProperties: false
         },
         output: {
           type: 'object',
           properties: {
-            date: { type: 'string' },
-            rates: { type: 'object' }
-          }
+            type: { type: 'string' },
+            example: {
+              type: 'object',
+              properties: {
+                date: { type: 'string' },
+                rates: { type: 'object' }
+              }
+            }
+          },
+          required: ['type']
         }
       },
       required: ['input', 'output']
@@ -454,25 +526,12 @@ const BAZAAR_SCHEMAS = {
   }
 };
 
-// Normalize bazaar schema to validator-expected nesting:
-// extensions.bazaar.schema.properties.{input,output}.properties.*
+// The bazaar extension for an endpoint, as emitted on the wire. A deep copy so
+// callers can't mutate BAZAAR_SCHEMAS; info and schema pass through unchanged.
 function bazaarForEndpoint(endpointPath) {
   const bz = BAZAAR_SCHEMAS[endpointPath];
   if (!bz) return null;
-  const norm = JSON.parse(JSON.stringify(bz));
-  if (norm.schema && norm.schema.properties) {
-    const p = norm.schema.properties;
-    const hasExample = p.output && p.output.properties && p.output.properties.example;
-    if (!hasExample) {
-      const ex = norm.info && norm.info.output && norm.info.output.example ? norm.info.output.example : {};
-      p.output = { type: 'object', properties: { example: ex } };
-    }
-    if (p.input && !p.input.properties) p.input = { type: 'object', properties: {} };
-    if (p.input && p.input.properties && !p.input.properties.queryParams && !p.input.properties.body) {
-      p.input.properties.queryParams = { type: 'object', properties: {} };
-    }
-  }
-  return norm;
+  return JSON.parse(JSON.stringify(bz));
 }
 
 
@@ -920,7 +979,9 @@ const ENDPOINT_DESCRIPTIONS = {
   '/v1/treasury/tips-rates/current': 'Current TIPS rates (5, 7, 10, 20, 30-year)'
 };
 
-// Helper: Encode x402 payment info as base64url for Payment-Required header (v2 format)
+// Helper: Encode x402 payment info for the PAYMENT-REQUIRED header (v2 format).
+// Standard base64 (RFC 4648 §4) with padding: the x402 v2 HTTP transport and
+// CDP's validator decode it strictly, so no base64url alphabet, no '=' strip.
 function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
   const paymentRequiredV2 = {
     x402Version: 2,
@@ -952,11 +1013,7 @@ function encodePaymentRequired(price, endpointPath, resolvedPath, method) {
     };
   }
   
-  const json = JSON.stringify(paymentRequiredV2);
-  const base64 = Buffer.from(json).toString('base64');
-  // Convert standard base64 to base64url
-  const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  return base64url;
+  return Buffer.from(JSON.stringify(paymentRequiredV2)).toString('base64');
 }
 
 function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
@@ -980,8 +1037,7 @@ function buildV1PaymentRequiredBody(price, endpointPath, resolvedPath, method) {
       asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
       outputSchema: (() => {
         const bz = bazaarForEndpoint(endpointPath);
-        const ex = bz && bz.schema && bz.schema.properties && bz.schema.properties.output;
-        const exampleVal = ex && ex.properties && ex.properties.example ? ex.properties.example : {};
+        const exampleVal = bz && bz.info && bz.info.output && bz.info.output.example ? bz.info.output.example : {};
         return {
           input: bz && bz.info ? bz.info.input : { type: 'http', method: normalizedMethod, discoverable: true },
           output: { properties: { example: exampleVal } }
@@ -1275,9 +1331,7 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
     }
 
     // ---- Bearer tokens -------------------------------------------------------
-    const authHeader = req.headers.authorization || '';
-    const bearerMatch = authHeader.match(/^Bearer\s+(x402_\S+)$/);
-    const token = bearerMatch ? bearerMatch[1] : null;
+    const token = bearerTokenOf(req);
 
     if (token) {
       // The only token the server recognises is the dev-only `x402_test`. The
@@ -1309,8 +1363,9 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
 
     // ---- x402 payment header -------------------------------------------------
     // v2 clients send PAYMENT-SIGNATURE, v1 clients (which follow the v1 402
-    // body) send X-PAYMENT. Same base64 JSON envelope; v2 wins if both present.
-    const paymentSig = req.headers['payment-signature'] || req.headers['x-payment'];
+    // body) send X-PAYMENT. Same base64 JSON envelope; v2 wins if both present
+    // (PAYMENT_HEADERS order, src/x402-headers.js).
+    const paymentSig = paymentHeaderOf(req);
     if (!paymentSig) {
       // No payment artifact at all: a probe. No reason, no wallet.
       res.locals.paymentMeta = { verified: false, price_usd: 0 };
@@ -2318,9 +2373,11 @@ app.get('/v1/treasury/yield-curve/historical', (req, res) => {
   });
 });
 
-// SECURITY (2026-04-20): preValidateTreasuryHistorical now runs BEFORE
-// require402Payment so malformed/invalid date-range requests return 400
-// without consuming the caller's payment.
+// SECURITY (2026-04-20): preValidateTreasuryHistorical runs BEFORE
+// require402Payment so a paid request with missing/invalid dates gets a free
+// 400 before verify/settle — the caller's payment is never consumed.
+// An unpaid request (no PAYMENT-SIGNATURE / X-PAYMENT / x402 bearer) skips
+// validation and gets the 402 challenge, so x402 probes see a 402 here too.
 app.post('/v1/treasury/yield-curve/historical', preValidateTreasuryHistorical, require402Payment('/v1/treasury/yield-curve/historical', getPrice('/v1/treasury/yield-curve/historical'), 'POST'), async (req, res) => {
   try {
     if (!FRED_API_KEY) {
@@ -3428,7 +3485,7 @@ const DOCS_HTML = `<!DOCTYPE html>
 
   <h2>Step 1 — Make an unpaid request (see the 402)</h2>
   <pre><code>curl -i https://api.mercury402.com/v1/fred/UNRATE</code></pre>
-  <p>You will get back <code>HTTP 402 Payment Required</code> with a <code>Payment-Required</code> header containing a base64url-encoded payment descriptor:</p>
+  <p>You will get back <code>HTTP 402 Payment Required</code> with a <code>Payment-Required</code> header containing a base64-encoded payment descriptor:</p>
   <pre><code>HTTP/2 402
 Payment-Required: eyJ4NDAyVmVyc2lvbiI6MiwgImFjY2VwdHMiOlt7Li4ufV19
 

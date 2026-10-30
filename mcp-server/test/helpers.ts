@@ -29,7 +29,7 @@ export function make402(resolvedPath: string, priceUsd: number, method = 'GET', 
     ],
     resource: { url: `https://api.mercury402.com${resolvedPath}`, method, description: 'Deterministic financial data from official sources', mimeType: 'application/json' },
   };
-  const header = Buffer.from(JSON.stringify(v2)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const header = Buffer.from(JSON.stringify(v2)).toString('base64');
   const v1Body = {
     x402Version: 1,
     error: 'payment required',

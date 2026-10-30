@@ -1,0 +1,56 @@
+{
+  "$comment": "Vendored from coinbase/x402 specs/extensions/bazaar.md at commit 0e6e8c55d86b4f14234fb6e49a4052074fb93e57 (https://github.com/coinbase/x402/blob/0e6e8c55d86b4f14234fb6e49a4052074fb93e57/specs/extensions/bazaar.md). The spec's 'Example: GET Endpoint' and 'Example: POST Endpoint' schemas are joined under input.oneOf. Only adaptation: the GET example's endpoint-specific queryParams ({ city: string, required }) is replaced by the POST example's generic form, widened to the scalar example values the spec tables describe (Query parameter examples). Everything else is verbatim.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "http" },
+            "method": { "type": "string", "enum": ["GET", "HEAD", "DELETE"] },
+            "queryParams": {
+              "type": "object",
+              "additionalProperties": { "type": ["string", "number", "integer", "boolean"] }
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "required": ["type", "method"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "http" },
+            "method": { "type": "string", "enum": ["POST", "PUT", "PATCH"] },
+            "bodyType": { "type": "string", "enum": ["json", "form-data", "text"] },
+            "body": { "type": "object" },
+            "queryParams": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "required": ["type", "method", "bodyType", "body"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "example": { "type": "object" }
+      },
+      "required": ["type"]
+    }
+  },
+  "required": ["input"]
+}

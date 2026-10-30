@@ -97,6 +97,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.15'
         protocols:
         - x402: {}
@@ -129,6 +130,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.10'
         protocols:
         - x402: {}
@@ -159,6 +161,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -189,6 +192,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -219,6 +223,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -249,6 +254,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -500,6 +506,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -530,6 +537,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -560,6 +568,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -590,6 +599,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -620,6 +630,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -650,6 +661,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -680,6 +692,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -710,6 +723,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -740,6 +754,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -770,6 +785,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -800,6 +816,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -830,6 +847,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -860,6 +878,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -890,6 +909,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -920,6 +940,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -950,6 +971,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -980,6 +1002,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1010,6 +1033,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1040,6 +1064,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1070,6 +1095,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1100,6 +1126,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1130,6 +1157,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1160,6 +1188,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1190,6 +1219,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1220,6 +1250,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1250,6 +1281,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1280,6 +1312,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1310,6 +1343,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1340,6 +1374,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1370,6 +1405,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1400,6 +1436,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1430,6 +1467,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1460,6 +1498,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1490,6 +1529,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1520,6 +1560,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1550,6 +1591,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1580,6 +1622,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1610,6 +1653,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1640,6 +1684,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1670,6 +1715,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1700,6 +1746,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1730,6 +1777,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1760,6 +1808,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1790,6 +1839,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1820,6 +1870,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1850,6 +1901,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1880,6 +1932,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1910,6 +1963,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1940,6 +1994,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -1970,6 +2025,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2000,6 +2056,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2030,6 +2087,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2060,6 +2118,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2090,6 +2149,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2120,6 +2180,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2150,6 +2211,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2345,6 +2407,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.10'
         protocols:
         - x402: {}
@@ -2375,6 +2438,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.10'
         protocols:
         - x402: {}
@@ -2968,6 +3032,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -2998,6 +3063,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -3028,6 +3094,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -3058,6 +3125,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -3088,6 +3156,7 @@ paths:
       x-payment-info:
         price:
           currency: USD
+          mode: fixed
           amount: '0.05'
         protocols:
         - x402: {}
@@ -3270,7 +3339,7 @@ components:
 
         1. Call any paid endpoint without payment headers
 
-        2. Read the `Payment-Required` header (base64url x402 descriptor)
+        2. Read the `Payment-Required` header (base64 x402 descriptor)
 
         3. Use an x402-compatible client or payment processor to create a signed payment payload
 

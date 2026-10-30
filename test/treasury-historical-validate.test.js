@@ -4,16 +4,38 @@ const { preValidateTreasuryHistorical, MAX_RANGE_DAYS } = require('../src/treasu
 
 // Runs the middleware against a fake req/res. `next` stands in for the x402
 // payment middleware + FRED fetch, so nothing past validation (and no network)
-// is ever reached.
-function run(body) {
+// is ever reached. Validation only applies to requests carrying a payment, so
+// by default the fake request carries a PAYMENT-SIGNATURE header.
+const PAID = { 'payment-signature': 'eyJ4NDAyVmVyc2lvbiI6Mn0=' };
+function run(body, headers = PAID) {
   const out = { status: null, body: null, passed: false };
   const res = {
     status(code) { out.status = code; return this; },
     json(payload) { out.body = payload; return this; }
   };
-  preValidateTreasuryHistorical({ body }, res, () => { out.passed = true; });
+  preValidateTreasuryHistorical({ body, headers }, res, () => { out.passed = true; });
   return out;
 }
+
+test('unpaid request skips validation so require402Payment can answer 402', () => {
+  for (const body of [undefined, {}, { start_date: 'bad' }, { start_date: '2024-01-01', end_date: '2025-01-01' }]) {
+    const r = run(body, {});
+    assert.ok(r.passed, JSON.stringify(body));
+    assert.strictEqual(r.status, null);
+  }
+});
+
+test('every payment artifact require402Payment reads triggers validation', () => {
+  for (const headers of [{ 'payment-signature': 'x' }, { 'x-payment': 'x' }, { authorization: 'Bearer x402_test' }]) {
+    const r = run({}, headers);
+    assert.strictEqual(r.status, 400, JSON.stringify(headers));
+    assert.strictEqual(r.body.error.code, 'MISSING_PARAMS');
+  }
+});
+
+test('a non-x402 Authorization header is not a payment artifact', () => {
+  assert.ok(run({}, { authorization: 'Bearer something-else' }).passed);
+});
 
 function withTZ(tz, fn) {
   const prev = process.env.TZ;
