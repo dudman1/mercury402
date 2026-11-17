@@ -794,17 +794,64 @@ function getProvider() {
   );
 }
 
+// One facilitator signer per provider, instead of a fresh ethers.Wallet for
+// every call.
+let facilitatorSigner = null; // { provider, wallet }
+function facilitatorWallet(provider) {
+  if (!facilitatorSigner || facilitatorSigner.provider !== provider) {
+    const key = process.env.SERVER_PRIVATE_KEY;
+    facilitatorSigner = { provider, wallet: new ethers.Wallet(key.startsWith('0x') ? key : '0x' + key, provider) };
+  }
+  return facilitatorSigner.wallet;
+}
+
 function facilitatorUsdc(provider) {
-  const key = process.env.SERVER_PRIVATE_KEY;
-  const facilitatorWallet = new ethers.Wallet(key.startsWith('0x') ? key : '0x' + key, provider);
   return new ethers.Contract(
     process.env.USDC_CONTRACT_BASE,
     [
       'function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)',
       'function balanceOf(address account) view returns (uint256)',
     ],
-    facilitatorWallet
+    facilitatorWallet(provider)
   );
+}
+
+// ---- Facilitator nonce source ----------------------------------------------
+// Every settlement broadcast goes through this one in-process queue, one at a
+// time, with an explicit facilitator nonce. Left to ethers, each settlement
+// reads the pending nonce on its own, so two settlements in the same instant
+// pick the same one: the second is refused, or replaces the first.
+//
+// The nonce is the chain's pending count, or the one after our last broadcast
+// when the RPC has not caught up with it yet. That local value is trusted
+// only briefly, so a broadcast that was dropped cannot leave a permanent gap.
+const FACILITATOR_NONCE_TRUST_MS = 60000;
+const FACILITATOR_NONCE_READ_TIMEOUT_MS = 10000;
+let settlementQueue = Promise.resolve();
+let facilitatorNonceHint = null; // { next, at }
+
+// Runs `send(nonce)` once every earlier settlement broadcast has been handed
+// to the RPC (or failed). `send` returns the broadcast transaction. A send
+// that throws leaves the nonce unused.
+function broadcastInOrder(provider, send) {
+  const slot = settlementQueue.then(async () => {
+    const address = facilitatorWallet(provider).address;
+    let timer;
+    const chainNonce = await Promise.race([
+      provider.getTransactionCount(address, 'pending'),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('facilitator nonce read timed out')), FACILITATOR_NONCE_READ_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    let nonce = Number(chainNonce);
+    const hint = facilitatorNonceHint;
+    if (hint && Date.now() - hint.at < FACILITATOR_NONCE_TRUST_MS && hint.next > nonce) nonce = hint.next;
+    const tx = await send(nonce);
+    facilitatorNonceHint = { next: nonce + 1, at: Date.now() };
+    return tx;
+  });
+  settlementQueue = slot.then(() => {}, () => {});
+  return slot;
 }
 
 // Maps an ethers / USDC error to a machine-readable rejection_reason.
@@ -828,8 +875,8 @@ function classifyChainError(err, phase) {
 }
 
 // True when the mined receipt carries a USDC Transfer(from -> merchant) of at
-// least `requiredUnits`. Informational once status === 1: the transfer already
-// happened, so a mismatch is logged, never turned into a rejection.
+// least `requiredUnits`. Blocking: a status-1 receipt without it releases no
+// data (502, charged "unknown").
 function receiptHasMerchantTransfer(receipt, from, requiredUnits) {
   const usdc = String(process.env.USDC_CONTRACT_BASE || '').toLowerCase();
   const merchant = String(MERCHANT_WALLET).toLowerCase();
@@ -1108,11 +1155,13 @@ class PaymentRejection extends Error {
 //   2. The handler runs with its response intercepted. A non-2xx answer is
 //      sent unchanged and nothing is charged. A 2xx answer is held back,
 //      the authorization is settled on-chain, and only a mined status-1
-//      receipt releases the body. A settlement failure discards the body
-//      and answers 402 with the reason.
+//      receipt for the transaction this request broadcast, carrying the
+//      USDC Transfer(payer -> merchant) log, releases the body. A settlement
+//      failure discards the body and answers 402 with the reason.
 //   3. Once a transaction has been broadcast the client never sees a fresh
-//      402 challenge: a reverted tx is a 402 carrying its reason and hash, an
-//      unreadable receipt is a 502 {charged:"unknown", tx_hash}.
+//      402 challenge: a reverted or replaced tx is a 402 carrying its reason
+//      and hash; an unreadable receipt, or a mined one without the merchant
+//      transfer log, is a 502 {charged:"unknown", tx_hash}.
 //
 // Every rejected or uncharged payment attempt is logged with the payer's
 // address, nonce and a rejection_reason. Requests with no payment artifact
@@ -1261,49 +1310,46 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       try {
         provider = getProvider();
         const USDC = facilitatorUsdc(provider);
-        tx = await USDC.transferWithAuthorization(
-          authorization.from,
-          authorization.to,
-          authorization.value,
-          authorization.validAfter,
-          authorization.validBefore,
-          authorization.nonce,
-          signature.v, signature.r, signature.s
-        );
+        tx = await broadcastInOrder(provider, (facilitatorNonce) => {
+          // This request may have queued behind other settlements.
+          const nowAtBroadcast = Math.floor(Date.now() / 1000);
+          if (Number(authorization.validBefore) <= nowAtBroadcast + VALIDITY_SLACK_SECONDS) {
+            throw new PaymentRejection('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtBroadcast})`);
+          }
+          return USDC.transferWithAuthorization(
+            authorization.from,
+            authorization.to,
+            authorization.value,
+            authorization.validAfter,
+            authorization.validBefore,
+            authorization.nonce,
+            signature.v, signature.r, signature.s,
+            { nonce: facilitatorNonce }
+          );
+        });
       } catch (err) {
         // Nothing was broadcast: the authorization is still unspent.
+        if (err instanceof PaymentRejection) return rejectPayment(err.reason, err.message, meta);
         return rejectPayment(classifyChainError(err, 'settle'), err.message, meta);
       }
 
       // Broadcast happened. From here on the client never gets a fresh challenge.
       meta.tx_hash = tx.hash;
-      let receipt = null;
-      try {
-        receipt = await tx.wait(1, SETTLE_WAIT_MS);
-      } catch (err) {
-        if (err && err.receipt) receipt = err.receipt; // ethers throws on status 0 and attaches the receipt
-        else console.error(`x402: tx.wait failed for ${tx.hash}: ${err.message}`);
-      }
-      for (let attempt = 0; !receipt && attempt < RECEIPT_RETRIES; attempt++) {
-        await new Promise((r) => setTimeout(r, RECEIPT_RETRY_MS));
-        try {
-          receipt = await provider.getTransactionReceipt(tx.hash);
-        } catch (err) {
-          console.error(`x402: receipt fetch ${attempt + 1}/${RECEIPT_RETRIES} failed for ${tx.hash}: ${err.message}`);
-        }
-      }
 
-      if (!receipt) {
-        // Unknown outcome: the payer may or may not have been charged.
+      // Only a receipt for the transaction this request broadcast counts.
+      const isOurReceipt = (r) => Boolean(r && r.hash && String(r.hash).toLowerCase() === String(tx.hash).toLowerCase());
+
+      // Broadcast, but the payer may or may not have been charged: 502, no
+      // data, no fresh challenge.
+      const unknownOutcome = (reason, code, message, txHash) => {
         gate.state = 'done';
         releaseReservation();
-        const reason = 'receipt_unknown';
-        console.error(`x402: ${reason} for ${tx.hash} (payer ${from}) [${reason}]`);
-        logPayment(endpointPath, 0, from, false, reason, tx.hash);
+        console.error(`x402: ${reason} for ${txHash} (payer ${from}) [${reason}]`);
+        logPayment(endpointPath, 0, from, false, reason, txHash);
         res.locals.paymentMeta = {
           wallet_address: from,
           nonce,
-          tx_hash: tx.hash,
+          tx_hash: txHash,
           wallet_source: 'x402_eip3009',
           verified: false,
           price_usd: 0,
@@ -1311,23 +1357,84 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
         };
         res.status(502).set('X-Payment-Error', reason);
         return originalJson({
-          error: {
-            code: 'SETTLEMENT_UNCONFIRMED',
-            message: `Payment transaction ${tx.hash} was broadcast but its receipt could not be read. Check the transaction on-chain before retrying.`
-          },
+          error: { code, message },
           charged: 'unknown',
-          tx_hash: tx.hash
+          tx_hash: txHash
         });
+      };
+
+      let receipt = null;
+      let replacedBy = null; // { hash, reason } when another facilitator tx took this one's nonce
+      try {
+        const mined = await tx.wait(1, SETTLE_WAIT_MS);
+        if (isOurReceipt(mined)) receipt = mined;
+        else console.error(`x402: tx.wait for ${tx.hash} returned a receipt for ${mined && mined.hash}; ignoring it`);
+      } catch (err) {
+        if (isOurReceipt(err && err.receipt)) {
+          receipt = err.receipt; // ethers throws on status 0 and attaches the receipt
+        } else if (err && err.code === 'TRANSACTION_REPLACED') {
+          // ethers attaches the REPLACEMENT's receipt here. It says nothing
+          // about this request's transaction, which was never mined.
+          replacedBy = { hash: (err.receipt && err.receipt.hash) || null, reason: err.reason || 'replaced' };
+        } else {
+          // Includes any other error carrying a receipt for a different hash:
+          // ignored, the receipt is re-fetched by hash below.
+          console.error(`x402: tx.wait failed for ${tx.hash}: ${err && err.message}`);
+        }
+      }
+
+      if (replacedBy) {
+        if (replacedBy.reason === 'repriced') {
+          // Same call re-sent at a higher fee (the server never does this; a
+          // manual speed-up would): this authorization may have been spent by
+          // the replacement, so the payer is not told "not charged".
+          return unknownOutcome(
+            'tx_repriced',
+            'SETTLEMENT_UNCONFIRMED',
+            `Payment transaction ${tx.hash} was replaced by ${replacedBy.hash} carrying the same call. Check that transaction on-chain before retrying.`,
+            replacedBy.hash || tx.hash
+          );
+        }
+        // Replaced by a different transaction: this authorization was never
+        // submitted on-chain. Not settled, nothing charged, no data.
+        return rejectPayment('tx_replaced', `tx ${tx.hash} was replaced by ${replacedBy.hash} (${replacedBy.reason}); authorization not settled`, meta);
+      }
+
+      for (let attempt = 0; !receipt && attempt < RECEIPT_RETRIES; attempt++) {
+        await new Promise((r) => setTimeout(r, RECEIPT_RETRY_MS));
+        try {
+          const fetched = await provider.getTransactionReceipt(tx.hash);
+          if (isOurReceipt(fetched)) receipt = fetched;
+        } catch (err) {
+          console.error(`x402: receipt fetch ${attempt + 1}/${RECEIPT_RETRIES} failed for ${tx.hash}: ${err.message}`);
+        }
+      }
+
+      if (!receipt) {
+        return unknownOutcome(
+          'receipt_unknown',
+          'SETTLEMENT_UNCONFIRMED',
+          `Payment transaction ${tx.hash} was broadcast but its receipt could not be read. Check the transaction on-chain before retrying.`,
+          tx.hash
+        );
       }
 
       if (receipt.status !== 1) {
         return rejectPayment('settle_reverted', `tx ${tx.hash} reverted on-chain`, meta);
       }
 
-      // Mined with status 1: the payer is charged. Record it before anything else.
+      // Mined with status 1, but the body is released only when the receipt
+      // shows the USDC transfer from the payer to the merchant.
       if (!receiptHasMerchantTransfer(receipt, from, requiredUnits)) {
-        console.error(`x402: mined tx ${tx.hash} has no matching USDC Transfer(${from} -> ${MERCHANT_WALLET}) log; serving anyway`);
+        return unknownOutcome(
+          'transfer_log_mismatch',
+          'SETTLEMENT_UNVERIFIED',
+          `Payment transaction ${tx.hash} was mined without the expected USDC transfer to the merchant. Check the transaction on-chain before retrying.`,
+          tx.hash
+        );
       }
+
+      // The payer is charged. Record it before anything else.
       markRedeemed(redemptionKey, endpointPath);
       markRedeemed(`tx:${String(tx.hash).toLowerCase()}`, endpointPath);
       releaseReservation();
@@ -1730,9 +1837,24 @@ function fredPrice(req) {
   return fredRequestShape(req.query).multi ? basePrice * 2 : basePrice;
 }
 
-// Free 400 for a malformed `limit`, before the 402 challenge: no payment is
-// requested for a request the handler could not serve as priced.
+// Free 400 for a malformed `limit` or a non-string date parameter, before the
+// 402 challenge: no payment is requested for a request the handler could not
+// serve as priced.
+const FRED_DATE_PARAMS = ['date', 'observation_start', 'observation_end'];
 function fredQueryGuard(req, res, next) {
+  // A repeated or bracketed date param (?date=a&date=b, ?date[x]=1) parses to
+  // an array/object: never quote it.
+  const q = req.query || {};
+  const badDateParam = FRED_DATE_PARAMS.find((name) => q[name] !== undefined && typeof q[name] !== 'string');
+  if (badDateParam) {
+    return res.status(400).json({
+      error: {
+        code: 'INVALID_DATE_PARAM',
+        message: `${badDateParam} must be a single YYYY-MM-DD value. No payment was requested.`,
+        charged: false
+      }
+    });
+  }
   const shape = fredRequestShape(req.query);
   if (!shape.limitValid) {
     return res.status(400).json({

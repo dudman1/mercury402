@@ -179,4 +179,28 @@ test('FRED limit pricing', async (t) => {
       assert.strictEqual(server.count(/^(SIMULATED|SETTLED|SANDBOX_UPSTREAM_CALL) /gm, m), 0, `limit=${bad}: no payment work`);
     }
   });
+
+  // A repeated or bracketed date parameter parses to an array/object. It used
+  // to be quoted at the single-observation price and forwarded upstream as-is.
+  await t.test('non-string date / observation_start / observation_end: free 400, never quoted', async () => {
+    const bad = [
+      'date=1962-01-01&date=2026-11-01',
+      'date[]=1962-01-01',
+      'date[x]=1',
+      'observation_start=1962-01-01&observation_start=1990-01-01&observation_end=2026-11-01',
+      'observation_start=1962-01-01&observation_end[]=2026-11-01',
+    ];
+    for (const query of bad) {
+      for (const headers of [{}, { 'payment-signature': await payment(MULTI_UNITS) }]) {
+        const m = server.mark();
+        const res = await call(server.base, `/v1/fred/UNRATE?${query}`, headers);
+        await settle();
+        assert.strictEqual(res.status, 400, `${query}: ${res.status} ${res.text}`);
+        assert.strictEqual(res.body.error.code, 'INVALID_DATE_PARAM', query);
+        assert.strictEqual(res.body.error.charged, false, query);
+        assert.strictEqual(res.headers.get('payment-required'), null, `${query}: no challenge`);
+        assert.strictEqual(server.count(/^(SIMULATED|SETTLED|SANDBOX_UPSTREAM_CALL) /gm, m), 0, `${query}: no payment work`);
+      }
+    }
+  });
 });
