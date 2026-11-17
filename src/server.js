@@ -824,22 +824,34 @@ function facilitatorUsdc(provider) {
 //
 // The nonce is the chain's pending count, or the one after our last broadcast
 // when the RPC has not caught up with it yet. That local value is trusted
-// only briefly, so a broadcast that was dropped cannot leave a permanent gap.
+// only for a short time after the chain count last agreed with it: the clock
+// is not restarted by later broadcasts made on trust, so a broadcast that was
+// accepted and then dropped cannot keep every later settlement on a gapped
+// nonce. Once the window passes the chain count wins and the gap is refilled.
 //
-// A slot is bounded: the nonce read and the broadcast each have a timeout, so
-// an RPC call that never answers fails that one settlement and frees the
-// queue for the next.
-const FACILITATOR_NONCE_TRUST_MS = 60000;
+// A slot has two bounded phases:
+//   prepare  populate + sign. Nothing leaves this process, so a timeout here
+//            is a clean failure: nothing was sent.
+//   submit   eth_sendRawTransaction of the signed transaction, whose hash is
+//            already known. A timeout here is an UNKNOWN outcome: the node may
+//            have taken the transaction, or may still take it.
+// Either timeout frees the queue for the next settlement.
+const FACILITATOR_NONCE_TRUST_MS = (() => {
+  const n = Number(process.env.FACILITATOR_NONCE_TRUST_MS);
+  return Number.isFinite(n) && n > 0 ? n : 60000;
+})();
 const FACILITATOR_NONCE_READ_TIMEOUT_MS = 10000;
-// Fee data + gas estimate + eth_sendRawTransaction normally take well under a
-// second. Override with SETTLE_BROADCAST_TIMEOUT_MS.
+// Bound for each of the two phases. Fee data + gas estimate, and the submit,
+// normally take well under a second. Override with SETTLE_BROADCAST_TIMEOUT_MS.
 const SETTLE_BROADCAST_TIMEOUT_MS = (() => {
   const n = Number(process.env.SETTLE_BROADCAST_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : 15000;
 })();
 const RECEIPT_FETCH_TIMEOUT_MS = 5000;
 let settlementQueue = Promise.resolve();
-let facilitatorNonceHint = null; // { next, at }
+// { next, at }: the nonce after our last broadcast, and when the chain's
+// pending count last agreed with the nonce we used.
+let facilitatorNonceHint = null;
 
 // Rejects with `makeError()` when `promise` has not settled within `ms`. The
 // underlying call is not cancelled; its late outcome is ignored here.
@@ -851,40 +863,61 @@ function withTimeout(promise, ms, makeError) {
   ]).finally(() => clearTimeout(timer));
 }
 
-// Runs `send(nonce)` once every earlier settlement broadcast has been handed
-// to the RPC, failed, or timed out. `send` returns the broadcast transaction.
-// A send that throws or times out leaves the nonce unused, so the next
-// settlement takes the same one: if a timed-out send did reach the node after
-// all, only one of the two transactions can ever be mined.
+function settleTimeoutError(code, message, txHash) {
+  const err = new Error(message);
+  err.code = code;
+  if (txHash) err.txHash = txHash;
+  return err;
+}
+
+// Runs one settlement broadcast once every earlier one has been handed to the
+// RPC, failed, or timed out.
+//   prepare(nonce) -> { signed, hash }   populate + sign, nothing sent
+//   submit(prepared) -> tx               send the signed transaction
+// Rejects with code SETTLE_PREPARE_TIMEOUT (nothing was sent) or
+// SETTLE_SUBMIT_TIMEOUT (outcome unknown; err.txHash is the transaction that
+// may be out). A submit that still completes after its timeout calls
+// `onLateBroadcast(tx)`.
 //
-// A timed-out send rejects with code SETTLE_BROADCAST_TIMEOUT. If it still
-// completes later, `onLateBroadcast(tx)` is called so the caller can record a
-// transaction that went out after its request was already answered.
-function broadcastInOrder(provider, send, onLateBroadcast) {
+// A failed or timed-out broadcast leaves the nonce unused, so the next
+// settlement takes the same one: if a timed-out submit did reach the node,
+// only one of the two transactions can ever be mined.
+function broadcastInOrder(provider, { prepare, submit, onLateBroadcast }) {
   const slot = settlementQueue.then(async () => {
     const address = facilitatorWallet(provider).address;
-    const chainNonce = await withTimeout(
+    const chainNonce = Number(await withTimeout(
       provider.getTransactionCount(address, 'pending'),
       FACILITATOR_NONCE_READ_TIMEOUT_MS,
       () => new Error('facilitator nonce read timed out')
-    );
-    let nonce = Number(chainNonce);
+    ));
     const hint = facilitatorNonceHint;
-    if (hint && Date.now() - hint.at < FACILITATOR_NONCE_TRUST_MS && hint.next > nonce) nonce = hint.next;
+    const onTrust = Boolean(hint && hint.next > chainNonce && Date.now() - hint.at < FACILITATOR_NONCE_TRUST_MS);
+    const nonce = onTrust ? hint.next : chainNonce;
+    // The chain count is still behind our last broadcast: keep the original
+    // timestamp. Otherwise this broadcast starts a new window.
+    const advanceHint = () => {
+      facilitatorNonceHint = { next: nonce + 1, at: onTrust ? hint.at : Date.now() };
+    };
 
-    const sending = Promise.resolve().then(() => send(nonce));
+    // Phase 1: populate + sign.
+    const prepared = await withTimeout(
+      Promise.resolve().then(() => prepare(nonce)),
+      SETTLE_BROADCAST_TIMEOUT_MS,
+      () => settleTimeoutError('SETTLE_PREPARE_TIMEOUT', `settlement transaction was not prepared within ${SETTLE_BROADCAST_TIMEOUT_MS}ms; nothing was sent`)
+    );
+
+    // Phase 2: submit. From here the transaction may be out.
+    const submitting = Promise.resolve().then(() => submit(prepared));
     let timedOut = false;
     let tx;
     try {
-      tx = await withTimeout(sending, SETTLE_BROADCAST_TIMEOUT_MS, () => {
+      tx = await withTimeout(submitting, SETTLE_BROADCAST_TIMEOUT_MS, () => {
         timedOut = true;
-        const err = new Error(`settlement broadcast did not complete within ${SETTLE_BROADCAST_TIMEOUT_MS}ms`);
-        err.code = 'SETTLE_BROADCAST_TIMEOUT';
-        return err;
+        return settleTimeoutError('SETTLE_SUBMIT_TIMEOUT', `submit of ${prepared.hash} did not complete within ${SETTLE_BROADCAST_TIMEOUT_MS}ms; outcome unknown`, prepared.hash);
       });
     } catch (err) {
       if (timedOut) {
-        sending.then((lateTx) => {
+        submitting.then((lateTx) => {
           if (!facilitatorNonceHint || facilitatorNonceHint.next <= nonce) {
             facilitatorNonceHint = { next: nonce + 1, at: Date.now() };
           }
@@ -893,7 +926,7 @@ function broadcastInOrder(provider, send, onLateBroadcast) {
       }
       throw err;
     }
-    facilitatorNonceHint = { next: nonce + 1, at: Date.now() };
+    advanceHint();
     return tx;
   });
   settlementQueue = slot.then(() => {}, () => {});
@@ -1185,6 +1218,18 @@ function subInFlight(from, units) {
   if (left > 0n) inFlightValue.set(k, left); else inFlightValue.delete(k);
 }
 
+// Authorizations whose settlement transaction may have been submitted but
+// whose submit timed out: redemption key -> tx hash. A retry carrying the same
+// authorization is answered 502 with that hash: no fresh challenge (the payer
+// may already be charged) and no second broadcast. In memory only.
+const inDoubtSettlements = new Map();
+const IN_DOUBT_MAX = 1000;
+function markInDoubt(key, txHash) {
+  inDoubtSettlements.delete(key);
+  inDoubtSettlements.set(key, txHash);
+  while (inDoubtSettlements.size > IN_DOUBT_MAX) inDoubtSettlements.delete(inDoubtSettlements.keys().next().value);
+}
+
 class PaymentRejection extends Error {
   constructor(reason, detail) {
     super(detail || reason);
@@ -1204,10 +1249,16 @@ class PaymentRejection extends Error {
 //      receipt for the transaction this request broadcast, carrying the
 //      USDC Transfer(payer -> merchant) log, releases the body. A settlement
 //      failure discards the body and answers 402 with the reason.
-//   3. Once a transaction has been broadcast the client never sees a fresh
-//      402 challenge: a reverted or replaced tx is a 402 carrying its reason
-//      and hash; an unreadable receipt, or a mined one without the merchant
-//      transfer log, is a 502 {charged:"unknown", tx_hash}.
+//   3. A failure before the signed transaction is submitted (including a
+//      timeout while preparing it) is a 402: nothing was sent. Once the
+//      submit has started, the payer is never told "not charged" unless that
+//      is known: a tx that reverted, or was replaced by a different call, is
+//      a 402 carrying its reason and hash; everything else is a 502
+//      {charged:"unknown", tx_hash} with no fresh challenge — a submit that
+//      timed out (the tx may still be mined), an unreadable receipt, a tx
+//      repriced with the same call, or a mined receipt without the merchant
+//      transfer log. A retry of an authorization whose submit timed out gets
+//      the same 502 and is not broadcast again.
 //
 // Every rejected or uncharged payment attempt is logged with the payer's
 // address, nonce and a rejection_reason. Requests with no payment artifact
@@ -1351,53 +1402,8 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
         return rejectPayment('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtSettle})`, meta);
       }
 
-      let provider;
-      let tx;
-      try {
-        provider = getProvider();
-        const USDC = facilitatorUsdc(provider);
-        tx = await broadcastInOrder(provider, (facilitatorNonce) => {
-          // This request may have queued behind other settlements.
-          const nowAtBroadcast = Math.floor(Date.now() / 1000);
-          if (Number(authorization.validBefore) <= nowAtBroadcast + VALIDITY_SLACK_SECONDS) {
-            throw new PaymentRejection('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtBroadcast})`);
-          }
-          return USDC.transferWithAuthorization(
-            authorization.from,
-            authorization.to,
-            authorization.value,
-            authorization.validAfter,
-            authorization.validBefore,
-            authorization.nonce,
-            signature.v, signature.r, signature.s,
-            { nonce: facilitatorNonce }
-          );
-        }, (lateTx) => {
-          // The broadcast timed out, this request was answered 402
-          // settle_timeout, and the transaction went out afterwards. If it is
-          // mined the payer was charged without data: leave a ledger row with
-          // the hash so it can be found and refunded.
-          const lateHash = (lateTx && lateTx.hash) || null;
-          console.error(`x402: settlement broadcast for payer ${from} completed after its timeout as ${lateHash}; the request was already answered 402 [late_broadcast_after_timeout]`);
-          logPayment(endpointPath, 0, from, false, 'late_broadcast_after_timeout', lateHash);
-        });
-      } catch (err) {
-        // Nothing was broadcast: the authorization is still unspent.
-        if (err instanceof PaymentRejection) return rejectPayment(err.reason, err.message, meta);
-        // The broadcast did not complete in time: fail this settlement and
-        // let the queue move on. No transaction hash is known.
-        if (err && err.code === 'SETTLE_BROADCAST_TIMEOUT') return rejectPayment('settle_timeout', err.message, meta);
-        return rejectPayment(classifyChainError(err, 'settle'), err.message, meta);
-      }
-
-      // Broadcast happened. From here on the client never gets a fresh challenge.
-      meta.tx_hash = tx.hash;
-
-      // Only a receipt for the transaction this request broadcast counts.
-      const isOurReceipt = (r) => Boolean(r && r.hash && String(r.hash).toLowerCase() === String(tx.hash).toLowerCase());
-
-      // Broadcast, but the payer may or may not have been charged: 502, no
-      // data, no fresh challenge.
+      // The transaction may be out, but the payer may or may not have been
+      // charged: 502, no data, no fresh challenge.
       const unknownOutcome = (reason, code, message, txHash) => {
         gate.state = 'done';
         releaseReservation();
@@ -1419,6 +1425,73 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
           tx_hash: txHash
         });
       };
+
+      let provider;
+      let tx;
+      try {
+        provider = getProvider();
+        const USDC = facilitatorUsdc(provider);
+        const wallet = facilitatorWallet(provider);
+        tx = await broadcastInOrder(provider, {
+          // Populate + sign only. Nothing is sent from here.
+          prepare: async (facilitatorNonce) => {
+            // This request may have queued behind other settlements.
+            const nowAtBroadcast = Math.floor(Date.now() / 1000);
+            if (Number(authorization.validBefore) <= nowAtBroadcast + VALIDITY_SLACK_SECONDS) {
+              throw new PaymentRejection('expired_before_settle', `validBefore ${authorization.validBefore} reached before settlement (now ${nowAtBroadcast})`);
+            }
+            const request = await USDC.transferWithAuthorization.populateTransaction(
+              authorization.from,
+              authorization.to,
+              authorization.value,
+              authorization.validAfter,
+              authorization.validBefore,
+              authorization.nonce,
+              signature.v, signature.r, signature.s,
+              { nonce: facilitatorNonce }
+            );
+            // Gas estimate (reverts surface here), chain id and fees.
+            const populated = await wallet.populateTransaction(request);
+            const signed = await wallet.signTransaction(populated);
+            return { signed, hash: ethers.keccak256(signed) };
+          },
+          submit: (prepared) => provider.broadcastTransaction(prepared.signed),
+          onLateBroadcast: (lateTx) => {
+            // The submit timed out, this request was answered 502
+            // submit_timeout, and the submit completed afterwards. If the
+            // transaction is mined the payer was charged without data: leave
+            // a ledger row with the hash so it can be found and refunded.
+            const lateHash = (lateTx && lateTx.hash) || null;
+            console.error(`x402: settlement submit for payer ${from} completed after its timeout as ${lateHash}; the request was already answered 502 [late_broadcast_after_timeout]`);
+            logPayment(endpointPath, 0, from, false, 'late_broadcast_after_timeout', lateHash);
+          },
+        });
+      } catch (err) {
+        if (err instanceof PaymentRejection) return rejectPayment(err.reason, err.message, meta);
+        // Timed out before anything was sent: fail this settlement cleanly.
+        if (err && err.code === 'SETTLE_PREPARE_TIMEOUT') return rejectPayment('settle_timeout', err.message, meta);
+        // Timed out during the submit: the signed transaction may be out and
+        // may still be mined. Unknown outcome, never a fresh challenge; the
+        // authorization is remembered so a retry is not broadcast again.
+        if (err && err.code === 'SETTLE_SUBMIT_TIMEOUT') {
+          markInDoubt(redemptionKey, err.txHash);
+          return unknownOutcome(
+            'submit_timeout',
+            'SETTLEMENT_UNCONFIRMED',
+            `Payment transaction ${err.txHash} was signed and its submit timed out. It may still be mined. Check the transaction on-chain before retrying.`,
+            err.txHash
+          );
+        }
+        // The RPC refused the transaction, or preparing it failed: nothing
+        // was broadcast and the authorization is still unspent.
+        return rejectPayment(classifyChainError(err, 'settle'), err.message, meta);
+      }
+
+      // Broadcast happened. From here on the client never gets a fresh challenge.
+      meta.tx_hash = tx.hash;
+
+      // Only a receipt for the transaction this request broadcast counts.
+      const isOurReceipt = (r) => Boolean(r && r.hash && String(r.hash).toLowerCase() === String(tx.hash).toLowerCase());
 
       let receipt = null;
       let replacedBy = null; // { hash, reason } when another facilitator tx took this one's nonce
@@ -1639,6 +1712,14 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       // EIP-3009 authorization. Checked here cheaply, and again below in the
       // same synchronous step that reserves it.
       const redemptionKey = `sig:${meta.from.toLowerCase()}:${meta.nonce}`;
+      // A settlement of this same authorization was submitted, timed out, and
+      // may have been (or may still be) mined.
+      const inDoubtTx = inDoubtSettlements.get(redemptionKey);
+      if (inDoubtTx) {
+        const inDoubt = new PaymentRejection('settlement_in_doubt', `authorization was already submitted as ${inDoubtTx}; outcome unknown`);
+        inDoubt.txHash = inDoubtTx;
+        throw inDoubt;
+      }
       if (isRedeemed(redemptionKey) || pendingRedemptions.has(redemptionKey)) {
         fail('already_redeemed', 'authorization already redeemed (replay rejected)');
       }
@@ -1688,6 +1769,25 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       return next();
     } catch (err) {
       if (err instanceof PaymentRejection) {
+        if (err.reason === 'settlement_in_doubt') {
+          // No challenge, no handler, no second broadcast.
+          gate.state = 'done';
+          releaseReservation();
+          console.error(`x402 payment-signature error: ${err.message} [${err.reason}]`);
+          logPayment(endpointPath, 0, meta.from, false, err.reason, err.txHash);
+          res.locals.paymentMeta = {
+            wallet_address: meta.from, nonce: meta.nonce, tx_hash: err.txHash,
+            wallet_source: 'x402_eip3009', verified: false, price_usd: 0, rejection_reason: err.reason
+          };
+          return res.status(502).set('X-Payment-Error', err.reason).json({
+            error: {
+              code: 'SETTLEMENT_UNCONFIRMED',
+              message: `This authorization was already submitted as ${err.txHash} and its outcome is unknown. Check the transaction on-chain before paying again.`
+            },
+            charged: 'unknown',
+            tx_hash: err.txHash
+          });
+        }
         if (err.reason === 'server_misconfigured') {
           gate.state = 'done';
           console.error(`x402 payment-signature error: ${err.message} [${err.reason}]`);
