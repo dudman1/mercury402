@@ -14,6 +14,13 @@
 //     goes through one in-process queue with an explicit nonce. (Each
 //     settlement used to read the pending nonce on its own, so two at once
 //     picked the same one and the second was refused.)
+//   - a settlement broadcast that hangs is bounded: that one request gets
+//     402 settle_timeout (no data, nothing recorded as charged) and the next
+//     settlement goes through with the same facilitator nonce. (A hung RPC
+//     submit used to hold the settlement queue, and every payment behind it,
+//     until ethers' own 5-minute request timeout.)
+//   - a broadcast that completes after its timeout leaves a
+//     late_broadcast_after_timeout ledger row carrying the tx hash.
 //
 // Boots the real server in a sandboxed child process (fixtures/server-sandbox.js)
 // with on-chain state faked by fixtures/settle-ok-stub.js. Never a real RPC.
@@ -126,8 +133,10 @@ async function payment(signer = ethers.Wallet.createRandom()) {
   return { header, from: signer.address, nonce: authorization.nonce };
 }
 
+// Client-side cap so a server that never answers fails the test instead of
+// hanging it.
 async function paidCall(base, pay) {
-  const res = await fetch(base + ENDPOINT, { headers: { 'payment-signature': pay.header } });
+  const res = await fetch(base + ENDPOINT, { headers: { 'payment-signature': pay.header }, signal: AbortSignal.timeout(20000) });
   const text = await res.text();
   let body = null;
   try { body = JSON.parse(text); } catch (_) { /* non-JSON */ }
@@ -217,4 +226,80 @@ test('concurrent settlements never share a facilitator nonce', async (t) => {
       `every concurrent payment must settle:\n${server.output()}`);
     assert.deepStrictEqual(server.lines('SETTLED').map((s) => s.facilitator_nonce).sort((a, b) => a - b), [0, 1, 2]);
   });
+});
+
+test('hung settlement broadcast: that request gets 402 settle_timeout and the next settlement still proceeds', async (t) => {
+  // First broadcast never reaches the node within the test; timeout 400 ms.
+  const server = await boot({ MERCURY_TEST_FIRST_SEND_DELAY_MS: '600000', SETTLE_BROADCAST_TIMEOUT_MS: '400' });
+  t.after(() => server.stop());
+
+  const stuck = await payment();
+  const next = await payment();
+  const started = Date.now();
+  const stuckCall = paidCall(server.base, stuck);
+  // Make sure the stuck one is first in the settlement queue.
+  while (server.lines('SEND_HUNG').length === 0) {
+    if (Date.now() - started > 5000) throw new Error(`first broadcast never started:\n${server.output()}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  const nextCall = paidCall(server.base, next);
+  const [stuckRes, nextRes] = await Promise.all([stuckCall, nextCall]);
+  const elapsed = Date.now() - started;
+  await settle();
+
+  // The stuck settlement fails on its own: 402, no data, nothing charged.
+  assert.strictEqual(stuckRes.status, 402, `${stuckRes.status} ${stuckRes.text}`);
+  assert.strictEqual(stuckRes.headers.get('x-payment-error'), 'settle_timeout');
+  assert.strictEqual(stuckRes.headers.get('payment-response'), null);
+  assert.ok(!stuckRes.text.includes(PAID_BODY_MARKER), `paid body leaked: ${stuckRes.text}`);
+
+  // The one queued behind it is served, with the facilitator nonce the stuck
+  // send never used.
+  assert.strictEqual(nextRes.status, 200, `the queue must move on: ${nextRes.status} ${nextRes.text}\n${server.output()}`);
+  const settled = server.lines('SETTLED');
+  assert.strictEqual(settled.length, 1);
+  assert.strictEqual(settled[0].from, next.from);
+  assert.strictEqual(settled[0].facilitator_nonce, 0);
+  assert.ok(elapsed < 5000, `both answered within the timeout bound, took ${elapsed} ms`);
+
+  const rows = server.revenueRows();
+  assert.deepStrictEqual(rows.filter((r) => r.verified).map((r) => r.customer), [next.from]);
+  const row = rows.find((r) => r.rejection_reason === 'settle_timeout');
+  assert.ok(row, JSON.stringify(rows));
+  assert.strictEqual(row.customer, stuck.from);
+  assert.strictEqual(row.amount, 0);
+  assert.deepStrictEqual(server.redemptionRows().map((r) => r.key).filter((k) => k.startsWith('sig:')), [`sig:${next.from.toLowerCase()}:${next.nonce}`]);
+});
+
+test('broadcast that completes after its timeout: request already answered 402, ledger row carries the late tx hash', async (t) => {
+  // First broadcast reaches the node after 900 ms; timeout 300 ms.
+  const server = await boot({ MERCURY_TEST_FIRST_SEND_DELAY_MS: '900', SETTLE_BROADCAST_TIMEOUT_MS: '300' });
+  t.after(() => server.stop());
+
+  const pay = await payment();
+  const res = await paidCall(server.base, pay);
+  assert.strictEqual(res.status, 402, `${res.status} ${res.text}`);
+  assert.strictEqual(res.headers.get('x-payment-error'), 'settle_timeout');
+  assert.ok(!res.text.includes(PAID_BODY_MARKER), `paid body leaked: ${res.text}`);
+
+  // The transaction goes out afterwards.
+  const deadline = Date.now() + 5000;
+  while (server.lines('SETTLED').length === 0) {
+    if (Date.now() > deadline) throw new Error(`late broadcast never happened:\n${server.output()}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await settle();
+  const [late] = server.lines('SETTLED');
+  const rows = server.revenueRows();
+  assert.strictEqual(rows.filter((r) => r.verified || r.amount > 0).length, 0, JSON.stringify(rows));
+  const row = rows.find((r) => r.rejection_reason === 'late_broadcast_after_timeout');
+  assert.ok(row, JSON.stringify(rows));
+  assert.strictEqual(row.customer, pay.from);
+  assert.strictEqual(row.tx_hash, late.hash);
+
+  // The facilitator nonce it used is not handed out again.
+  const after = await paidCall(server.base, await payment());
+  await settle();
+  assert.strictEqual(after.status, 200, `${after.status} ${after.text}\n${server.output()}`);
+  assert.deepStrictEqual(server.lines('SETTLED').map((s) => s.facilitator_nonce), [0, 1]);
 });

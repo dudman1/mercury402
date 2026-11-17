@@ -37,6 +37,9 @@
 //                                 Logs BROADCAST_REPLACED.
 //   MERCURY_TEST_RECEIPT_WRONG_PAYTO=1  the mined status-1 receipt's USDC
 //                                 transfer goes to another address
+//   MERCURY_TEST_FIRST_SEND_DELAY_MS=n  the first broadcast only reaches the
+//                                 node after n ms (an RPC submit that hangs);
+//                                 later broadcasts are unaffected
 //   MERCURY_TEST_PENDING_NONCE_LAG_MS=n  getTransactionCount answers with the
 //                                 pending count as it was n ms ago (an RPC that
 //                                 has not seen the last broadcast yet)
@@ -58,6 +61,7 @@ function balanceOf(addr) {
 }
 const receipts = new Map();
 const usedNonces = new Set();
+let firstSendDelayMs = Number(process.env.MERCURY_TEST_FIRST_SEND_DELAY_MS || 0);
 
 // Facilitator account nonce (pending transaction count) and its history, so a
 // lagging RPC can be modelled.
@@ -130,6 +134,12 @@ class StubContract {
     const send = async (from, to, value, validAfter, validBefore, nonce, v, r, s, overrides) => {
       const key = simulate(from, to, value, validAfter, validBefore, nonce);
       if (process.env.MERCURY_TEST_SETTLE_REVERT) throw revert('ERC20: transfer amount exceeds balance');
+      if (firstSendDelayMs > 0) {
+        const delay = firstSendDelayMs;
+        firstSendDelayMs = 0;
+        console.log(`SEND_HUNG ${JSON.stringify({ from, nonce, delay_ms: delay })}`);
+        await new Promise((r2) => setTimeout(r2, delay));
+      }
       const facilitatorNonce = overrides && overrides.nonce !== undefined ? Number(overrides.nonce) : await readPendingNonce();
       await new Promise((r2) => setTimeout(r2, 20)); // gas estimate + submit
       takeFacilitatorNonce(facilitatorNonce);

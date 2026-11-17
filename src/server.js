@@ -825,28 +825,74 @@ function facilitatorUsdc(provider) {
 // The nonce is the chain's pending count, or the one after our last broadcast
 // when the RPC has not caught up with it yet. That local value is trusted
 // only briefly, so a broadcast that was dropped cannot leave a permanent gap.
+//
+// A slot is bounded: the nonce read and the broadcast each have a timeout, so
+// an RPC call that never answers fails that one settlement and frees the
+// queue for the next.
 const FACILITATOR_NONCE_TRUST_MS = 60000;
 const FACILITATOR_NONCE_READ_TIMEOUT_MS = 10000;
+// Fee data + gas estimate + eth_sendRawTransaction normally take well under a
+// second. Override with SETTLE_BROADCAST_TIMEOUT_MS.
+const SETTLE_BROADCAST_TIMEOUT_MS = (() => {
+  const n = Number(process.env.SETTLE_BROADCAST_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 15000;
+})();
+const RECEIPT_FETCH_TIMEOUT_MS = 5000;
 let settlementQueue = Promise.resolve();
 let facilitatorNonceHint = null; // { next, at }
 
+// Rejects with `makeError()` when `promise` has not settled within `ms`. The
+// underlying call is not cancelled; its late outcome is ignored here.
+function withTimeout(promise, ms, makeError) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(makeError()), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 // Runs `send(nonce)` once every earlier settlement broadcast has been handed
-// to the RPC (or failed). `send` returns the broadcast transaction. A send
-// that throws leaves the nonce unused.
-function broadcastInOrder(provider, send) {
+// to the RPC, failed, or timed out. `send` returns the broadcast transaction.
+// A send that throws or times out leaves the nonce unused, so the next
+// settlement takes the same one: if a timed-out send did reach the node after
+// all, only one of the two transactions can ever be mined.
+//
+// A timed-out send rejects with code SETTLE_BROADCAST_TIMEOUT. If it still
+// completes later, `onLateBroadcast(tx)` is called so the caller can record a
+// transaction that went out after its request was already answered.
+function broadcastInOrder(provider, send, onLateBroadcast) {
   const slot = settlementQueue.then(async () => {
     const address = facilitatorWallet(provider).address;
-    let timer;
-    const chainNonce = await Promise.race([
+    const chainNonce = await withTimeout(
       provider.getTransactionCount(address, 'pending'),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('facilitator nonce read timed out')), FACILITATOR_NONCE_READ_TIMEOUT_MS);
-      }),
-    ]).finally(() => clearTimeout(timer));
+      FACILITATOR_NONCE_READ_TIMEOUT_MS,
+      () => new Error('facilitator nonce read timed out')
+    );
     let nonce = Number(chainNonce);
     const hint = facilitatorNonceHint;
     if (hint && Date.now() - hint.at < FACILITATOR_NONCE_TRUST_MS && hint.next > nonce) nonce = hint.next;
-    const tx = await send(nonce);
+
+    const sending = Promise.resolve().then(() => send(nonce));
+    let timedOut = false;
+    let tx;
+    try {
+      tx = await withTimeout(sending, SETTLE_BROADCAST_TIMEOUT_MS, () => {
+        timedOut = true;
+        const err = new Error(`settlement broadcast did not complete within ${SETTLE_BROADCAST_TIMEOUT_MS}ms`);
+        err.code = 'SETTLE_BROADCAST_TIMEOUT';
+        return err;
+      });
+    } catch (err) {
+      if (timedOut) {
+        sending.then((lateTx) => {
+          if (!facilitatorNonceHint || facilitatorNonceHint.next <= nonce) {
+            facilitatorNonceHint = { next: nonce + 1, at: Date.now() };
+          }
+          try { if (onLateBroadcast) onLateBroadcast(lateTx); } catch (e) { console.error(`x402: late-broadcast handler failed: ${e.message}`); }
+        }, () => {});
+      }
+      throw err;
+    }
     facilitatorNonceHint = { next: nonce + 1, at: Date.now() };
     return tx;
   });
@@ -1326,10 +1372,21 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
             signature.v, signature.r, signature.s,
             { nonce: facilitatorNonce }
           );
+        }, (lateTx) => {
+          // The broadcast timed out, this request was answered 402
+          // settle_timeout, and the transaction went out afterwards. If it is
+          // mined the payer was charged without data: leave a ledger row with
+          // the hash so it can be found and refunded.
+          const lateHash = (lateTx && lateTx.hash) || null;
+          console.error(`x402: settlement broadcast for payer ${from} completed after its timeout as ${lateHash}; the request was already answered 402 [late_broadcast_after_timeout]`);
+          logPayment(endpointPath, 0, from, false, 'late_broadcast_after_timeout', lateHash);
         });
       } catch (err) {
         // Nothing was broadcast: the authorization is still unspent.
         if (err instanceof PaymentRejection) return rejectPayment(err.reason, err.message, meta);
+        // The broadcast did not complete in time: fail this settlement and
+        // let the queue move on. No transaction hash is known.
+        if (err && err.code === 'SETTLE_BROADCAST_TIMEOUT') return rejectPayment('settle_timeout', err.message, meta);
         return rejectPayment(classifyChainError(err, 'settle'), err.message, meta);
       }
 
@@ -1403,7 +1460,11 @@ function require402Payment(endpointPath, priceOrFn, routeMethod = 'GET') {
       for (let attempt = 0; !receipt && attempt < RECEIPT_RETRIES; attempt++) {
         await new Promise((r) => setTimeout(r, RECEIPT_RETRY_MS));
         try {
-          const fetched = await provider.getTransactionReceipt(tx.hash);
+          const fetched = await withTimeout(
+            provider.getTransactionReceipt(tx.hash),
+            RECEIPT_FETCH_TIMEOUT_MS,
+            () => new Error(`receipt fetch timed out after ${RECEIPT_FETCH_TIMEOUT_MS}ms`)
+          );
           if (isOurReceipt(fetched)) receipt = fetched;
         } catch (err) {
           console.error(`x402: receipt fetch ${attempt + 1}/${RECEIPT_RETRIES} failed for ${tx.hash}: ${err.message}`);
